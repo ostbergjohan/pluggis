@@ -124,7 +124,9 @@ function kr(v) {
 }
 function lines(text) { return (text || '').split('\n').map(s => s.trim()).filter(Boolean); }
 function kindTag(kind) {
-  return kind === 'TEST' ? h('span', { class: 'tag test' }, 'Prov') : h('span', { class: 'tag' }, 'Läxa');
+  if (kind === 'TEST') return h('span', { class: 'tag test' }, 'Prov');
+  if (kind === 'OTHER') return h('span', { class: 'tag other' }, 'Annat');
+  return h('span', { class: 'tag' }, 'Läxa');
 }
 const enc = encodeURIComponent;
 const FILE_ACCEPT = 'image/*,.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -201,9 +203,9 @@ views.oversikt = async (main) => {
   ));
 
   const upcoming = state.homework
-    .filter(x => x.dueDate && daysUntil(x.dueDate) >= 0 && daysUntil(x.dueDate) <= 21)
+    .filter(x => x.kind !== 'OTHER' && x.dueDate && daysUntil(x.dueDate) >= 0 && daysUntil(x.dueDate) <= 21)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const missingContent = state.homework.filter(x => !x.description && (!x.steps || !x.steps.length));
+  const missingContent = state.homework.filter(x => x.kind !== 'OTHER' && !x.description && (!x.steps || !x.steps.length));
 
   const labels = stats.perDay.map(d => fmtDay(d.day).replace('.', ''));
   main.append(h('div', { class: 'grid cols-2', style: 'margin-top:16px' },
@@ -319,7 +321,7 @@ views.laxor = async (main) => {
 
   function uploadForm(file) {
     const target = h('select', {}, h('option', { value: '' }, 'Ny läxa eller prov – läs av allt i filen'),
-      state.homework.filter(x => x.status === 'OPEN')
+      state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER')
         .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
         .map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ` (${fmtDay(x.dueDate)})` : ''}`)));
     const cards = h('input', { type: 'checkbox' });
@@ -469,9 +471,11 @@ function toggleForm(container, factory) {
 function homeworkFields(x) {
   const title = h('input', { value: x.title || '', placeholder: 'T.ex. NO-prov fotosyntes' });
   const subject = h('input', { value: x.subject || '', placeholder: 'T.ex. NO' });
-  const kind = h('select', {}, h('option', { value: 'HOMEWORK' }, 'Läxa / inlämning'), h('option', { value: 'TEST' }, 'Prov / förhör'));
+  const kind = h('select', {}, h('option', { value: 'HOMEWORK' }, 'Läxa / inlämning'), h('option', { value: 'TEST' }, 'Prov / förhör'),
+    h('option', { value: 'OTHER' }, 'Annat (räknas inte)'));
   kind.value = x.kind || 'HOMEWORK';
   const due = h('input', { type: 'date', value: x.dueDate || '' });
+  const noDate = h('button', { type: 'button', class: 'small', title: 'Ta bort datumet', onclick: () => { due.value = ''; } }, '✕');
   const description = h('textarea', { rows: 3, placeholder: 'Vad ingår? T.ex. "Utkik kap 4 s. 40–72 + begreppslistan"' }, x.description || '');
   const steps = h('textarea', { rows: 3, placeholder: 'Ett per rad (valfritt) – avsnitt eller delsteg' }, (x.steps || []).join('\n'));
   const el = h('div', {},
@@ -479,14 +483,15 @@ function homeworkFields(x) {
       h('div', {}, h('label', {}, 'Titel'), title),
       h('div', {}, h('label', {}, 'Ämne'), subject),
       h('div', {}, h('label', {}, 'Typ'), kind),
-      h('div', {}, h('label', {}, 'Datum (inlämning/prov)'), due)),
+      h('div', {}, h('label', {}, 'Datum (inlämning/prov)'), h('div', { style: 'display:flex;gap:6px;align-items:center' }, due, noDate))),
     h('label', {}, 'Vad som ingår'), description,
     h('label', {}, 'Avsnitt / delsteg'), steps);
   return {
     el,
     values: () => ({
       title: title.value.trim(), subject: subject.value.trim(), kind: kind.value,
-      dueDate: due.value || null, description: description.value.trim(), steps: lines(steps.value),
+      dueDate: due.value || null, clearDueDate: !due.value && !!x.dueDate,
+      description: description.value.trim(), steps: lines(steps.value),
     }),
   };
 }
@@ -495,7 +500,7 @@ function homeworkItem(x, rerender) {
   const open = state.openHomeworkId === x.id;
   const body = h('div', { class: 'item-body' });
   const meta = [x.subject, x.dueDate ? `${fmtLong(x.dueDate)} (${relDays(x.dueDate)})` : 'inget datum'].filter(Boolean).join(' · ');
-  const missing = !x.description && !(x.steps || []).length;
+  const missing = x.kind !== 'OTHER' && !x.description && !(x.steps || []).length;
   const item = h('div', { class: 'item' },
     h('div', { class: 'item-head', onclick: () => {
       state.openHomeworkId = state.openHomeworkId === x.id ? null : x.id;
@@ -534,7 +539,7 @@ function homeworkItem(x, rerender) {
           const r = await run(() => api(`/api/homework/${x.id}`, { method: 'PUT', body: v }), e.target, 'Sparat');
           if (r) rerender();
         } }, 'Spara'),
-        h('button', { onclick: async (e) => {
+        x.kind === 'OTHER' ? null : h('button', { onclick: async (e) => {
           const v = f.values();
           await api(`/api/homework/${x.id}`, { method: 'PUT', body: { ...v, replan: false } });
           const r = await run(() => api(`/api/plan/homework/${x.id}`, { method: 'POST' }), e.target,

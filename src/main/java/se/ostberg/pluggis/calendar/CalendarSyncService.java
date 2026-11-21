@@ -214,7 +214,7 @@ public class CalendarSyncService {
                 homework.fixTitleEncoding(h.getId());
             }
             String key = TextFix.key(h.getTitle());
-            groups.computeIfAbsent((key.isEmpty() ? String.valueOf(h.getTitle()) : key) + "|" + h.getDueDate(), k -> new ArrayList<>()).add(h);
+            groups.computeIfAbsent((key.isEmpty() ? String.valueOf(h.getTitle()) : key) + "|" + h.getCalendarDate(), k -> new ArrayList<>()).add(h);
         }
         int removed = 0;
         for (List<Homework> group : groups.values()) {
@@ -266,6 +266,9 @@ public class CalendarSyncService {
         }
         if (h.getStatus() == Homework.Status.DONE) {
             score += 1;
+        }
+        if (h.isOther() || h.getDueDate() == null) {
+            score += 3; // ändrad för hand till annat / utan datum – det valet ska stå kvar
         }
         return score;
     }

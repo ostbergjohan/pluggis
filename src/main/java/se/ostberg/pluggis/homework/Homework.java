@@ -21,7 +21,8 @@ public class Homework {
     public enum Source { MANUAL, PHOTO, COACH, CALENDAR }
 
     /** Läxa (inlämning/uppgift) eller prov/förhör – styr hur planeringen görs. */
-    public enum Kind { HOMEWORK, TEST }
+    /** OTHER = annat i kalendern (t.ex. aktivitetsdag) – räknas inte som läxa eller prov. */
+    public enum Kind { HOMEWORK, TEST, OTHER }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,7 +48,15 @@ public class Homework {
     private Source source;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 20, columnDefinition = "varchar(20)")
     private Kind kind = Kind.HOMEWORK;
+
+    /** Typ eller datum ändrat för hand – kalendersynken skriver då inte över dem. */
+    private Boolean kindLocked;
+    private Boolean dateLocked;
+
+    /** Datumet i skolans kalender, även om datumet här ändrats eller tagits bort (för att känna igen händelsen). */
+    private LocalDate calendarDate;
 
     /** UID från skolans kalender, så att samma händelse uppdateras i stället för att dubbleras. */
     @Column(unique = true)
@@ -75,12 +84,41 @@ public class Homework {
     public void updateFromCalendar(String subject, String title, String description, LocalDate dueDate, Kind kind) {
         this.subject = subject;
         this.title = title;
+        this.calendarDate = dueDate;
         // Skriv inte över det ni själva fyllt i med kalenderns (ofta kortare) text.
         if (this.description == null || this.description.isBlank() || this.source == Source.CALENDAR) {
             this.description = description;
         }
-        this.dueDate = dueDate;
-        this.kind = kind;
+        if (!Boolean.TRUE.equals(dateLocked)) {
+            this.dueDate = dueDate;
+        }
+        if (!Boolean.TRUE.equals(kindLocked)) {
+            this.kind = kind;
+        }
+    }
+
+    /** Ändring för hand i webben: typ och/eller datum (null = ta bort datumet om clearDate). */
+    public void editKindAndDate(Kind kind, LocalDate dueDate, boolean clearDate) {
+        if (kind != null && kind != getKind()) {
+            this.kind = kind;
+            this.kindLocked = true;
+        }
+        if (clearDate && this.dueDate != null) {
+            this.dueDate = null;
+            this.dateLocked = true;
+        } else if (dueDate != null && !dueDate.equals(this.dueDate)) {
+            this.dueDate = dueDate;
+            this.dateLocked = true;
+        }
+    }
+
+    public boolean isOther() {
+        return getKind() == Kind.OTHER;
+    }
+
+    /** Datum att känna igen kalenderhändelsen på. */
+    public LocalDate getCalendarDate() {
+        return calendarDate != null ? calendarDate : dueDate;
     }
 
     public void setExternalId(String externalId) {

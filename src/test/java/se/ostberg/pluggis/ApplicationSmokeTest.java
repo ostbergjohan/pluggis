@@ -49,6 +49,9 @@ class ApplicationSmokeTest {
     @Autowired
     MockMvc mvc;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    se.ostberg.pluggis.homework.HomeworkService homeworkService;
+
     @Autowired
     ObjectMapper mapper;
 
@@ -254,6 +257,44 @@ class ApplicationSmokeTest {
         assertThat(titles).hasSize(2);
         assertThat(titles).anyMatch(t -> t.startsWith("Matteprov"));
         assertThat(titles).contains("Glosförhör v.48");
+    }
+
+    @Test
+    void calendarEntryCanBeMarkedOtherWithoutDateAndSyncKeepsIt() throws Exception {
+        String date = LocalDate.now().plusDays(12).toString().replace("-", "");
+        java.util.function.Function<String, String> feed = uid -> "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:akt-" + uid
+                + "\r\nDTSTART;VALUE=DATE:" + date + "\r\nSUMMARY:Läxa: Aktivitetsdag i Västertorshallen\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                .content(feed.apply("1"))).andExpect(status().isOk());
+        long id = -1;
+        for (JsonNode h : json(mvc.perform(get("/api/homework").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString())) {
+            if (h.path("title").asText().contains("Aktivitetsdag")) {
+                id = h.path("id").asLong();
+            }
+        }
+        assertThat(id).isPositive();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/homework/" + id)
+                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\":\"OTHER\",\"clearDueDate\":true}"))
+                .andExpect(status().isOk());
+        // Ny synk med nytt UID (som InfoMentor gör) – ska inte ge ny läxa eller återställa typ/datum
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                .content(feed.apply("2"))).andExpect(status().isOk());
+
+        int found = 0;
+        for (JsonNode h : json(mvc.perform(get("/api/homework").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString())) {
+            if (h.path("title").asText().contains("Aktivitetsdag")) {
+                found++;
+                assertThat(h.path("kind").asText()).isEqualTo("OTHER");
+                assertThat(h.path("dueDate").isNull()).isTrue();
+            }
+        }
+        assertThat(found).isEqualTo(1);
+        mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token")).andExpect(status().isBadRequest());
+        assertThat(homeworkService.summaryForPrompt()).doesNotContain("Aktivitetsdag");
     }
 
     @Test

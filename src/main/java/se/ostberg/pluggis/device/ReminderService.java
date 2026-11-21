@@ -92,7 +92,7 @@ public class ReminderService {
 
     private List<Homework> dueTomorrow() {
         LocalDate tomorrow = LocalDate.now(props.zone()).plusDays(1);
-        return homework.open().stream().filter(h -> tomorrow.equals(h.getDueDate())).toList();
+        return homework.openSchoolwork().stream().filter(h -> tomorrow.equals(h.getDueDate())).toList();
     }
 
     private boolean enabled() {

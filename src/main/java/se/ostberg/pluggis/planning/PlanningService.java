@@ -76,6 +76,9 @@ public class PlanningService {
     public PlanResult plan(long homeworkId) {
         Homework h = homework.get(homeworkId)
                 .orElseThrow(() -> new IllegalArgumentException("Hittade ingen läxa med id " + homeworkId));
+        if (h.isOther()) {
+            throw new IllegalArgumentException("Det här är markerat som annat (inte läxa eller prov) och planeras inte");
+        }
         if (h.getDueDate() == null) {
             throw new IllegalArgumentException("Läxan saknar datum – ange när den ska in eller när provet är");
         }

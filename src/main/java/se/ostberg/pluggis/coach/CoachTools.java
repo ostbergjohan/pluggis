@@ -73,7 +73,8 @@ public class CoachTools {
                     yield Map.of("ok", true, "id", h.getId());
                 }
                 case "list_homework" -> Map.of("homework", homework.summaryForPrompt());
-                case "complete_homework" -> homework.complete(input.path("id").asLong())
+                case "complete_homework" -> homework.get(input.path("id").asLong()).filter(h -> !h.isOther())
+                        .flatMap(h -> homework.complete(h.getId()))
                         .<Object>map(h -> {
                             rewards.onHomeworkDone(deviceId, h.getId(), h.getTitle());
                             return Map.of("ok", true, "id", h.getId(), "points", rewards.summaryForPrompt(deviceId));

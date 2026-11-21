@@ -39,6 +39,7 @@ public class HomeworkService {
                     Homework h = new Homework(subject, TextFix.fixMojibake(title), TextFix.fixMojibake(description),
                             dueDate, null, Homework.Source.CALENDAR);
                     h.updateContent(null, null, kind, null);
+                    h.updateFromCalendar(subject, h.getTitle(), h.getDescription(), dueDate, kind);
                     h.setExternalId(externalId);
                     return repo.save(h);
                 });
@@ -50,15 +51,15 @@ public class HomeworkService {
             return Optional.empty();
         }
         String key = TextFix.key(title);
-        return repo.findByExternalIdIsNotNullAndDueDate(dueDate).stream()
-                .filter(h -> TextFix.key(h.getTitle()).equals(key))
+        return repo.findByExternalIdIsNotNull().stream()
+                .filter(h -> dueDate.equals(h.getCalendarDate()) && TextFix.key(h.getTitle()).equals(key))
                 .findFirst();
     }
 
     /** Alla läxor med datum – för att hitta dubbletter mellan kalender och egna. */
     @Transactional(readOnly = true)
     public List<Homework> withDueDate() {
-        return repo.findAll().stream().filter(h -> h.getDueDate() != null).toList();
+        return repo.findAll().stream().filter(h -> h.getCalendarDate() != null).toList();
     }
 
     /** Låter en läxa ta över kalenderns UID (efter att dubbletten med UID:t tagits bort). */
@@ -93,10 +94,11 @@ public class HomeworkService {
     /** Fullständig redigering från föräldravyn. Null = lämna oförändrat. */
     @Transactional
     public Optional<Homework> edit(long id, String subject, String title, String description, List<String> steps,
-                                   Homework.Kind kind, LocalDate dueDate, Boolean open) {
+                                   Homework.Kind kind, LocalDate dueDate, Boolean open, boolean clearDueDate) {
         return repo.findById(id).map(h -> {
             h.edit(subject, title);
-            h.updateContent(description, steps, kind, dueDate);
+            h.updateContent(description, steps, null, null);
+            h.editKindAndDate(kind, dueDate, clearDueDate);
             if (Boolean.TRUE.equals(open)) {
                 h.reopen();
             } else if (Boolean.FALSE.equals(open) && h.getStatus() == Homework.Status.OPEN) {
@@ -138,6 +140,12 @@ public class HomeworkService {
         return repo.findByStatusOrderByDueDateAscCreatedAtAsc(Homework.Status.OPEN);
     }
 
+    /** Öppna läxor och prov – utan "annat" (aktivitetsdagar m.m.). Det coachen, påminnelser och statistik ser. */
+    @Transactional(readOnly = true)
+    public List<Homework> openSchoolwork() {
+        return open().stream().filter(h -> !h.isOther()).toList();
+    }
+
     @Transactional(readOnly = true)
     public List<Homework> all() {
         return repo.findAll();
@@ -154,7 +162,7 @@ public class HomeworkService {
     /** Kort text till coachens systemprompt. */
     @Transactional(readOnly = true)
     public String summaryForPrompt() {
-        List<Homework> open = open();
+        List<Homework> open = openSchoolwork();
         if (open.isEmpty()) {
             return "Inga öppna läxor registrerade.";
         }

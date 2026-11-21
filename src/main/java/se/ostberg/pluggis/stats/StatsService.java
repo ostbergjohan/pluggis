@@ -131,7 +131,7 @@ public class StatsService {
                 })
                 .toList();
 
-        List<Homework> open = homework.open();
+        List<Homework> open = homework.openSchoolwork();
         int upcomingTests = (int) open.stream()
                 .filter(h -> h.getKind() == Homework.Kind.TEST && h.getDueDate() != null && !h.getDueDate().isBefore(today))
                 .count();

@@ -58,13 +58,19 @@ public class HomeworkController {
     }
 
     public record EditHomework(String subject, String title, String description, List<String> steps,
-                               Homework.Kind kind, LocalDate dueDate, Boolean open, Boolean replan) {
+                               Homework.Kind kind, LocalDate dueDate, Boolean open, Boolean replan,
+                               Boolean clearDueDate) {
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Homework> edit(@PathVariable long id, @RequestBody EditHomework body) {
+        boolean clear = Boolean.TRUE.equals(body.clearDueDate());
         var updated = homework.edit(id, body.subject(), body.title(), body.description(), body.steps(),
-                body.kind(), body.dueDate(), body.open());
+                body.kind(), body.dueDate(), body.open(), clear);
+        if (updated.isPresent() && (updated.get().isOther() || updated.get().getDueDate() == null)) {
+            planning.deleteForHomework(id); // annat och odaterat planeras inte
+            return ResponseEntity.of(updated);
+        }
         if (updated.isPresent() && !Boolean.FALSE.equals(body.replan())
                 && (body.description() != null || body.steps() != null || body.dueDate() != null)) {
             try {
