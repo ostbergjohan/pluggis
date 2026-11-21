@@ -79,7 +79,7 @@ public class PlanningService {
         if (h.getDueDate() == null) {
             throw new IllegalArgumentException("Läxan saknar datum – ange när den ska in eller när provet är");
         }
-        LocalDate today = today();
+        LocalDate today = todayDate();
         List<PlanItem> done = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(homeworkId).stream()
                 .filter(PlanItem::isDone).toList();
         List<LocalDate> days = PlanDays.available(today, h.getDueDate(), props.studyDays());
@@ -119,7 +119,7 @@ public class PlanningService {
     /** Dagens moment plus det som inte hanns med tidigare dagar. */
     @Transactional(readOnly = true)
     public List<TodayItem> today() {
-        LocalDate today = today();
+        LocalDate today = todayDate();
         Map<Long, Optional<Homework>> cache = new HashMap<>();
         List<TodayItem> out = new ArrayList<>();
         for (PlanItem item : repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today)) {
@@ -135,7 +135,7 @@ public class PlanningService {
 
     @Transactional(readOnly = true)
     public List<PlanItem> upcoming(int days) {
-        LocalDate today = today();
+        LocalDate today = todayDate();
         return repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(today, today.plusDays(Math.max(0, days)));
     }
 
@@ -182,7 +182,7 @@ public class PlanningService {
 
     private GeneratedPlan askClaude(Homework h, List<LocalDate> days, List<PlanItem> done) {
         StringBuilder ask = new StringBuilder();
-        ask.append("Idag: ").append(today()).append('\n');
+        ask.append("Idag: ").append(todayDate()).append('\n');
         ask.append(h.getKind() == Homework.Kind.TEST ? "PROV: " : "LÄXA/INLÄMNING: ").append(h.getTitle());
         if (h.getSubject() != null) {
             ask.append(" (").append(h.getSubject()).append(')');
@@ -254,7 +254,7 @@ public class PlanningService {
         return h.getSteps().stream().filter(s -> !doneTasks.contains(s)).toList();
     }
 
-    private LocalDate today() {
+    private LocalDate todayDate() {
         return LocalDate.now(props.zone());
     }
 }
