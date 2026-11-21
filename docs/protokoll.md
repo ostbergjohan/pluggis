@@ -1,6 +1,6 @@
 # Protokoll: Tab5 ⇄ backend
 
-Anslutning: `ws://<host>:8080/ws/device?deviceId=tab5-1&token=<LAXCOACH_DEVICE_TOKEN>`
+Anslutning: `ws://<host>:8080/ws/device?deviceId=tab5-1&token=<PLUGGIS_DEVICE_TOKEN>`
 
 Alla meddelanden är JSON-text med fältet `type`.
 
@@ -41,7 +41,7 @@ Exempel:
 
 ```
 POST /api/homework/photo?deviceId=tab5-1[&hint=...]
-Header: X-Laxcoach-Token: <token>
+Header: X-Pluggis-Token: <token>
 Content-Type: multipart/form-data, fält "image" (image/jpeg, max 5 MB)
 ```
 
@@ -54,7 +54,7 @@ Samma endpoint används av iOS-genvägen: *Ta bild → Hämta innehåll från UR
 
 ```
 POST /api/flashcards/photo?deviceId=tab5-1[&hint=...][&count=20]
-Header: X-Laxcoach-Token: <token>
+Header: X-Pluggis-Token: <token>
 Content-Type: multipart/form-data, fält "image"
 ```
 
@@ -72,4 +72,4 @@ Två vägar, välj efter hur xiaozhi-firmwaren fungerar på Tab5:
    `CoachService` som "LLM". Då kan färdig firmware användas oförändrad.
 
 Mät latens per steg (STT → Claude → TTS). Claude-delen finns redan som
-`laxcoach_claude_request_seconds` i `/actuator/prometheus`.
+`pluggis_claude_request_seconds` i `/actuator/prometheus`.

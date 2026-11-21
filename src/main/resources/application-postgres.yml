@@ -1,9 +1,9 @@
 # Aktivera med SPRING_PROFILES_ACTIVE=postgres
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/laxcoach}
-    username: ${DB_USER:laxcoach}
-    password: ${DB_PASSWORD:laxcoach}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pluggis}
+    username: ${DB_USER:pluggis}
+    password: ${DB_PASSWORD:pluggis}
   jpa:
     hibernate:
       # Byt till Flyway/Liquibase + validate när datamodellen satt sig.

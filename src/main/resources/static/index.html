@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pluggis</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true">◐</span> Pluggis</div>
+    <nav class="tabs" id="tabs">
+      <a href="#oversikt" data-view="oversikt">Översikt</a>
+      <a href="#laxor" data-view="laxor">Läxor &amp; prov</a>
+      <a href="#plan" data-view="plan">Plan</a>
+      <a href="#kort" data-view="kort">Flashkort</a>
+      <a href="#poang" data-view="poang">Poäng</a>
+      <a href="#simulator" data-view="simulator">Tab5-simulator</a>
+      <a href="#installningar" data-view="installningar">Inställningar</a>
+    </nav>
+    <div class="device-status" id="deviceStatus" title="Tab5-status">●</div>
+  </header>
+
+  <main id="main" class="main" tabindex="-1"></main>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

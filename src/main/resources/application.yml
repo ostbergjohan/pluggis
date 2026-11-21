@@ -1,11 +1,11 @@
 spring:
   application:
-    name: laxcoach
+    name: pluggis
   threads:
     virtual:
       enabled: true
   datasource:
-    url: jdbc:h2:file:./data/laxcoach;AUTO_SERVER=TRUE
+    url: jdbc:h2:file:./data/pluggis;AUTO_SERVER=TRUE
     username: sa
     password: ""
   jpa:
@@ -17,10 +17,10 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
-laxcoach:
-  # Delad hemlighet som Tab5 och iOS-genvägen skickar med (header X-Laxcoach-Token / ?token=).
+pluggis:
+  # Delad hemlighet som Tab5 och iOS-genvägen skickar med (header X-Pluggis-Token / ?token=).
   # Tom = ingen kontroll (bara för lokal utveckling).
-  device-token: ${LAXCOACH_DEVICE_TOKEN:}
+  device-token: ${PLUGGIS_DEVICE_TOKEN:}
   timezone: Europe/Stockholm
   # Hur många meddelanden coachen minns per enhet innan äldre plockas bort.
   max-history-messages: 30
@@ -28,32 +28,32 @@ laxcoach:
   conversation-idle-minutes: 30
   planning:
     # Dagar då planen får lägga pluggmoment
-    study-days: ${LAXCOACH_STUDY_DAYS:MONDAY,TUESDAY,WEDNESDAY,THURSDAY,SUNDAY}
-    max-minutes-per-day: ${LAXCOACH_MAX_MINUTES_PER_DAY:40}
+    study-days: ${PLUGGIS_STUDY_DAYS:MONDAY,TUESDAY,WEDNESDAY,THURSDAY,SUNDAY}
+    max-minutes-per-day: ${PLUGGIS_MAX_MINUTES_PER_DAY:40}
   calendar:
     # iCal/webcal-länk till en skolkalender, om en finns. Tom = av.
-    ical-url: ${LAXCOACH_ICAL_URL:}
+    ical-url: ${PLUGGIS_ICAL_URL:}
     horizon-days: 60
     sync-cron: "0 5 * * * *"
   reminders:
-    enabled: ${LAXCOACH_REMINDERS_ENABLED:true}
+    enabled: ${PLUGGIS_REMINDERS_ENABLED:true}
     # sek min tim dag mån veckodag (Europe/Stockholm)
     start-cron: "0 30 16 * * MON-FRI"
     nudge-cron: "0 30 18 * * MON-FRI"
   rewards:
     # Poäng räknas alltid. Med enabled=true nämner coachen också kronor.
-    enabled: ${LAXCOACH_REWARDS_ENABLED:true}
+    enabled: ${PLUGGIS_REWARDS_ENABLED:true}
     # 0.10 kr per poäng = 10 poäng per krona
-    sek-per-point: ${LAXCOACH_SEK_PER_POINT:0.10}
+    sek-per-point: ${PLUGGIS_SEK_PER_POINT:0.10}
     # Max kronor per vecka (0 = inget tak)
-    weekly-cap-sek: ${LAXCOACH_WEEKLY_CAP_SEK:50}
+    weekly-cap-sek: ${PLUGGIS_WEEKLY_CAP_SEK:50}
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
     base-url: https://api.anthropic.com
     api-version: "2023-06-01"
     # Röst kräver låg latens – byt gärna till en Haiku-modell och mät.
-    model: ${LAXCOACH_MODEL:claude-sonnet-5-5}
-    vision-model: ${LAXCOACH_VISION_MODEL:claude-sonnet-5-5}
+    model: ${PLUGGIS_MODEL:claude-sonnet-5-5}
+    vision-model: ${PLUGGIS_VISION_MODEL:claude-sonnet-5-5}
     max-tokens: 400
 
 management:
@@ -64,4 +64,4 @@ management:
 
 logging:
   level:
-    se.ostberg.laxcoach: INFO
+    se.ostberg.pluggis: INFO

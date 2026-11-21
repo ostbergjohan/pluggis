@@ -1,0 +1,23 @@
+package se.ostberg.pluggis.device;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.socket.config.annotation.EnableWebSocket;
+import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+
+@Configuration
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
+
+    private final DeviceWebSocketHandler handler;
+
+    public WebSocketConfig(DeviceWebSocketHandler handler) {
+        this.handler = handler;
+    }
+
+    @Override
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        // Enheten är ingen webbläsare; origin-kontroll ger inget skydd här – token gör det.
+        registry.addHandler(handler, "/ws/device").setAllowedOrigins("*");
+    }
+}

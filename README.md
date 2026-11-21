@@ -1,4 +1,4 @@
-# Läxcoach
+# Pluggis
 
 Backend för en fysisk studiekompis på skrivbordet: en **M5Stack Tab5** med kamera,
 mikrofoner och högtalare, plus en **Dual Button** (U025) och eventuellt en LED-list som timer.
@@ -18,6 +18,7 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 | Påminnelser på Tab5 (eftermiddag + kvällsknuff, "imorgon är det prov") | ✅ |
 | Läxor in via skärmdump/foto, inklistrad text (InfoMentor) eller iCal-länk | ✅ |
 | WebSocket för Tab5 (text, knappar, timer, foto, kort, poäng) | ✅ |
+| Webbgränssnitt: föräldravy (läxor, plan, flashkort, poäng, statistik) + Tab5-simulator | ✅ |
 | REST för test med curl / iOS-genväg | ✅ |
 | Prometheus-metrik för Claude-latens och tokens | ✅ |
 | Ljud (tal till text / text till tal) | ⏳ fas 2, se `docs/protokoll.md` |
@@ -29,42 +30,44 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 Kräver Java 21 och Maven.
 
 ```bash
-cp .env.example .env        # fyll i ANTHROPIC_API_KEY och LAXCOACH_DEVICE_TOKEN
+cp .env.example .env        # fyll i ANTHROPIC_API_KEY och PLUGGIS_DEVICE_TOKEN
 set -a; . ./.env; set +a
 mvn spring-boot:run
 ```
+
+Öppna sedan **http://localhost:8080** och ange token under *Inställningar*.
 
 Data hamnar i en H2-fil under `./data`. Kör med Postgres via `SPRING_PROFILES_ACTIVE=postgres`.
 
 ### Testa coachen utan hårdvara
 
 ```bash
-T=$LAXCOACH_DEVICE_TOKEN
-curl -s -H "X-Laxcoach-Token: $T" -H 'Content-Type: application/json' \
+T=$PLUGGIS_DEVICE_TOKEN
+curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"text":"(Knapptryck: jag vill börja plugga nu.)"}' \
   localhost:8080/api/devices/tab5-1/coach
 
-curl -s -H "X-Laxcoach-Token: $T" -F image=@stencil.jpg \
+curl -s -H "X-Pluggis-Token: $T" -F image=@stencil.jpg \
   "localhost:8080/api/homework/photo?deviceId=tab5-1"
 
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/homework
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/devices/tab5-1/sessions/active
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/homework
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/tab5-1/sessions/active
 ```
 
 Flashkort och poäng:
 
 ```bash
-curl -s -H "X-Laxcoach-Token: $T" -H 'Content-Type: application/json' \
+curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"topic":"Engelska glosor: djur","subject":"Engelska","count":10}' \
   localhost:8080/api/flashcards/generate
-curl -s -H "X-Laxcoach-Token: $T" -F image=@glosor.jpg "localhost:8080/api/flashcards/photo?deviceId=tab5-1"
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/flashcards/decks
-curl -s -H "X-Laxcoach-Token: $T" -o kort.tsv localhost:8080/api/flashcards/decks/1/export.tsv   # till Anki
+curl -s -H "X-Pluggis-Token: $T" -F image=@glosor.jpg "localhost:8080/api/flashcards/photo?deviceId=tab5-1"
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/flashcards/decks
+curl -s -H "X-Pluggis-Token: $T" -o kort.tsv localhost:8080/api/flashcards/decks/1/export.tsv   # till Anki
 
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/devices/tab5-1/rewards            # veckans poäng och kronor
-curl -s -H "X-Laxcoach-Token: $T" -H 'Content-Type: application/json' \
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/tab5-1/rewards            # veckans poäng och kronor
+curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"points":50,"reason":"Bra jobbat på provet!"}' localhost:8080/api/devices/tab5-1/rewards/bonus
-curl -s -H "X-Laxcoach-Token: $T" -X POST localhost:8080/api/devices/tab5-1/rewards/payouts  # markera veckan utbetald
+curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/tab5-1/rewards/payouts  # markera veckan utbetald
 ```
 
 WebSocket (t.ex. med `websocat`):
@@ -78,7 +81,7 @@ websocat "ws://localhost:8080/ws/device?deviceId=tab5-1&token=$T"
 ## Arkitektur
 
 ```
-Tab5 (firmware)                      Spring Boot "laxcoach"
+Tab5 (firmware)                      Spring Boot "pluggis"
  ├─ mikrofon/högtalare ─┐            ├─ device/   WebSocket, knappar, händelser → enhet
  ├─ Dual Button (Grove) ├─ WS ──────▶├─ coach/    Claude-loop med verktyg + historik
  ├─ LED-list (sidoport) ┘            ├─ session/  pass + timer (@Scheduled)
@@ -93,16 +96,32 @@ iOS-genväg ── POST /api/homework/photo ─┘ claude/   tunn klient mot Mes
 - **Pass och läxor** skickas med i systemprompten varje anrop, så coachen vet läget
   även efter omstart. Själva samtalet hålls i minnet och nollställs efter 30 min tystnad.
 
+## Webbgränssnitt
+
+Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byggsteg) och fungerar i mobilen.
+
+| Flik | Vad |
+|---|---|
+| Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
+| Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp skärmdump, redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
+| Plan | Tre veckor framåt dag för dag, plus det som ligger efter |
+| Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
+| Poäng | Händelser, bonuspoäng, markera utbetalning |
+| Tab5-simulator | Ansluter via samma WebSocket som Tab5: knappar, timer, kort, poäng, foto – med uppläsning och mikrofon (svenska) i webbläsaren |
+| Inställningar | Token, enhets-id och instruktion för iOS-genvägen |
+
+Statistik finns även som JSON: `GET /api/devices/{id}/stats?days=14`.
+
 ## Läxor in, planering och påminnelser
 
 **Skolan använder InfoMentor**, som (såvitt vi hittat) saknar iCal-export och öppet API, och
 inloggning sker oftast med BankID – därför hämtas inget automatiskt därifrån. I stället:
 
-1. **Skärmdump av veckoplanen** i InfoMentor-appen → iOS-genväg "Läxcoach: läxor"
+1. **Skärmdump av veckoplanen** i InfoMentor-appen → iOS-genväg "Pluggis: läxor"
    (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=tab5-1`,
-   formulär med fältet `image`, header `X-Laxcoach-Token`).
+   formulär med fältet `image`, header `X-Pluggis-Token`).
 2. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
-3. **iCal-länk** om skolan har en annan kalender: sätt `LAXCOACH_ICAL_URL` (synkas varje timme),
+3. **iCal-länk** om skolan har en annan kalender: sätt `PLUGGIS_ICAL_URL` (synkas varje timme),
    eller ladda upp en .ics till `POST /api/calendar/import`.
 
 Claude läser ut läxa/prov, datum och vad som ingår. Saknas innehållet frågar coachen efter det.
@@ -111,21 +130,21 @@ Claude läser ut läxa/prov, datum och vad som ingår. Saknas innehållet fråga
 `POST /api/plan/homework/{id}/content`) gör Claude en plan med små moment (max ~20 min) på
 pluggdagarna fram till datumet. Inför prov är det nya materialet klart 1–2 dagar innan och sista
 dagarna är repetition och flashkort. Avbockade moment ger poäng och ligger kvar vid omplanering.
-Pluggdagar och max minuter per dag: `LAXCOACH_STUDY_DAYS`, `LAXCOACH_MAX_MINUTES_PER_DAY`.
+Pluggdagar och max minuter per dag: `PLUGGIS_STUDY_DAYS`, `PLUGGIS_MAX_MINUTES_PER_DAY`.
 
 **Påminnelser:** kl. 16:30 (vardagar) säger Tab5 vad som står först på dagens plan och vad som
 ska in imorgon, och kl. 18:30 kommer en mjuk knuff om inget pass startats. Tiderna ändras med
-`laxcoach.reminders.start-cron` / `nudge-cron`.
+`pluggis.reminders.start-cron` / `nudge-cron`.
 
 ```bash
-curl -s -H "X-Laxcoach-Token: $T" -H 'Content-Type: application/json' \
+curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"text":"v.48: Engelska glosförhör fredag, kap 3 s. 42. NO-prov 4/12 fotosyntesen, Utkik s. 40–72"}' \
   "localhost:8080/api/homework/text?deviceId=tab5-1"
-curl -s -H "X-Laxcoach-Token: $T" -H 'Content-Type: application/json' \
+curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"content":"Utkik kap 4 s. 40–72 + begreppslistan","kind":"TEST"}' \
   localhost:8080/api/plan/homework/2/content
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/plan/today
-curl -s -H "X-Laxcoach-Token: $T" localhost:8080/api/plan/upcoming?days=14
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/today
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/upcoming?days=14
 ```
 
 ## Flashkort
@@ -152,8 +171,8 @@ Grundtanken är att **belöna ansträngning mer än rätt svar** – det är van
 | Bonus från förälder | valfritt |
 
 - Poäng dras **aldrig** av.
-- Kronor: `LAXCOACH_SEK_PER_POINT` (standard 0,10 = 10 poäng/krona) med tak `LAXCOACH_WEEKLY_CAP_SEK`
-  (standard 50 kr/vecka). Sätt `LAXCOACH_REWARDS_ENABLED=false` om coachen inte ska prata om pengar.
+- Kronor: `PLUGGIS_SEK_PER_POINT` (standard 0,10 = 10 poäng/krona) med tak `PLUGGIS_WEEKLY_CAP_SEK`
+  (standard 50 kr/vecka). Sätt `PLUGGIS_REWARDS_ENABLED=false` om coachen inte ska prata om pengar.
 - Reglerna ligger i `RewardRules` och är lätta att ändra.
 - Pengar som belöning kan på sikt tränga undan den egna motivationen. Överväg att trappa ner
   pengadelen när vanan sitter, och fortsätt med poäng och streak.
@@ -162,7 +181,7 @@ Grundtanken är att **belöna ansträngning mer än rätt svar** – det är van
 
 Det här hanterar en minderårigs röst, bilder och skolarbete.
 
-- Sätt alltid `LAXCOACH_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
+- Sätt alltid `PLUGGIS_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
   Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.
 - Bilder sparas inte, bara de utlästa läxorna.

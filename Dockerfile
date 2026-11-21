@@ -7,7 +7,7 @@ RUN mvn -q -B package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY --from=build /src/target/laxcoach-*.jar app.jar
+COPY --from=build /src/target/pluggis-*.jar app.jar
 # Skrivbar datakatalog även med slumpat UID (OpenShift kör som grupp 0).
 RUN mkdir -p /app/data && chgrp -R 0 /app && chmod -R g=u /app
 USER 10001

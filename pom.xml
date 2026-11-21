@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>se.ostberg</groupId>
-    <artifactId>laxcoach</artifactId>
+    <artifactId>pluggis</artifactId>
     <version>0.1.0-SNAPSHOT</version>
-    <name>laxcoach</name>
-    <description>Läxcoach – backend för en fysisk studiekompis (M5Stack Tab5) med Claude</description>
+    <name>pluggis</name>
+    <description>Pluggis – backend för en fysisk studiekompis (M5Stack Tab5) med Claude</description>
 
     <properties>
         <java.version>21</java.version>
