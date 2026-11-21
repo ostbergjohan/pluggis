@@ -127,6 +127,7 @@ function kindTag(kind) {
   return kind === 'TEST' ? h('span', { class: 'tag test' }, 'Prov') : h('span', { class: 'tag' }, 'Läxa');
 }
 const enc = encodeURIComponent;
+const FILE_ACCEPT = 'image/*,.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 async function loadHomework(all = true) {
   state.homework = await api(`/api/homework?openOnly=${!all}`);
@@ -263,22 +264,18 @@ function planChecklist(items, showHomework) {
 
 views.laxor = async (main) => {
   main.append(h('h1', {}, 'Läxor & prov'),
-    h('p', { class: 'sub' }, 'Prenumerera på InfoMentors kalender, lägg till för hand, klistra in text eller ladda upp en skärmdump.'));
+    h('p', { class: 'sub' }, 'Prenumerera på InfoMentors kalender, lägg till för hand, klistra in text eller ladda upp skärmdumpar, Word-filer och PDF:er.'));
 
   const showDone = h('input', { type: 'checkbox', checked: store.get('lc.showDone', '0') === '1',
     onchange: () => { store.set('lc.showDone', showDone.checked ? '1' : '0'); render(); } });
   const forms = h('div');
-  const photoInput = h('input', { type: 'file', accept: 'image/*', style: 'display:none',
-    onchange: async () => {
+  const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none',
+    onchange: () => {
       const file = photoInput.files[0];
-      if (!file) return;
-      const fd = new FormData(); fd.append('image', file);
-      const r = await run(() => api(`/api/homework/photo?deviceId=${enc(state.deviceId)}`, { method: 'POST', form: fd }),
-        photoBtn);
-      if (r) { toast(`La till ${r.saved.length} st${r.note ? ' – ' + r.note : ''}`); render(); }
       photoInput.value = '';
+      if (file) forms.replaceChildren(uploadForm(file));
     } });
-  const photoBtn = h('button', { onclick: () => photoInput.click() }, '📷 Ladda upp skärmdump');
+  const photoBtn = h('button', { onclick: () => photoInput.click() }, '📎 Ladda upp fil');
 
   main.append(h('div', { class: 'toolbar' },
     h('button', { class: 'primary', onclick: () => toggleForm(forms, newHomeworkForm) }, '+ Ny läxa eller prov'),
@@ -317,6 +314,38 @@ views.laxor = async (main) => {
           forms.replaceChildren();
           render();
         } }, 'Spara'),
+        h('button', { onclick: () => forms.replaceChildren() }, 'Avbryt')));
+  }
+
+  function uploadForm(file) {
+    const target = h('select', {}, h('option', { value: '' }, 'Ny läxa eller prov – läs av allt i filen'),
+      state.homework.filter(x => x.status === 'OPEN')
+        .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
+        .map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ` (${fmtDay(x.dueDate)})` : ''}`)));
+    const cards = h('input', { type: 'checkbox' });
+    const cardsRow = h('label', { style: 'display:none;gap:6px;align-items:center' }, cards, 'Gör också flashkort av materialet');
+    target.addEventListener('change', () => { cardsRow.style.display = target.value ? 'flex' : 'none'; });
+    return h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, `Ladda upp: ${file.name}`),
+      h('label', {}, 'Vad är det här?'), target, cardsRow,
+      h('p', { class: 'item-meta' }, 'Koppla till en läxa eller ett prov: Claude läser vad som ingår (avsnitt, sidor, begrepp), lägger in det och gör om planen.'),
+      h('div', { class: 'toolbar', style: 'margin-top:12px' },
+        h('button', { class: 'primary', onclick: async (e) => {
+          const fd = new FormData();
+          fd.append('file', file);
+          const q = new URLSearchParams({ deviceId: state.deviceId });
+          if (target.value) { q.set('homeworkId', target.value); q.set('flashcards', String(cards.checked)); }
+          const r = await run(() => api(`/api/homework/upload?${q}`, { method: 'POST', form: fd }), e.target);
+          if (!r) return;
+          if (target.value) {
+            toast([`${r.sections.length} avsnitt inlagda`, r.replanned ? 'ny plan gjord' : null,
+              r.deckId ? `${r.cardCount} flashkort` : null, r.note].filter(Boolean).join(' · '));
+            state.openHomeworkId = Number(target.value);
+          } else {
+            toast(`La till ${r.saved.length} st${r.note ? ' – ' + r.note : ''}`);
+          }
+          forms.replaceChildren();
+          render();
+        } }, 'Ladda upp'),
         h('button', { onclick: () => forms.replaceChildren() }, 'Avbryt')));
   }
 
@@ -481,6 +510,23 @@ function homeworkItem(x, rerender) {
   async function fill() {
     const f = homeworkFields(x);
     const planBox = h('div', {}, h('span', { class: 'spinner' }));
+    const matBox = h('div', {}, h('span', { class: 'spinner' }));
+    const matInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none', onchange: async () => {
+      const file = matInput.files[0];
+      matInput.value = '';
+      if (!file) return;
+      const cards = confirm('Ska Pluggis också göra flashkort av materialet?');
+      const fd = new FormData(); fd.append('file', file);
+      matBox.replaceChildren(h('span', { class: 'spinner' }), ' Claude läser materialet…');
+      const r = await run(() => api(`/api/homework/upload?homeworkId=${x.id}&flashcards=${cards}&deviceId=${enc(state.deviceId)}`,
+        { method: 'POST', form: fd }));
+      if (r) {
+        toast([`${r.sections.length} avsnitt inlagda`, r.replanned ? 'ny plan gjord' : null,
+          r.deckId ? `${r.cardCount} flashkort` : null, r.note].filter(Boolean).join(' · '));
+        state.openHomeworkId = x.id;
+        rerender();
+      } else showMaterial();
+    } });
     body.replaceChildren(f.el,
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
@@ -495,6 +541,7 @@ function homeworkItem(x, rerender) {
             'Ny plan gjord');
           if (r) { if (r.note) toast(r.note); showPlan(); }
         } }, '🗓 Planera'),
+        h('button', { onclick: () => matInput.click() }, '📎 Material'),
         h('button', { onclick: async (e) => {
           const v = f.values();
           const r = await run(() => api(`/api/flashcards/generate?deviceId=${enc(state.deviceId)}`, { method: 'POST',
@@ -511,8 +558,26 @@ function homeworkItem(x, rerender) {
           await run(() => api(`/api/homework/${x.id}`, { method: 'DELETE' }), null, 'Borttagen');
           rerender();
         } }, 'Ta bort')),
+      h('h3', { style: 'margin-top:16px' }, 'Material'), matBox, matInput,
       h('h3', { style: 'margin-top:16px' }, 'Plan'), planBox);
     item.append(body);
+    showMaterial();
+
+    async function showMaterial() {
+      const list = await api(`/api/homework/${x.id}/material`);
+      if (!list.length) {
+        matBox.replaceChildren(h('div', { class: 'empty' }, 'Inget material än. Ladda upp en skärmdump, Word-fil, PDF eller text så läser Claude vad som ingår.'));
+        return;
+      }
+      matBox.replaceChildren(...list.map(m => h('div', { class: 'check' },
+        h('span', { class: 'tag' }, { IMAGE: 'Bild', PDF: 'PDF', WORD: 'Word', TEXT: 'Text' }[m.kind] || m.kind),
+        h('div', { style: 'flex:1' }, h('div', { class: 'task' }, m.filename || 'fil'),
+          m.summary ? h('div', { class: 'item-meta' }, m.summary) : null),
+        h('button', { class: 'small danger', onclick: async (e) => {
+          const r = await run(() => api(`/api/homework/material/${m.id}`, { method: 'DELETE' }), e.target);
+          if (r !== undefined) showMaterial();
+        } }, '✕'))));
+    }
 
     async function showPlan() {
       const items = await api(`/api/plan/homework/${x.id}`);
@@ -565,7 +630,7 @@ views.kort = async (main) => {
   main.append(h('h1', {}, 'Flashkort'),
     h('p', { class: 'sub' }, 'Skapa kortlekar för hand, låt Claude göra dem från ett ämne eller ett foto, och öva här eller på Tab5.'));
   const forms = h('div');
-  const photoInput = h('input', { type: 'file', accept: 'image/*', style: 'display:none', onchange: async () => {
+  const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none', onchange: async () => {
     const file = photoInput.files[0];
     if (!file) return;
     const fd = new FormData(); fd.append('image', file);
@@ -573,7 +638,7 @@ views.kort = async (main) => {
     if (r) { toast(`"${r.deck.name}": ${r.cardCount} kort`); render(); }
     photoInput.value = '';
   } });
-  const photoBtn = h('button', { onclick: () => photoInput.click() }, '📷 Från foto (glosor/anteckningar)');
+  const photoBtn = h('button', { onclick: () => photoInput.click() }, '📎 Från fil (foto, Word, PDF)');
   main.append(h('div', { class: 'toolbar' },
     h('button', { class: 'primary', onclick: () => toggleForm(forms, generateForm) }, '✨ Generera med Claude'),
     h('button', { onclick: () => toggleForm(forms, manualForm) }, '+ Skriv egen lek'),

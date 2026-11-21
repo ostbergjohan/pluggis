@@ -9,6 +9,7 @@ import se.ostberg.pluggis.claude.ClaudeResponse;
 import se.ostberg.pluggis.config.PluggisProperties;
 import se.ostberg.pluggis.support.JsonExtract;
 import se.ostberg.pluggis.support.Prompts;
+import se.ostberg.pluggis.support.UploadedDocument;
 
 import java.util.Base64;
 import java.util.Set;
@@ -88,6 +89,20 @@ public class FlashcardGenerator {
         text.put("text", "Skapa upp till " + clamp(count) + " flashkort av det som står på bilden."
                 + (hint == null || hint.isBlank() ? "" : " Eleven säger: " + hint));
         return save(claude.create(req, "flashcards-vision"), null, null, Deck.Source.PHOTO);
+    }
+
+    /** Från en fil: bild, PDF, Word eller text (glosor, anteckningar, en sida ur boken). */
+    public Result fromDocument(UploadedDocument doc, String hint, int count) {
+        ObjectNode req = request(doc.kind() == UploadedDocument.Kind.IMAGE || doc.kind() == UploadedDocument.Kind.PDF
+                ? props.anthropic().vision() : props.anthropic().flashcards());
+        ObjectNode msg = req.putArray("messages").addObject();
+        msg.put("role", "user");
+        ArrayNode content = msg.putArray("content");
+        doc.addTo(content, mapper);
+        content.addObject().put("type", "text").put("text", "Skapa upp till " + clamp(count) + " flashkort av materialet."
+                + (hint == null || hint.isBlank() ? "" : " Eleven säger: " + hint));
+        return save(claude.create(req, "flashcards-document"), null, null,
+                doc.kind() == UploadedDocument.Kind.IMAGE ? Deck.Source.PHOTO : Deck.Source.GENERATED);
     }
 
     private ObjectNode request(PluggisProperties.ModelProfile profile) {

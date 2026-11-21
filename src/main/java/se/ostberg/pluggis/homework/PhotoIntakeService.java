@@ -9,6 +9,7 @@ import se.ostberg.pluggis.claude.ClaudeClient;
 import se.ostberg.pluggis.claude.ClaudeResponse;
 import se.ostberg.pluggis.config.PluggisProperties;
 import se.ostberg.pluggis.support.Prompts;
+import se.ostberg.pluggis.support.UploadedDocument;
 
 import java.time.LocalDate;
 import java.util.Base64;
@@ -50,38 +51,30 @@ public class PhotoIntakeService {
         this.events = events;
     }
 
-    public IntakeResult intake(byte[] image, String mediaType, String deviceId, String hint) {
-        if (image == null || image.length == 0) {
-            throw new IllegalArgumentException("Ingen bild");
-        }
-        if (image.length > MAX_BYTES) {
-            throw new IllegalArgumentException("Bilden är för stor (max 5 MB) – sänk upplösning/kvalitet");
-        }
-        if (mediaType == null || !MEDIA_TYPES.contains(mediaType)) {
-            throw new IllegalArgumentException("Bildformatet stöds inte: " + mediaType);
-        }
-
+    /** Bild, skärmdump, PDF, Word eller text → nya läxor/prov. */
+    public IntakeResult intake(UploadedDocument doc, String deviceId, String hint) {
         String today = LocalDate.now(props.zone()).toString();
         ObjectNode req = claude.newRequest(props.anthropic().vision(), prompts.extraction(), "Dagens datum: " + today);
 
         ArrayNode content = mapper.createArrayNode();
-        ObjectNode imageBlock = content.addObject();
-        imageBlock.put("type", "image");
-        ObjectNode source = imageBlock.putObject("source");
-        source.put("type", "base64");
-        source.put("media_type", mediaType);
-        source.put("data", Base64.getEncoder().encodeToString(image));
+        doc.addTo(content, mapper);
         ObjectNode textBlock = content.addObject();
         textBlock.put("type", "text");
         textBlock.put("text", hint == null || hint.isBlank()
-                ? "Läs av uppgifterna på bilden."
-                : "Läs av uppgifterna på bilden. Eleven säger: " + hint);
+                ? "Läs av läxorna och proven i materialet."
+                : "Läs av läxorna och proven i materialet. Eleven säger: " + hint);
 
         ObjectNode message = req.putArray("messages").addObject();
         message.put("role", "user");
         message.set("content", content);
 
-        return save(claude.create(req, "vision"), deviceId, Homework.Source.PHOTO);
+        return save(claude.create(req, "vision"), deviceId,
+                doc.kind() == UploadedDocument.Kind.IMAGE ? Homework.Source.PHOTO : Homework.Source.MANUAL);
+    }
+
+    /** Bakåtkompatibelt för bilder. */
+    public IntakeResult intake(byte[] image, String mediaType, String deviceId, String hint) {
+        return intake(UploadedDocument.of(image, "bild", mediaType), deviceId, hint);
     }
 
     /** Inklistrad text, t.ex. från InfoMentors veckoplan eller ett veckobrev. */

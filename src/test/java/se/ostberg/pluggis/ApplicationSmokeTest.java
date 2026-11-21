@@ -216,6 +216,41 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void wordAndTextMaterialIsSavedOnHomeworkEvenWhenClaudeIsDown() throws Exception {
+        String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subject\":\"SO\",\"title\":\"Prov vikingatiden\",\"dueDate\":\""
+                                + LocalDate.now().plusDays(8) + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long id = json(created).path("id").asLong();
+
+        byte[] word = se.ostberg.pluggis.support.UploadedDocumentTest.docx(
+                "<w:document><w:body><w:p><w:r><w:t>Vikingatiden s. 80–95: handel, resor, gudar</w:t></w:r></w:p></w:body></w:document>");
+        var file = new org.springframework.mock.web.MockMultipartFile("file", "vikingar.docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", word);
+        String res = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/homework/upload").file(file).param("homeworkId", String.valueOf(id))
+                        .header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(res).path("note").asText()).contains("sparades");
+
+        String list = mvc.perform(get("/api/homework/" + id + "/material").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(list).get(0).path("text").asText()).contains("Vikingatiden");
+        assertThat(json(list).get(0).path("kind").asText()).isEqualTo("WORD");
+
+        // Ny läxa från fil kräver Claude – ska ge ett begripligt fel, inte 500
+        var png = new org.springframework.mock.web.MockMultipartFile("file", "skarm.png", "image/png", new byte[]{1, 2, 3});
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/homework/upload").file(png).header(TOKEN, "test-token"))
+                .andExpect(status().is(502));
+        var mp3 = new org.springframework.mock.web.MockMultipartFile("file", "x.mp3", "audio/mpeg", new byte[]{1});
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/homework/upload").file(mp3).header(TOKEN, "test-token"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void voiceSettingsAreStoredEvenWithoutSpeechService() throws Exception {
         String saved = mvc.perform(put("/api/speech").header(TOKEN, "test-token")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"voice\":\"sv_SE-lisa-medium\",\"speed\":1.15}"))

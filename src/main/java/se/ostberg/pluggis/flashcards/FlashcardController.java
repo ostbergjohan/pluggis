@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import se.ostberg.pluggis.homework.HomeworkService;
 import se.ostberg.pluggis.planning.PlanningService;
+import se.ostberg.pluggis.support.UploadedDocument;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -126,7 +127,8 @@ public class FlashcardController {
                                            @RequestParam(required = false) String deviceId,
                                            @RequestParam(required = false) String hint,
                                            @RequestParam(defaultValue = "20") int count) throws IOException {
-        FlashcardGenerator.Result r = generator.fromImage(image.getBytes(), image.getContentType(), hint, count);
+        FlashcardGenerator.Result r = generator.fromDocument(
+                UploadedDocument.of(image.getBytes(), image.getOriginalFilename(), image.getContentType()), hint, count);
         notifyDevice(deviceId, r);
         return r;
     }

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import se.ostberg.pluggis.planning.PlanningService;
+import se.ostberg.pluggis.support.UploadedDocument;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -34,11 +35,14 @@ public class HomeworkController {
     private final HomeworkService homework;
     private final PhotoIntakeService photos;
     private final PlanningService planning;
+    private final MaterialService materials;
 
-    public HomeworkController(HomeworkService homework, PhotoIntakeService photos, PlanningService planning) {
+    public HomeworkController(HomeworkService homework, PhotoIntakeService photos, PlanningService planning,
+                              MaterialService materials) {
         this.homework = homework;
         this.photos = photos;
         this.planning = planning;
+        this.materials = materials;
     }
 
     @GetMapping
@@ -75,6 +79,7 @@ public class HomeworkController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable long id) {
         planning.deleteForHomework(id);
+        materials.deleteForHomework(id);
         return homework.delete(id) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
@@ -91,7 +96,45 @@ public class HomeworkController {
     public PhotoIntakeService.IntakeResult photo(@RequestPart("image") MultipartFile image,
                                                  @RequestParam(required = false) String deviceId,
                                                  @RequestParam(required = false) String hint) throws IOException {
-        return photos.intake(image.getBytes(), image.getContentType(), deviceId, hint);
+        return photos.intake(UploadedDocument.of(image.getBytes(), image.getOriginalFilename(), image.getContentType()),
+                deviceId, hint);
+    }
+
+    /**
+     * Ladda upp en fil (bild, Word .docx, PDF, text). Utan {@code homeworkId} blir den nya läxor/prov;
+     * med {@code homeworkId} blir den material till den läxan (innehåll + ny plan, ev. flashkort).
+     */
+    @PostMapping(path = "/upload", consumes = "multipart/form-data")
+    public Object upload(@RequestPart("file") MultipartFile file,
+                         @RequestParam(required = false) Long homeworkId,
+                         @RequestParam(defaultValue = "false") boolean flashcards,
+                         @RequestParam(required = false) String deviceId,
+                         @RequestParam(required = false) String hint) throws IOException {
+        UploadedDocument doc = UploadedDocument.of(file.getBytes(), file.getOriginalFilename(), file.getContentType());
+        if (homeworkId != null) {
+            return materials.attach(homeworkId, doc, flashcards);
+        }
+        return photos.intake(doc, deviceId, hint);
+    }
+
+    @GetMapping("/{id}/material")
+    public List<Material> material(@PathVariable long id) {
+        return materials.forHomework(id);
+    }
+
+    @DeleteMapping("/material/{materialId}")
+    public ResponseEntity<Void> deleteMaterial(@PathVariable long materialId) {
+        return materials.delete(materialId) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+    }
+
+    @ExceptionHandler(org.springframework.web.client.RestClientException.class)
+    public ResponseEntity<Map<String, String>> claudeDown(org.springframework.web.client.RestClientException e) {
+        return ResponseEntity.status(502).body(Map.of("error", "Claude svarar inte just nu – försök igen om en stund"));
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, String>> unavailable(IllegalStateException e) {
+        return ResponseEntity.status(502).body(Map.of("error", e.getMessage()));
     }
 
     public record TextIntake(@NotBlank String text) {
