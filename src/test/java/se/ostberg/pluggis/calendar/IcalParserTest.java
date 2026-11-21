@@ -58,6 +58,21 @@ class IcalParserTest {
     }
 
     @Test
+    void calendarIsDecodedAsUtf8WhenServerSendsNoCharset() {
+        byte[] body = "\uFEFFBEGIN:VCALENDAR\r\nSUMMARY:Aktivitetsdag förmiddag i Västertorpshallen!\r\n"
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        String noCharset = CalendarSyncService.decode(body, org.springframework.http.MediaType.parseMediaType("text/calendar"));
+        String missingHeader = CalendarSyncService.decode(body, null);
+        String latin1 = CalendarSyncService.decode("Väster".getBytes(java.nio.charset.StandardCharsets.ISO_8859_1),
+                org.springframework.http.MediaType.parseMediaType("text/calendar; charset=ISO-8859-1"));
+
+        assertThat(noCharset).startsWith("BEGIN:VCALENDAR").contains("förmiddag i Västertorpshallen");
+        assertThat(missingHeader).contains("förmiddag");
+        assertThat(latin1).isEqualTo("Väster");
+    }
+
+    @Test
     void webcalLinksBecomeHttps() {
         assertThat(CalendarSyncService.normalizeUrl("webcals://im2-api.infomentor.se/V1/x"))
                 .isEqualTo("https://im2-api.infomentor.se/V1/x");

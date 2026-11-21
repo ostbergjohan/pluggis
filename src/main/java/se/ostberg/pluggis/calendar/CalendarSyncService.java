@@ -2,6 +2,7 @@ package se.ostberg.pluggis.calendar;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -11,6 +12,8 @@ import se.ostberg.pluggis.homework.HomeworkService;
 import se.ostberg.pluggis.planning.PlanningService;
 import se.ostberg.pluggis.settings.SettingsService;
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -121,7 +124,8 @@ public class CalendarSyncService {
     public String fetch(String url) {
         String fixed = normalizeUrl(url);
         try {
-            String ics = http.get().uri(fixed).retrieve().body(String.class);
+            var response = http.get().uri(fixed).retrieve().toEntity(byte[].class);
+            String ics = decode(response.getBody(), response.getHeaders().getContentType());
             if (ics == null || !ics.contains("BEGIN:VCALENDAR")) {
                 throw new IllegalArgumentException("Länken gav ingen iCal-kalender");
             }
@@ -195,6 +199,20 @@ public class CalendarSyncService {
         lastResult = r;
         lastError = null;
         return r;
+    }
+
+    /**
+     * iCal är UTF-8 enligt RFC 5545. Servrar som InfoMentor anger ofta ingen charset, och då
+     * skulle Spring tolka texten som ISO-8859-1 ("FÃ¶rmiddag"). Använd UTF-8 om inget annat anges.
+     */
+    static String decode(byte[] body, MediaType contentType) {
+        if (body == null) {
+            return null;
+        }
+        Charset charset = contentType != null && contentType.getCharset() != null
+                ? contentType.getCharset() : StandardCharsets.UTF_8;
+        String text = new String(body, charset);
+        return text.startsWith("\uFEFF") ? text.substring(1) : text;
     }
 
     /** webcal:// och webcals:// (InfoMentor m.fl.) är https:// i praktiken. */
