@@ -1,6 +1,7 @@
 package se.ostberg.pluggis.homework;
 
 import org.springframework.stereotype.Service;
+import se.ostberg.pluggis.support.TextFix;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -27,16 +28,41 @@ public class HomeworkService {
     public Homework upsertFromCalendar(String externalId, String subject, String title, String description,
                                        LocalDate dueDate, Homework.Kind kind) {
         return repo.findByExternalId(externalId)
+                // Vissa kalendrar (t.ex. InfoMentor) byter UID mellan hämtningar – känn då igen på titel + datum.
+                .or(() -> findCalendarTwin(title, dueDate))
                 .map(h -> {
-                    h.updateFromCalendar(subject, title, description, dueDate, kind);
+                    h.updateFromCalendar(subject, TextFix.fixMojibake(title), TextFix.fixMojibake(description), dueDate, kind);
+                    h.setExternalId(externalId);
                     return h;
                 })
                 .orElseGet(() -> {
-                    Homework h = new Homework(subject, title, description, dueDate, null, Homework.Source.CALENDAR);
+                    Homework h = new Homework(subject, TextFix.fixMojibake(title), TextFix.fixMojibake(description),
+                            dueDate, null, Homework.Source.CALENDAR);
                     h.updateContent(null, null, kind, null);
                     h.setExternalId(externalId);
                     return repo.save(h);
                 });
+    }
+
+    /** Kalenderimporterad läxa med samma titel (oavsett åäö-fel) och samma datum. */
+    private Optional<Homework> findCalendarTwin(String title, LocalDate dueDate) {
+        if (dueDate == null) {
+            return Optional.empty();
+        }
+        String key = TextFix.key(title);
+        return repo.findByExternalIdIsNotNullAndDueDate(dueDate).stream()
+                .filter(h -> TextFix.key(h.getTitle()).equals(key))
+                .findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public List<Homework> calendarImported() {
+        return repo.findByExternalIdIsNotNull();
+    }
+
+    @Transactional
+    public void fixTitleEncoding(long id) {
+        repo.findById(id).ifPresent(h -> h.edit(null, TextFix.fixMojibake(h.getTitle())));
     }
 
     @Transactional

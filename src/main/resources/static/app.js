@@ -384,12 +384,16 @@ views.laxor = async (main) => {
           } }, 'Förhandsgranska'),
           h('button', { class: 'primary', onclick: async (e) => {
             const r = await run(() => api('/api/calendar', { method: 'PUT', body: { url: url.value.trim(), onlySchoolwork: only.checked } }), e.target);
-            if (r) { toast(`Sparad – importerade ${r.imported}, hoppade över ${r.skipped}`); status.textContent = syncText(await api('/api/calendar')); render(); }
+            if (r) { toast(`Sparad – importerade ${r.imported}, hoppade över ${r.skipped}${r.merged ? `, ${r.merged} dubbletter borttagna` : ''}`); status.textContent = syncText(await api('/api/calendar')); render(); }
           } }, 'Spara och synka'),
           st.url ? h('button', { onclick: async (e) => {
             const r = await run(() => api('/api/calendar/sync', { method: 'POST' }), e.target);
-            if (r) { toast(`Synkad – ${r.imported} importerade`); status.textContent = syncText(await api('/api/calendar')); render(); }
+            if (r) { toast(`Synkad – ${r.imported} importerade${r.merged ? `, ${r.merged} dubbletter borttagna` : ''}`); status.textContent = syncText(await api('/api/calendar')); render(); }
           } }, '↻ Synka nu') : null,
+          h('button', { onclick: async (e) => {
+            const r = await run(() => api('/api/calendar/dedupe', { method: 'POST' }), e.target);
+            if (r) { toast(r.merged ? `Tog bort ${r.merged} dubbletter` : 'Inga dubbletter hittades'); render(); }
+          } }, '🧹 Rensa dubbletter'),
           st.url ? h('button', { class: 'danger', onclick: async () => {
             if (!confirm('Sluta prenumerera? Redan importerade läxor ligger kvar.')) return;
             await run(() => api('/api/calendar', { method: 'DELETE' }), null, 'Prenumerationen borttagen');

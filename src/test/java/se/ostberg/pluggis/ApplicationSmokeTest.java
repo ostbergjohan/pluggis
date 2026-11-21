@@ -176,6 +176,46 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void calendarWithChangingUidsAndBrokenEncodingDoesNotCreateDuplicates() throws Exception {
+        String date = LocalDate.now().plusDays(10).toString().replace("-", "");
+        java.util.function.Function<String, String> feed = (uidSuffix) -> "BEGIN:VCALENDAR\r\n"
+                + "BEGIN:VEVENT\r\nUID:a-" + uidSuffix + "\r\nDTSTART;VALUE=DATE:" + date
+                + "\r\nSUMMARY:Prov i SO: Vikingatiden\r\nEND:VEVENT\r\n"
+                + "BEGIN:VEVENT\r\nUID:b-" + uidSuffix + "\r\nDTSTART;VALUE=DATE:" + date
+                + "\r\nSUMMARY:Läxa: Glosor kap 5\r\nEND:VEVENT\r\n"
+                + "BEGIN:VEVENT\r\nUID:c-" + uidSuffix + "\r\nDTSTART;VALUE=DATE:" + date
+                + "\r\nSUMMARY:Läxa: Glosor kap 5\r\nEND:VEVENT\r\n"  // samma händelse två gånger i flödet
+                + "END:VCALENDAR\r\n";
+
+        // Som innan åäö-rättningen: titeln sparad med trasig kodning
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                        .content(feed.apply("1").replace("Läxa", "LÃ¤xa")))
+                .andExpect(status().isOk());
+        // Ny hämtning: nya UID:n och rätt kodning
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                        .content(feed.apply("2")))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                        .content(feed.apply("3")))
+                .andExpect(status().isOk());
+
+        String list = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String due = LocalDate.now().plusDays(10).toString();
+        long count = 0;
+        boolean glosorOk = false;
+        for (JsonNode h : json(list)) {
+            if (due.equals(h.path("dueDate").asText())) {
+                count++;
+                glosorOk |= h.path("title").asText().equals("Läxa: Glosor kap 5");
+            }
+        }
+        assertThat(count).isEqualTo(2);
+        assertThat(glosorOk).isTrue();
+        mvc.perform(post("/api/calendar/dedupe").header(TOKEN, "test-token")).andExpect(status().isOk());
+    }
+
+    @Test
     void voiceSettingsAreStoredEvenWithoutSpeechService() throws Exception {
         String saved = mvc.perform(put("/api/speech").header(TOKEN, "test-token")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"voice\":\"sv_SE-lisa-medium\",\"speed\":1.15}"))

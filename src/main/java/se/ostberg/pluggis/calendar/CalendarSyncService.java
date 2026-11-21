@@ -11,12 +11,17 @@ import se.ostberg.pluggis.homework.Homework;
 import se.ostberg.pluggis.homework.HomeworkService;
 import se.ostberg.pluggis.planning.PlanningService;
 import se.ostberg.pluggis.settings.SettingsService;
+import se.ostberg.pluggis.support.TextFix;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -32,7 +37,7 @@ import java.util.Set;
 @Service
 public class CalendarSyncService {
 
-    public record SyncResult(int read, int imported, int replanned, int skipped) {
+    public record SyncResult(int read, int imported, int replanned, int skipped, int merged) {
     }
 
     public record PreviewEntry(String uid, String summary, String description, LocalDate date,
@@ -165,7 +170,12 @@ public class CalendarSyncService {
         int imported = 0;
         int replanned = 0;
         int skipped = 0;
+        Set<String> seen = new HashSet<>();
         for (IcalParser.Entry e : entries) {
+            if (!seen.add(TextFix.key(e.summary()) + "|" + e.date())) {
+                skipped++; // samma händelse två gånger i samma kalender
+                continue;
+            }
             boolean selected = uids == null || uids.contains(e.uid());
             boolean outOfRange = e.date().isBefore(today.minusDays(1)) || e.date().isAfter(today.plusDays(horizon));
             boolean filteredOut = uids == null && onlySchoolwork && !IcalParser.looksLikeSchoolwork(e.summary(), e.description());
@@ -186,7 +196,66 @@ public class CalendarSyncService {
                 }
             }
         }
-        return new SyncResult(entries.size(), imported, replanned, skipped);
+        int merged = mergeDuplicates();
+        return new SyncResult(entries.size(), imported, replanned, skipped, merged);
+    }
+
+    /**
+     * Slår ihop kalenderimporterade läxor med samma titel (oavsett åäö-fel) och datum.
+     * Behåller den som har mest eget innehåll (plan, kortlek, delsteg, egen beskrivning)
+     * och tar bort resten. Rättar också trasiga åäö i titlar. Returnerar antal borttagna.
+     */
+    public int mergeDuplicates() {
+        Map<String, List<Homework>> groups = new LinkedHashMap<>();
+        for (Homework h : homework.calendarImported()) {
+            if (h.getTitle() != null && !h.getTitle().equals(TextFix.fixMojibake(h.getTitle()))) {
+                homework.fixTitleEncoding(h.getId());
+            }
+            groups.computeIfAbsent(TextFix.key(h.getTitle()) + "|" + h.getDueDate(), k -> new ArrayList<>()).add(h);
+        }
+        int removed = 0;
+        for (List<Homework> group : groups.values()) {
+            if (group.size() < 2) {
+                continue;
+            }
+            Homework keep = group.stream().max(Comparator.comparingInt(this::richness)
+                    .thenComparing(Homework::getCreatedAt, Comparator.reverseOrder())).orElseThrow();
+            for (Homework dup : group) {
+                if (dup == keep) {
+                    continue;
+                }
+                if (keep.getDeckId() == null && dup.getDeckId() != null) {
+                    homework.linkDeck(keep.getId(), dup.getDeckId());
+                }
+                planning.deleteForHomework(dup.getId());
+                homework.delete(dup.getId());
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            log.info("Kalender: slog ihop {} dubbletter", removed);
+        }
+        return removed;
+    }
+
+    private int richness(Homework h) {
+        int score = 0;
+        if (!planning.forHomework(h.getId()).isEmpty()) {
+            score += 8;
+        }
+        if (h.getDeckId() != null) {
+            score += 4;
+        }
+        if (!h.getSteps().isEmpty()) {
+            score += 2;
+        }
+        if (h.getSource() != Homework.Source.CALENDAR) {
+            score += 2; // beskrivningen är ifylld för hand
+        }
+        if (h.getStatus() == Homework.Status.DONE) {
+            score += 1;
+        }
+        return score;
     }
 
     /** Bakåtkompatibelt: importera allt inom tidsfönstret. */

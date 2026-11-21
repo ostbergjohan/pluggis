@@ -47,6 +47,12 @@ public class CalendarController {
         return ResponseEntity.noContent().build();
     }
 
+    /** Slå ihop dubbletter bland kalenderimporterade läxor. */
+    @PostMapping("/dedupe")
+    public Map<String, Integer> dedupe() {
+        return Map.of("merged", sync.mergeDuplicates());
+    }
+
     /** Synka den sparade prenumerationen nu. */
     @PostMapping("/sync")
     public CalendarSyncService.SyncResult syncNow() {
