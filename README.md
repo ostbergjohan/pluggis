@@ -18,7 +18,8 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 | Poäng för pluggande med streak och valfri veckopeng (tak per vecka) | ✅ |
 | Pluggplan dag för dag utifrån vad som ingår (sidor, kapitel, begrepp), omplanering | ✅ |
 | Påminnelser på Tab5 (eftermiddag + kvällsknuff, "imorgon är det prov") | ✅ |
-| Läxor in via InfoMentors kalenderprenumeration (webcals), .ics-fil, skärmdump eller inklistrad text | ✅ |
+| Läxor in via InfoMentors kalenderprenumeration (webcals), .ics-fil, skärmdump, Word, PDF eller inklistrad text | ✅ |
+| Material på en läxa/prov (skärmdump, Word, PDF, text) → innehåll, ny plan, valfria flashkort | ✅ |
 | WebSocket för Tab5 (text, knappar, timer, foto, kort, poäng) | ✅ |
 | Webbgränssnitt: föräldravy (läxor, plan, flashkort, poäng, statistik) + Tab5-simulator | ✅ |
 | REST för test med curl / iOS-genväg | ✅ |
@@ -128,7 +129,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Flik | Vad |
 |---|---|
 | Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
-| Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp skärmdump, redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
+| Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
 | Plan | Tre veckor framåt dag för dag, plus det som ligger efter |
 | Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
@@ -152,6 +153,11 @@ Andra vägar in:
    (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=tab5-1`,
    formulär med fältet `image`, header `X-Pluggis-Token`).
 3. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
+4. **Ladda upp fil** (bild, Word .docx, PDF, .txt): *📎 Ladda upp fil* och välj **Ny läxa eller prov**
+   eller en befintlig läxa. Kopplat till en läxa blir filen *material*: Claude läser vad som ingår
+   (avsnitt, sidor, begrepp), läxan uppdateras, planen görs om och – om du kryssar i – blir det flashkort.
+   `POST /api/homework/upload` (fält `file`, valfritt `homeworkId`, `flashcards=true`).
+   Word-text läses lokalt och sparas även om Claude inte svarar. Gamla .doc stöds inte – spara som .docx.
 
 Kalendern ger oftast bara titel och datum – saknas innehållet frågar coachen vad som ingår. Från skärmdump och text läser Claude ut läxa/prov, datum och innehåll.
 
@@ -213,7 +219,7 @@ Det här hanterar en minderårigs röst, bilder och skolarbete.
 - Sätt alltid `PLUGGIS_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
   Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.
-- Bilder sparas inte, bara de utlästa läxorna.
+- Bilder och PDF:er sparas inte, bara det som lästs ut. Text från Word/textfiler sparas som material på läxan och tas bort med läxan.
 - Prata igenom med eleven vad som sparas och vad en förälder kan se.
 
 ## Nästa steg
