@@ -12,12 +12,14 @@ import java.nio.charset.StandardCharsets;
 public class Prompts {
 
     private final String coach;
+    private final String coachState;
     private final String extraction;
     private final String flashcards;
     private final String studyPlan;
 
     public Prompts() {
         this.coach = load("prompts/coach-system.md");
+        this.coachState = load("prompts/coach-state.md");
         this.extraction = load("prompts/homework-extraction.md");
         this.flashcards = load("prompts/flashcards.md");
         this.studyPlan = load("prompts/study-plan.md");
@@ -33,6 +35,11 @@ public class Prompts {
 
     public String coach() {
         return coach;
+    }
+
+    /** Mall för läget just nu – fylls i varje anrop och ligger efter cache-markeringen. */
+    public String coachState() {
+        return coachState;
     }
 
     public String extraction() {

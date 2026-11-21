@@ -1,0 +1,26 @@
+# Allt på en maskin: docker compose up --build
+# Öppna sedan http://localhost:8080
+services:
+  pluggis:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      PLUGGIS_SPEECH_URL: http://speech:8090
+    volumes:
+      - pluggis-data:/app/data
+    depends_on:
+      - speech
+
+  speech:
+    build: ./speech
+    environment:
+      STT_MODEL: KBLab/kb-whisper-small
+      STT_DEVICE: cpu
+      STT_COMPUTE_TYPE: int8
+      PIPER_LENGTH_SCALE: "1.05"
+    # Exponeras bara internt – Pluggis pratar med den, inte enheterna.
+
+volumes:
+  pluggis-data:

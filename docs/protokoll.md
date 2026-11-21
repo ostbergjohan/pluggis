@@ -60,16 +60,33 @@ Content-Type: multipart/form-data, fält "image"
 
 Skapar en ny kortlek. Med `deviceId` får enheten ett `say` om hur många kort som skapades.
 
-## Fas 2: ljud (inte byggt än)
+## Ljud
 
-Två vägar, välj efter hur xiaozhi-firmwaren fungerar på Tab5:
+Kräver att Pluggis har en ljudtjänst (`PLUGGIS_SPEECH_URL`, se `speech/`).
 
-1. **Ljud direkt hit:** binära WebSocket-ramar med Opus (16 kHz mono) upp, och
-   TTS-ljud ner. Backenden kör tal till text (t.ex. KB-Whisper lokalt) och text till tal
-   (t.ex. Piper med svensk röst). Kräver `SpeechToText`/`TextToSpeech` i backenden.
-2. **xiaozhi-protokollet:** implementera xiaozhis dokumenterade WebSocket-protokoll
-   (hello/listen/stt/tts/llm-meddelanden + Opus) i en egen handler, och återanvänd
-   `CoachService` som "LLM". Då kan färdig firmware användas oförändrad.
+1. Efter anslutning skickar enheten
+   `{"type":"hello","audio":true,"audioFormat":"wav"}` (simulatorn skickar `webm`).
+   Svar: `{"type":"hello_ack","audio":true}`.
+2. **Tryck-och-prata:** när knappen släpps skickar enheten hela yttrandet som **en binär ram**
+   (wav 16 kHz mono 16-bit, eller webm/opus). Max ca 4 MB.
+3. Servern svarar i ordning:
+   - `{"type":"thinking"}`
+   - `{"type":"heard","text":"jag ska göra matteläxan"}` – det KB-Whisper hörde
+   - för varje mening, så fort den är klar:
+     `{"type":"audio","format":"wav","seq":0,"text":"Okej!","bytes":48210}` **följt av en binär ram** med wav-ljudet.
+     Spela upp i `seq`-ordning. (Andra textmeddelanden, t.ex. `timer`, kan komma emellan.)
+   - `{"type":"say","text":"…hela svaret…"}` – för skärmen
+   - `{"type":"audio_end","count":3}`
+4. Text och knappar (`text`, `button`) ger också uppläst svar när `audio` är på.
 
-Mät latens per steg (STT → Claude → TTS). Claude-delen finns redan som
-`pluggis_claude_request_seconds` i `/actuator/prometheus`.
+Utan `hello`/`audio:true` – eller utan ljudtjänst – fungerar allt som tidigare med bara text.
+
+**Latens att hålla koll på** (`/actuator/prometheus`):
+
+| Mätvärde | Vad |
+|---|---|
+| `pluggis_speech_stt_seconds` | tal till text |
+| `pluggis_claude_first_text_seconds{purpose="coach"}` | tills Claude börjar svara |
+| `pluggis_voice_first_audio_seconds` | från yttrande till första ljudet – det som känns |
+| `pluggis_speech_tts_seconds` | text till tal per mening |
+| `pluggis_claude_tokens_total{kind="cache_read"}` | att prompt caching fungerar |

@@ -21,7 +21,8 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 | Webbgränssnitt: föräldravy (läxor, plan, flashkort, poäng, statistik) + Tab5-simulator | ✅ |
 | REST för test med curl / iOS-genväg | ✅ |
 | Prometheus-metrik för Claude-latens och tokens | ✅ |
-| Ljud (tal till text / text till tal) | ⏳ fas 2, se `docs/protokoll.md` |
+| Ljud: KB-Whisper (tal till text) + Piper (text till tal), uppläsning mening för mening | ✅ |
+| Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
 | Firmware för Tab5 | ⏳ eget repo eller `firmware/` senare |
 | Föräldravy | ⏳ |
 
@@ -95,6 +96,28 @@ iOS-genväg ── POST /api/homework/photo ─┘ claude/   tunn klient mot Mes
   "(Knapptryck: jag vill börja plugga nu.)", så beteendet styrs av prompten.
 - **Pass och läxor** skickas med i systemprompten varje anrop, så coachen vet läget
   även efter omstart. Själva samtalet hålls i minnet och nollställs efter 30 min tystnad.
+
+## Modeller och ljud
+
+| Jobb | Standard | Varför |
+|---|---|---|
+| Röstcoachen | Haiku 5.5, `effort: low`, thinking av | Snabbast – varje sekund märks i röst |
+| Foto/skärmdumpar | Sonnet 5.5, `effort: medium` | Handskrift och tabeller |
+| Pluggplaner | Sonnet 5.5, `effort: medium` | Ingen väntar i realtid, kvalitet viktigare |
+| Flashkort | Sonnet 5.5, `effort: medium` | Bra kort kräver omdöme |
+
+Byt med `PLUGGIS_COACH_MODEL` m.fl. (se `.env.example`). Coachens fasta regler och verktygen
+cachas (prompt caching); bara "läget just nu" och samtalet skickas fullt varje gång.
+Svaret strömmas och delas upp i meningar som läses upp en i taget.
+
+**Ljudtjänsten** (`speech/`) kör lokalt: KB-Whisper small (Kungliga bibliotekets svenska Whisper)
+via faster-whisper, och Piper med svensk röst. Enklast:
+
+```bash
+docker compose up --build      # Pluggis + speech, öppna http://localhost:8080
+```
+
+I Tab5-simulatorn: kryssa i *Serverns röst* och håll inne *🎙 Håll och prata*.
 
 ## Webbgränssnitt
 
@@ -191,6 +214,6 @@ Det här hanterar en minderårigs röst, bilder och skolarbete.
 
 1. Kompilera och kör testerna lokalt (`mvn verify`) och prova coachen med curl.
 2. Tab5: flasha färdig firmware och få upp WebSocket + knappar (text först, ljud sen).
-3. Fas 2 ljud: välj väg i `docs/protokoll.md`, mät latens, testa Haiku mot Sonnet.
+3. Ljud på riktiga Tab5: tryck-och-prata enligt `docs/protokoll.md`, mät latens i Grafana.
 4. Föräldravy: veckans pass, läxor, poäng och utbetalning (enkel sida eller Grafana-panel).
 5. MCP-server så att samma läxlista nås från Claude-appen och hemagenten.

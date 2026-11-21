@@ -62,8 +62,7 @@ public class PhotoIntakeService {
         }
 
         String today = LocalDate.now(props.zone()).toString();
-        ObjectNode req = claude.newRequest(
-                props.anthropic().visionModel(), 2048, prompts.extraction().replace("{{today}}", today));
+        ObjectNode req = claude.newRequest(props.anthropic().vision(), prompts.extraction(), "Dagens datum: " + today);
 
         ArrayNode content = mapper.createArrayNode();
         ObjectNode imageBlock = content.addObject();
@@ -94,8 +93,7 @@ public class PhotoIntakeService {
             throw new IllegalArgumentException("Texten är för lång – klistra in en vecka i taget");
         }
         String today = LocalDate.now(props.zone()).toString();
-        ObjectNode req = claude.newRequest(
-                props.anthropic().model(), 2048, prompts.extraction().replace("{{today}}", today));
+        ObjectNode req = claude.newRequest(props.anthropic().vision(), prompts.extraction(), "Dagens datum: " + today);
         ObjectNode message = req.putArray("messages").addObject();
         message.put("role", "user");
         message.put("content", "Läs ut läxor och prov ur den här texten:\n\n" + text);

@@ -5,44 +5,43 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
-import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import org.springframework.web.util.UriComponentsBuilder;
-import se.ostberg.pluggis.coach.CoachService;
 import se.ostberg.pluggis.config.PluggisProperties;
 import se.ostberg.pluggis.session.StudySessionService;
+import se.ostberg.pluggis.speech.VoiceService;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.nio.ByteBuffer;
+import java.util.Map;
 
 /**
- * WebSocket för Tab5: ws://host:8080/ws/device?deviceId=tab5-1&token=...
+ * WebSocket för Tab5 (och webbsimulatorn): ws://host:8080/ws/device?deviceId=tab5-1&token=...
  *
- * Fas 1 (nu): text in/ut + knappar + timer. Tal till text och text till tal görs
- * på enheten eller i en separat tjänst och skickas hit som "text".
- * Fas 2: binära Opus-ramar för ljud (se docs/protokoll.md).
+ * Text-ramar är JSON (se docs/protokoll.md). Binära ramar är ett helt yttrande som ljud
+ * (wav 16 kHz mono eller webm/opus) – det skickas till tal till text och sedan till coachen.
  */
 @Component
-public class DeviceWebSocketHandler extends TextWebSocketHandler {
+public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceWebSocketHandler.class);
     private static final String DEVICE_ID = "deviceId";
+    private static final String AUDIO_FORMAT = "audioFormat";
 
     private final DeviceRegistry registry;
-    private final CoachService coach;
+    private final VoiceService voice;
     private final StudySessionService sessions;
     private final PluggisProperties props;
     private final ObjectMapper mapper;
-    /** Claude-anrop tar sekunder – kör dem utanför WebSocket-tråden. */
-    private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
-    public DeviceWebSocketHandler(DeviceRegistry registry, CoachService coach, StudySessionService sessions,
+    public DeviceWebSocketHandler(DeviceRegistry registry, VoiceService voice, StudySessionService sessions,
                                   PluggisProperties props, ObjectMapper mapper) {
         this.registry = registry;
-        this.coach = coach;
+        this.voice = voice;
         this.sessions = sessions;
         this.props = props;
         this.mapper = mapper;
@@ -81,10 +80,16 @@ public class DeviceWebSocketHandler extends TextWebSocketHandler {
         }
 
         switch (msg.path("type").asText()) {
+            case "hello" -> {
+                // {"type":"hello","audio":true,"audioFormat":"wav"} – vill enheten ha uppläst ljud?
+                registry.setWantsAudio(deviceId, msg.path("audio").asBoolean(false));
+                session.getAttributes().put(AUDIO_FORMAT, msg.path("audioFormat").asText("wav"));
+                registry.send(deviceId, Map.of("type", "hello_ack", "audio", registry.wantsAudio(deviceId)));
+            }
             case "text" -> {
                 String text = msg.path("text").asText("").trim();
                 if (!text.isEmpty()) {
-                    askCoach(deviceId, text);
+                    voice.onText(deviceId, text);
                 }
             }
             case "button" -> {
@@ -95,13 +100,26 @@ public class DeviceWebSocketHandler extends TextWebSocketHandler {
                                 case ButtonMapper.TakePhoto p -> registry.send(deviceId, p.forFlashcards()
                                         ? DeviceMessages.TakePhoto.flashcards()
                                         : DeviceMessages.TakePhoto.homework());
-                                case ButtonMapper.SayToCoach s -> askCoach(deviceId, s.text());
+                                case ButtonMapper.SayToCoach s -> voice.onText(deviceId, s.text());
                             }
                         });
             }
-            case "ping" -> registry.send(deviceId, java.util.Map.of("type", "pong"));
+            case "ping" -> registry.send(deviceId, Map.of("type", "pong"));
             default -> registry.send(deviceId, new DeviceMessages.Error("Okänd typ: " + msg.path("type").asText()));
         }
+    }
+
+    @Override
+    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        String deviceId = (String) session.getAttributes().get(DEVICE_ID);
+        if (deviceId == null) {
+            return;
+        }
+        ByteBuffer payload = message.getPayload();
+        byte[] audio = new byte[payload.remaining()];
+        payload.get(audio);
+        String format = (String) session.getAttributes().getOrDefault(AUDIO_FORMAT, "wav");
+        voice.onAudio(deviceId, audio, "utterance." + format);
     }
 
     @Override
@@ -111,10 +129,5 @@ public class DeviceWebSocketHandler extends TextWebSocketHandler {
             registry.unregister(deviceId, session);
             log.info("Enhet frånkopplad: {} ({})", deviceId, status.getCode());
         }
-    }
-
-    private void askCoach(String deviceId, String text) {
-        registry.send(deviceId, new DeviceMessages.Thinking());
-        workers.submit(() -> registry.send(deviceId, new DeviceMessages.Say(coach.chat(deviceId, text))));
     }
 }

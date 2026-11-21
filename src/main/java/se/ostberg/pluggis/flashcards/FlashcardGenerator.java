@@ -55,7 +55,7 @@ public class FlashcardGenerator {
         if (sourceText != null && !sourceText.isBlank()) {
             ask.append("\n\nUtgå ENDAST från detta material:\n").append(sourceText);
         }
-        ObjectNode req = request(props.anthropic().model());
+        ObjectNode req = request(props.anthropic().flashcards());
         ObjectNode msg = req.putArray("messages").addObject();
         msg.put("role", "user");
         msg.put("content", ask.toString());
@@ -73,7 +73,7 @@ public class FlashcardGenerator {
         if (mediaType == null || !MEDIA_TYPES.contains(mediaType)) {
             throw new IllegalArgumentException("Bildformatet stöds inte: " + mediaType);
         }
-        ObjectNode req = request(props.anthropic().visionModel());
+        ObjectNode req = request(props.anthropic().vision());
         ObjectNode msg = req.putArray("messages").addObject();
         msg.put("role", "user");
         ArrayNode content = msg.putArray("content");
@@ -90,8 +90,8 @@ public class FlashcardGenerator {
         return save(claude.create(req, "flashcards-vision"), null, null, Deck.Source.PHOTO);
     }
 
-    private ObjectNode request(String model) {
-        return claude.newRequest(model, 4096, prompts.flashcards());
+    private ObjectNode request(PluggisProperties.ModelProfile profile) {
+        return claude.newRequest(profile, prompts.flashcards());
     }
 
     private Result save(ClaudeResponse response, String subjectFallback, Long homeworkId, Deck.Source source) {

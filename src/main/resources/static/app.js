@@ -678,7 +678,13 @@ views.simulator = async (main) => {
   const connectBtn = h('button', { class: 'primary', onclick: () => (state.ws ? disconnect() : connect()) }, 'Anslut');
   const speakBox = h('input', { type: 'checkbox', checked: state.speak, onchange: () => { state.speak = speakBox.checked; store.set('lc.speak', state.speak ? '1' : '0'); } });
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const micBtn = Recognition ? h('button', { onclick: listen, title: 'Prata (svenska)' }, '🎤') : null;
+  const micBtn = Recognition ? h('button', { onclick: listen, title: 'Prata (webbläsarens taligenkänning)' }, '🎤') : null;
+  const serverVoice = h('input', { type: 'checkbox', checked: store.get('lc.serverVoice', '0') === '1',
+    onchange: () => { store.set('lc.serverVoice', serverVoice.checked ? '1' : '0'); sendHello(); } });
+  const pttBtn = h('button', { title: 'Håll inne och prata – skickas till serverns KB-Whisper' }, '🎙 Håll och prata');
+  let recorder = null, chunks = [], pendingAudio = null;
+  const audioQueue = [];
+  let playing = false;
 
   const press = (button, gesture) => send({ type: 'button', button, gesture });
   main.append(h('div', { class: 'sim' },
@@ -692,8 +698,10 @@ views.simulator = async (main) => {
         h('button', { class: 'small', onclick: () => press('main', 'double') }, 'Blå dubbel (hjälp)'),
         h('button', { class: 'small', onclick: () => press('photo', 'long') }, 'Röd långt (kort från foto)')),
       h('div', { class: 'sim-input' }, input, micBtn, h('button', { onclick: sendText }, 'Skicka')),
-      h('div', { class: 'toolbar', style: 'margin-top:10px' }, connectBtn,
-        h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, speakBox, 'Läs upp svar'), photoInput)),
+      h('div', { class: 'toolbar', style: 'margin-top:10px' }, connectBtn, pttBtn,
+        h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, speakBox, 'Läs upp (webbläsaren)'),
+        h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, serverVoice, 'Serverns röst (KB-Whisper + Piper)'),
+        photoInput)),
     h('div', {}, h('h3', {}, 'Meddelanden'), log)));
 
   function logLine(dir, obj) {
@@ -711,7 +719,51 @@ views.simulator = async (main) => {
     send({ type: 'text', text });
     input.value = '';
   }
+  function sendHello() {
+    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', audio: serverVoice.checked, audioFormat: 'webm' });
+  }
+
+  // Tryck-och-prata: spelar in i webbläsaren och skickar som binär ram (webm/opus) till servern.
+  async function startRecording() {
+    if (!state.ws || state.ws.readyState !== 1) return toast('Inte ansluten', true);
+    if (!navigator.mediaDevices || !window.MediaRecorder) return toast('Webbläsaren kan inte spela in', true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 2000) return;
+        state.ws.send(await blob.arrayBuffer());
+        logLine('out', { binary: `${Math.round(blob.size / 1024)} kB ljud` });
+      };
+      recorder.start();
+      pttBtn.textContent = '● Spelar in…';
+    } catch {
+      toast('Fick inte använda mikrofonen', true);
+    }
+  }
+  function stopRecording() {
+    if (recorder && recorder.state === 'recording') recorder.stop();
+    pttBtn.textContent = '🎙 Håll och prata';
+  }
+  pttBtn.addEventListener('pointerdown', startRecording);
+  pttBtn.addEventListener('pointerup', stopRecording);
+  pttBtn.addEventListener('pointerleave', stopRecording);
+
+  function playNext() {
+    if (playing || !audioQueue.length) return;
+    playing = true;
+    const url = URL.createObjectURL(audioQueue.shift());
+    const a = new Audio(url);
+    a.onended = a.onerror = () => { URL.revokeObjectURL(url); playing = false; playNext(); };
+    a.play().catch(() => { playing = false; });
+  }
+
   function speakText(text) {
+    if (serverVoice.checked) return; // servern läser upp
     if (!state.speak || !window.speechSynthesis) return;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'sv-SE';
@@ -735,15 +787,24 @@ views.simulator = async (main) => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${proto}://${location.host}/ws/device?deviceId=${enc(state.deviceId)}&token=${enc(state.token)}`;
     const ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
     state.ws = ws;
     stateLine.textContent = 'Ansluter…';
-    ws.onopen = () => { stateLine.textContent = 'Ansluten – redo'; connectBtn.textContent = 'Koppla ner'; say.textContent = 'Tryck på blå knappen för att börja, eller skriv något.'; };
+    ws.onopen = () => { sendHello(); stateLine.textContent = 'Ansluten – redo'; connectBtn.textContent = 'Koppla ner'; say.textContent = 'Tryck på blå knappen för att börja, eller skriv något.'; };
     ws.onclose = (e) => {
       stateLine.textContent = e.code === 1008 ? 'Nekad – kontrollera token' : 'Frånkopplad';
       connectBtn.textContent = 'Anslut';
       if (state.ws === ws) state.ws = null;
     };
     ws.onmessage = (e) => {
+      if (typeof e.data !== 'string') {
+        // Binär ram = ljudet till det senaste "audio"-meddelandet
+        audioQueue.push(new Blob([e.data], { type: 'audio/wav' }));
+        logLine('in', { binary: `${Math.round(e.data.byteLength / 1024)} kB ljud`, sentence: pendingAudio && pendingAudio.text });
+        pendingAudio = null;
+        playNext();
+        return;
+      }
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       logLine('in', msg);
@@ -799,6 +860,16 @@ views.simulator = async (main) => {
           photoInput.value = '';
         };
         photoInput.click();
+        break;
+      case 'heard':
+        say.replaceChildren(h('em', {}, `Du sa: ”${msg.text}”`), h('br'), h('span', { class: 'thinking' }, 'Tänker'));
+        break;
+      case 'audio':
+        pendingAudio = msg;
+        break;
+      case 'hello_ack':
+      case 'audio_end':
+      case 'pong':
         break;
       case 'error':
         toast(msg.message, true);

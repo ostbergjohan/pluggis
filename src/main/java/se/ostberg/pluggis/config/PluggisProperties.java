@@ -19,7 +19,18 @@ public record PluggisProperties(
         Rewards rewards,
         Planning planning,
         Calendar calendar,
-        Reminders reminders) {
+        Reminders reminders,
+        Speech speech) {
+
+    /**
+     * Ljudtjänsten (pluggis-speech: KB-Whisper + Piper). Tom baseUrl = ingen ljudväg,
+     * då fungerar allt som text som tidigare.
+     */
+    public record Speech(String baseUrl, int timeoutSeconds) {
+        public boolean enabled() {
+            return baseUrl != null && !baseUrl.isBlank();
+        }
+    }
 
     /** Vilka veckodagar planen får lägga pluggmoment på, och max minuter per dag. */
     public record Planning(List<DayOfWeek> studyDays, int maxMinutesPerDay) {
@@ -52,9 +63,19 @@ public record PluggisProperties(
             String apiKey,
             String baseUrl,
             String apiVersion,
-            String model,
-            String visionModel,
-            int maxTokens) {
+            ModelProfile coach,
+            ModelProfile vision,
+            ModelProfile planning,
+            ModelProfile flashcards) {
+    }
+
+    /**
+     * En modell med inställningar för ett visst jobb.
+     *
+     * @param effort   low | medium | high | xhigh | max, tomt = modellens standard
+     * @param thinking disabled (Haiku) | between_tools (Sonnet) | adaptive | tomt = standard
+     */
+    public record ModelProfile(String model, String effort, String thinking, int maxTokens) {
     }
 
     public ZoneId zone() {

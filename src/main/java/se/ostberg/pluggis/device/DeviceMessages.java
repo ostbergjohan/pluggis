@@ -79,6 +79,30 @@ public final class DeviceMessages {
         }
     }
 
+    /** Det servern hörde (tal till text) – visa så att eleven ser att den förstod. */
+    public record Heard(String type, String text) {
+        public Heard(String text) {
+            this("heard", text);
+        }
+    }
+
+    /**
+     * Nästa binära WebSocket-ram är ljud för den här meningen (wav från Piper).
+     * Spela upp i seq-ordning.
+     */
+    public record Audio(String type, String format, int seq, String text, int bytes) {
+        public Audio(String format, int seq, String text, int bytes) {
+            this("audio", format, seq, text, bytes);
+        }
+    }
+
+    /** Inga fler ljudbitar för det här svaret. */
+    public record AudioEnd(String type, int count) {
+        public AudioEnd(int count) {
+            this("audio_end", count);
+        }
+    }
+
     /** Coachen tänker – visa en animation så eleven vet att något händer. */
     public record Thinking(String type) {
         public Thinking() {

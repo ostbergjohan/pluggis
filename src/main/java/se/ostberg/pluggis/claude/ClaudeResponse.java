@@ -16,9 +16,18 @@ public record ClaudeResponse(
         @JsonProperty("stop_reason") String stopReason,
         Usage usage) {
 
+    /**
+     * Ett innehållsblock. Thinking-block (thinking + signature) och redacted_thinking (data)
+     * bevaras exakt, eftersom de måste skickas tillbaka orörda i en verktygsrunda.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ContentBlock(String type, String text, String id, String name, JsonNode input) {
+    public record ContentBlock(String type, String text, String id, String name, JsonNode input,
+                               String thinking, String signature, String data) {
+
+        public static ContentBlock text(String text) {
+            return new ContentBlock("text", text, null, null, null, null, null, null);
+        }
 
         public boolean isToolUse() {
             return "tool_use".equals(type);
@@ -28,7 +37,9 @@ public record ClaudeResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Usage(
             @JsonProperty("input_tokens") long inputTokens,
-            @JsonProperty("output_tokens") long outputTokens) {
+            @JsonProperty("output_tokens") long outputTokens,
+            @JsonProperty("cache_creation_input_tokens") long cacheCreationInputTokens,
+            @JsonProperty("cache_read_input_tokens") long cacheReadInputTokens) {
     }
 
     public String text() {

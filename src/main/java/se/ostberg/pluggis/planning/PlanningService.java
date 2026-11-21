@@ -204,7 +204,7 @@ public class PlanningService {
             ask.append('\n');
         }
 
-        ObjectNode req = claude.newRequest(props.anthropic().model(), 3000, prompts.studyPlan());
+        ObjectNode req = claude.newRequest(props.anthropic().planning(), prompts.studyPlan());
         ObjectNode msg = req.putArray("messages").addObject();
         msg.put("role", "user");
         msg.put("content", ask.toString());

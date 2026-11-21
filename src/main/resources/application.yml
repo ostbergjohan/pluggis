@@ -51,10 +51,33 @@ pluggis:
     api-key: ${ANTHROPIC_API_KEY:}
     base-url: https://api.anthropic.com
     api-version: "2023-06-01"
-    # Röst kräver låg latens – byt gärna till en Haiku-modell och mät.
-    model: ${PLUGGIS_MODEL:claude-sonnet-5-5}
-    vision-model: ${PLUGGIS_VISION_MODEL:claude-sonnet-5-5}
-    max-tokens: 400
+    # Röstcoachen: snabbast möjligt. Haiku 5.5, låg effort, inget förhandstänkande.
+    coach:
+      model: ${PLUGGIS_COACH_MODEL:claude-haiku-5-5}
+      effort: ${PLUGGIS_COACH_EFFORT:low}
+      thinking: ${PLUGGIS_COACH_THINKING:disabled}
+      max-tokens: 400
+    # Foton/skärmdumpar (handskrift, tabeller): Sonnet 5.5.
+    vision:
+      model: ${PLUGGIS_VISION_MODEL:claude-sonnet-5-5}
+      effort: medium
+      thinking: ""
+      max-tokens: 2048
+    # Pluggplaner: ingen väntar i realtid, kvalitet viktigare.
+    planning:
+      model: ${PLUGGIS_PLANNING_MODEL:claude-sonnet-5-5}
+      effort: medium
+      thinking: ""
+      max-tokens: 3000
+    flashcards:
+      model: ${PLUGGIS_FLASHCARDS_MODEL:claude-sonnet-5-5}
+      effort: medium
+      thinking: ""
+      max-tokens: 4096
+  speech:
+    # pluggis-speech (se speech/). Tomt = ingen ljudväg.
+    base-url: ${PLUGGIS_SPEECH_URL:}
+    timeout-seconds: 30
 
 management:
   endpoints:

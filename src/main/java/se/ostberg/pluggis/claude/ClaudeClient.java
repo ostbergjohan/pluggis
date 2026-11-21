@@ -1,6 +1,7 @@
 package se.ostberg.pluggis.claude;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -10,12 +11,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import se.ostberg.pluggis.config.PluggisProperties;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+
 /**
- * Tunn klient mot Anthropics Messages API (POST /v1/messages).
- * Medvetet utan SDK för full kontroll över JSON:en – går att byta mot
- * com.anthropic:anthropic-java senare om man vill.
- *
- * Mäter latens per syfte (coach/vision) i Micrometer: pluggis.claude.request.
+ * Tunn klient mot Anthropics Messages API (POST /v1/messages), med:
+ * <ul>
+ *   <li>modellprofil per jobb (modell, effort, thinking, max tokens)</li>
+ *   <li>prompt caching: fasta regler i ett eget systemblock med cache-markering, läget i ett block efter</li>
+ *   <li>strömning (SSE) så att första meningen kan läsas upp innan svaret är klart</li>
+ * </ul>
+ * Mätvärden: pluggis.claude.request (latens), pluggis.claude.first_text (tid till första text),
+ * pluggis.claude.tokens (input/output/cache_read/cache_write).
  */
 @Component
 public class ClaudeClient {
@@ -37,12 +47,41 @@ public class ClaudeClient {
                 .build();
     }
 
-    public ObjectNode newRequest(String model, int maxTokens, String system) {
+    /** Anrop med ett enda (fast) systemblock. */
+    public ObjectNode newRequest(PluggisProperties.ModelProfile profile, String system) {
+        return newRequest(profile, system, null);
+    }
+
+    /**
+     * Anrop där {@code staticSystem} är identisk mellan anrop (regler) och cachas tillsammans med verktygen,
+     * och {@code dynamicSystem} (läget just nu) läggs efter cache-markeringen.
+     */
+    public ObjectNode newRequest(PluggisProperties.ModelProfile profile, String staticSystem, String dynamicSystem) {
         ObjectNode req = mapper.createObjectNode();
-        req.put("model", model);
-        req.put("max_tokens", maxTokens);
-        if (system != null && !system.isBlank()) {
-            req.put("system", system);
+        req.put("model", profile.model());
+        req.put("max_tokens", profile.maxTokens() > 0 ? profile.maxTokens() : 1024);
+
+        ArrayNode system = req.putArray("system");
+        if (staticSystem != null && !staticSystem.isBlank()) {
+            ObjectNode block = system.addObject();
+            block.put("type", "text");
+            block.put("text", staticSystem);
+            block.putObject("cache_control").put("type", "ephemeral");
+        }
+        if (dynamicSystem != null && !dynamicSystem.isBlank()) {
+            ObjectNode block = system.addObject();
+            block.put("type", "text");
+            block.put("text", dynamicSystem);
+        }
+        if (system.isEmpty()) {
+            req.remove("system");
+        }
+
+        if (notBlank(profile.effort())) {
+            req.putObject("output_config").put("effort", profile.effort().trim());
+        }
+        if (notBlank(profile.thinking())) {
+            req.putObject("thinking").put("type", profile.thinking().trim());
         }
         return req;
     }
@@ -57,19 +96,80 @@ public class ClaudeClient {
                     .retrieve()
                     .body(ClaudeResponse.class);
             outcome = "ok";
-            if (response != null && response.usage() != null) {
-                meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "input")
-                        .increment(response.usage().inputTokens());
-                meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "output")
-                        .increment(response.usage().outputTokens());
-            }
+            recordUsage(response, purpose);
             return response;
         } finally {
             sample.stop(meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome));
         }
     }
 
+    /** Strömmande anrop. {@code onText} får textbitar i den ordning de kommer. */
+    public ClaudeResponse stream(ObjectNode request, String purpose, Consumer<String> onText) {
+        ObjectNode req = request.deepCopy();
+        req.put("stream", true);
+        long start = System.nanoTime();
+        boolean[] first = {false};
+        Consumer<String> timed = t -> {
+            if (!first[0]) {
+                first[0] = true;
+                meters.timer("pluggis.claude.first_text", "purpose", purpose)
+                        .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+            }
+            if (onText != null) {
+                onText.accept(t);
+            }
+        };
+        StreamAccumulator acc = new StreamAccumulator(mapper, timed);
+        String outcome = "error";
+        try {
+            ClaudeResponse response = rest.post()
+                    .uri("/v1/messages")
+                    .header(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
+                    .body(req)
+                    .exchange((httpRequest, httpResponse) -> {
+                        if (httpResponse.getStatusCode().isError()) {
+                            String body = new String(httpResponse.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                            throw new IllegalStateException("Claude svarade " + httpResponse.getStatusCode() + ": " + body);
+                        }
+                        try (BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(httpResponse.getBody(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (line.startsWith("data:")) {
+                                    String json = line.substring(5).trim();
+                                    if (!json.isEmpty()) {
+                                        acc.accept(mapper.readTree(json));
+                                    }
+                                }
+                            }
+                        }
+                        return acc.result();
+                    });
+            outcome = "ok";
+            recordUsage(response, purpose);
+            return response;
+        } finally {
+            meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome)
+                    .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
+        }
+    }
+
+    private void recordUsage(ClaudeResponse response, String purpose) {
+        if (response == null || response.usage() == null) {
+            return;
+        }
+        var u = response.usage();
+        meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "input").increment(u.inputTokens());
+        meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "output").increment(u.outputTokens());
+        meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_read").increment(u.cacheReadInputTokens());
+        meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_write").increment(u.cacheCreationInputTokens());
+    }
+
     public PluggisProperties.Anthropic config() {
         return cfg;
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 }

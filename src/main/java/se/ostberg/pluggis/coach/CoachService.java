@@ -23,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Coachen: tar elevens (transkriberade) yttrande, kör Claude med verktyg i en loop
@@ -70,25 +71,44 @@ public class CoachService {
     }
 
     public String chat(String deviceId, String userText) {
+        return chat(deviceId, userText, null);
+    }
+
+    /**
+     * Som {@link #chat(String, String)}, men strömmar svaret och anropar {@code onSentence}
+     * för varje hel mening så fort den är klar – för uppläsning mening för mening.
+     * Returnerar hela texten (alla rundor) för visning.
+     */
+    public String chat(String deviceId, String userText, Consumer<String> onSentence) {
         Conversation conv = conversations.computeIfAbsent(deviceId, id -> new Conversation(
                 mapper, props.maxHistoryMessages(), Duration.ofMinutes(Math.max(1, props.conversationIdleMinutes()))));
 
         synchronized (conv) {
             conv.resetIfIdle(Instant.now());
             conv.addUserText(userText);
+            StringBuilder spoken = new StringBuilder();
             try {
                 for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
-                    ObjectNode req = claude.newRequest(
-                            props.anthropic().model(), props.anthropic().maxTokens(), systemPrompt(deviceId));
+                    ObjectNode req = claude.newRequest(props.anthropic().coach(), prompts.coach(), statePrompt(deviceId));
                     req.set("tools", tools.definitions());
                     req.set("messages", conv.toJson());
 
-                    ClaudeResponse resp = claude.create(req, "coach");
+                    ClaudeResponse resp;
+                    if (onSentence == null) {
+                        resp = claude.create(req, "coach");
+                    } else {
+                        SentenceSplitter splitter = new SentenceSplitter(onSentence);
+                        resp = claude.stream(req, "coach", splitter::accept);
+                        splitter.flush();
+                    }
                     conv.addAssistant(mapper.valueToTree(resp.content()));
+                    String text = resp.text();
+                    if (!text.isBlank()) {
+                        spoken.append(spoken.isEmpty() ? "" : " ").append(text);
+                    }
 
                     if (!resp.wantsTools()) {
-                        String text = resp.text();
-                        return text.isBlank() ? FALLBACK : text;
+                        return spoken.isEmpty() ? fallback(onSentence) : spoken.toString();
                     }
 
                     ArrayNode results = mapper.createArrayNode();
@@ -108,16 +128,24 @@ public class CoachService {
                 // Börja om hellre än att riskera en trasig historik (t.ex. tool_use utan tool_result).
                 conv.clear();
             }
-            return FALLBACK;
+            return spoken.isEmpty() ? fallback(onSentence) : spoken.toString();
         }
+    }
+
+    private static String fallback(Consumer<String> onSentence) {
+        if (onSentence != null) {
+            onSentence.accept(FALLBACK);
+        }
+        return FALLBACK;
     }
 
     public void forget(String deviceId) {
         conversations.remove(deviceId);
     }
 
-    String systemPrompt(String deviceId) {
-        return prompts.coach()
+    /** Läget just nu – ändras varje anrop och ligger därför efter cache-markeringen. */
+    String statePrompt(String deviceId) {
+        return prompts.coachState()
                 .replace("{{now}}", NOW_FORMAT.format(ZonedDateTime.now(props.zone())))
                 .replace("{{session}}", sessions.describeForPrompt(deviceId))
                 .replace("{{homework}}", homework.summaryForPrompt())
