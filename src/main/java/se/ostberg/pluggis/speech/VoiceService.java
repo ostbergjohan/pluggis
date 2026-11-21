@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import se.ostberg.pluggis.coach.CoachService;
 import se.ostberg.pluggis.device.DeviceMessages;
 import se.ostberg.pluggis.device.DeviceRegistry;
+import se.ostberg.pluggis.settings.SettingsService;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -33,13 +34,21 @@ public class VoiceService {
     private final CoachService coach;
     private final DeviceRegistry registry;
     private final MeterRegistry meters;
+    private final SettingsService settings;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
 
-    public VoiceService(SpeechClient speech, CoachService coach, DeviceRegistry registry, MeterRegistry meters) {
+    public VoiceService(SpeechClient speech, CoachService coach, DeviceRegistry registry, MeterRegistry meters,
+                        SettingsService settings) {
         this.speech = speech;
         this.coach = coach;
         this.registry = registry;
         this.meters = meters;
+        this.settings = settings;
+    }
+
+    /** Text → ljud med förälderns valda röst och tempo. */
+    public byte[] speak(String text) {
+        return speech.synthesize(text, settings.voice(), SettingsService.lengthScale(settings.speed()));
     }
 
     /** Ljud från enheten (ett helt yttrande, t.ex. tryck-och-prata). */
@@ -103,7 +112,7 @@ public class VoiceService {
                 }
                 byte[] wav;
                 try {
-                    wav = speech.synthesize(sentence);
+                    wav = speak(sentence);
                 } catch (RuntimeException e) {
                     log.warn("Text till tal misslyckades: {}", e.toString());
                     continue;
@@ -125,7 +134,7 @@ public class VoiceService {
         registry.send(deviceId, new DeviceMessages.Say(text));
         if (speech.enabled() && registry.wantsAudio(deviceId)) {
             try {
-                byte[] wav = speech.synthesize(text);
+                byte[] wav = speak(text);
                 registry.send(deviceId, new DeviceMessages.Audio("wav", 0, text, wav.length));
                 registry.sendBinary(deviceId, wav);
                 registry.send(deviceId, new DeviceMessages.AudioEnd(1));

@@ -904,6 +904,7 @@ views.installningar = async (main) => {
         } }, 'Spara och testa')),
       result,
       h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.')),
+    voicePanel(),
     h('section', { class: 'panel', style: 'margin-top:16px' },
       h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
       h('ol', {},
@@ -912,6 +913,52 @@ views.installningar = async (main) => {
         h('li', {}, 'Metod POST, Rubriker: X-Pluggis-Token = din token, Begärans brödtext: Formulär, fält "image" = Genvägsindata.'),
         h('li', {}, 'Lägg till "Visa resultat". Dela sedan skärmdumpen av veckoplanen till genvägen.'))));
 };
+
+function voicePanel() {
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Röst'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' }), ' Hämtar röster…'));
+  (async () => {
+    let s;
+    try { s = await api('/api/speech'); } catch (e) {
+      panel.replaceChildren(h('h2', {}, 'Röst'), h('div', { class: 'empty' }, e.message === '401' ? 'Ange token först.' : e.message));
+      return;
+    }
+    if (!s.enabled) {
+      panel.replaceChildren(h('h2', {}, 'Röst'), h('p', { class: 'item-meta' },
+        'Ljudtjänsten är inte påslagen. Starta med docker compose (eller sätt PLUGGIS_SPEECH_URL) så kan du välja röst här.'));
+      return;
+    }
+    const voices = Array.isArray(s.voices) ? s.voices : [];
+    const select = h('select', {}, voices.map(v => h('option', { value: v.id },
+      `${v.name.charAt(0).toUpperCase() + v.name.slice(1)}${v.quality ? ` (${v.quality})` : ''}${v.default ? ' – standard' : ''}`)));
+    select.value = s.voice || (voices.find(v => v.default) || voices[0] || {}).id || '';
+    const speed = h('input', { type: 'range', min: '0.7', max: '1.4', step: '0.05', value: String(s.speed || 1) });
+    const speedLabel = h('span', { class: 'item-meta' }, `${Math.round((s.speed || 1) * 100)} %`);
+    speed.addEventListener('input', () => { speedLabel.textContent = `${Math.round(Number(speed.value) * 100)} %`; });
+    const sample = h('input', { value: 'Hej! Jag är Pluggis. Ska vi ta första uppgiften tillsammans?' });
+    let audio = null;
+    async function listen(e) {
+      const res = await run(() => api('/api/speech/preview', { method: 'POST', raw: true,
+        body: { text: sample.value, voice: select.value, speed: Number(speed.value) } }), e.target);
+      if (!res || !res.ok) { if (res) toast('Kunde inte läsa upp', true); return; }
+      if (audio) audio.pause();
+      audio = new Audio(URL.createObjectURL(await res.blob()));
+      audio.play();
+    }
+    panel.replaceChildren(h('h2', {}, 'Röst'),
+      s.error ? h('p', { class: 'item-meta' }, s.error) : null,
+      h('div', { class: 'row' },
+        h('div', {}, h('label', {}, 'Röst'), select),
+        h('div', {}, h('label', {}, 'Tempo '), speed, ' ', speedLabel)),
+      h('label', {}, 'Provmening'), sample,
+      h('div', { class: 'toolbar', style: 'margin-top:12px' },
+        h('button', { onclick: listen }, '▶ Lyssna'),
+        h('button', { class: 'primary', onclick: (e) => run(() => api('/api/speech', { method: 'PUT',
+          body: { voice: select.value, speed: Number(speed.value) } }), e.target, 'Rösten sparad') }, 'Spara')),
+      h('p', { class: 'item-meta' }, 'Gäller Tab5 och simulatorn med "Serverns röst". Röster: Piper (svenska).'));
+  })();
+  return panel;
+}
 
 // ---------- Router ----------
 

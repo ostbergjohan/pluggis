@@ -11,6 +11,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.web.client.RestClient;
 import se.ostberg.pluggis.config.PluggisProperties;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -65,19 +66,39 @@ public class SpeechClient {
         }
     }
 
-    /** Text → wav (22 kHz mono från Piper). */
+    /** Text → wav (22 kHz mono från Piper) med ljudtjänstens standardröst. */
     public byte[] synthesize(String text) {
+        return synthesize(text, null, 1.0);
+    }
+
+    /**
+     * Text → wav med vald röst (t.ex. "sv_SE-lisa-medium", null = standard) och
+     * Piper-tempo (length_scale, större = långsammare).
+     */
+    public byte[] synthesize(String text, String voice, double lengthScale) {
         requireEnabled();
+        Map<String, Object> body = new HashMap<>();
+        body.put("text", text);
+        body.put("length_scale", lengthScale);
+        if (voice != null && !voice.isBlank()) {
+            body.put("voice", voice);
+        }
         Timer.Sample sample = Timer.start(meters);
         try {
             return rest.post().uri("/tts")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("text", text))
+                    .body(body)
                     .retrieve()
                     .body(byte[].class);
         } finally {
             sample.stop(meters.timer("pluggis.speech.tts"));
         }
+    }
+
+    /** Röster som ljudtjänsten har, t.ex. [{"id":"sv_SE-nst-medium","name":"nst",...}]. */
+    public JsonNode voices() {
+        requireEnabled();
+        return rest.get().uri("/voices").retrieve().body(JsonNode.class);
     }
 
     private void requireEnabled() {

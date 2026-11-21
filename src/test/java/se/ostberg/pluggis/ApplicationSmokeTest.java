@@ -165,6 +165,21 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void voiceSettingsAreStoredEvenWithoutSpeechService() throws Exception {
+        String saved = mvc.perform(put("/api/speech").header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"voice\":\"sv_SE-lisa-medium\",\"speed\":1.15}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode s = json(saved);
+        assertThat(s.path("enabled").asBoolean()).isFalse();
+        assertThat(s.path("voice").asText()).isEqualTo("sv_SE-lisa-medium");
+        assertThat(s.path("speed").asDouble()).isEqualTo(1.15);
+        mvc.perform(post("/api/speech/preview").header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isServiceUnavailable());
+    }
+
+    @Test
     void coachAnswersWithFallbackWhenClaudeIsUnreachable() throws Exception {
         String reply = mvc.perform(post("/api/devices/tab5-2/coach").header(TOKEN, "test-token")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"hej\"}"))
