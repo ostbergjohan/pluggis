@@ -1,5 +1,7 @@
 # Pluggis
 
+[![build](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml) [![docker](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml)
+
 Backend för en fysisk studiekompis på skrivbordet: en **M5Stack Tab5** med kamera,
 mikrofoner och högtalare, plus en **Dual Button** (U025) och eventuellt en LED-list som timer.
 Hjärnan är Claude, som coachar med frågor i stället för färdiga svar och är byggd
