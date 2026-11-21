@@ -133,7 +133,8 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
 | Tab5-simulator | Ansluter via samma WebSocket som Tab5: knappar, timer, kort, poäng, foto – med uppläsning och mikrofon (svenska) i webbläsaren |
-| Inställningar | Token, enhets-id och instruktion för iOS-genvägen |
+| Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
+| Inställningar | Token, enhets-id, röst och tempo, och instruktion för iOS-genvägen |
 
 Statistik finns även som JSON: `GET /api/devices/{id}/stats?days=14`.
 

@@ -180,6 +180,18 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void backendLogIsAvailableToTheWebUi() throws Exception {
+        org.slf4j.LoggerFactory.getLogger("se.ostberg.pluggis.test").warn("Loggtest från smoke-testet");
+        String body = mvc.perform(get("/api/logs?level=WARN&q=loggtest").header(TOKEN, "test-token"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        JsonNode logs = json(body);
+        assertThat(logs.path("lines").size()).isGreaterThanOrEqualTo(1);
+        assertThat(logs.path("lines").get(0).path("message").asText()).contains("Loggtest");
+        mvc.perform(get("/api/logs")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void coachAnswersWithFallbackWhenClaudeIsUnreachable() throws Exception {
         String reply = mvc.perform(post("/api/devices/tab5-2/coach").header(TOKEN, "test-token")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"hej\"}"))

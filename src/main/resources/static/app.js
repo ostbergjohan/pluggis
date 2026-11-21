@@ -883,6 +883,72 @@ views.simulator = async (main) => {
   state.leaveView = disconnect;
 };
 
+// ----- Logg -----
+
+views.logg = async (main) => {
+  const level = h('select', {}, ['DEBUG', 'INFO', 'WARN', 'ERROR'].map(l => h('option', { value: l }, l)));
+  level.value = store.get('lc.logLevel', 'INFO');
+  const search = h('input', { placeholder: 'Sök i loggen…', style: 'max-width:260px' });
+  const pause = h('input', { type: 'checkbox' });
+  const view = h('div', { class: 'logview', role: 'log', 'aria-live': 'off' });
+  const status = h('span', { class: 'item-meta' }, '');
+  let after = 0;
+  let timer = null;
+  let searchTimer = null;
+
+  const fmtTime = (iso) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('sv-SE', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+  };
+
+  function reset() {
+    after = 0;
+    view.replaceChildren();
+    poll();
+  }
+
+  async function poll() {
+    if (pause.checked) return;
+    try {
+      const q = search.value.trim();
+      const data = await api(`/api/logs?after=${after}&level=${level.value}&limit=500${q ? '&q=' + enc(q) : ''}`);
+      const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+      for (const l of data.lines) {
+        view.append(h('span', { class: 'logline ' + l.level },
+          h('span', { class: 't' }, fmtTime(l.time)), ' ',
+          h('span', { class: 'lv' }, l.level), ' ',
+          h('span', { class: 'lg' }, l.logger), '  ',
+          l.message));
+      }
+      while (view.childElementCount > 2000) view.firstChild.remove();
+      after = Math.max(after, data.last);
+      if (atBottom && data.lines.length) view.scrollTop = view.scrollHeight;
+      status.textContent = `${view.childElementCount} rader · uppdaterad ${new Date().toLocaleTimeString('sv-SE')}`;
+    } catch (e) {
+      status.textContent = e.message === '401' ? 'Ange token under Inställningar' : `Fel: ${e.message}`;
+    }
+  }
+
+  level.addEventListener('change', () => { store.set('lc.logLevel', level.value); reset(); });
+  search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(reset, 300); });
+  pause.addEventListener('change', () => { if (!pause.checked) poll(); });
+
+  main.append(h('h1', {}, 'Logg'),
+    h('p', { class: 'sub' }, 'Backendens senaste 2 000 loggrader, uppdateras varannan sekund. Ljudtjänstens logg syns med docker compose logs speech.'),
+    h('div', { class: 'toolbar' },
+      h('label', { style: 'margin:0' }, 'Nivå '), level, search,
+      h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, pause, 'Pausa'),
+      h('button', { onclick: () => view.replaceChildren() }, 'Rensa vyn'),
+      h('button', { onclick: () => { view.scrollTop = view.scrollHeight; } }, '↓ Till slutet'),
+      h('span', { class: 'spacer' }), status),
+    view);
+
+  await poll();
+  view.scrollTop = view.scrollHeight;
+  timer = setInterval(poll, 2000);
+  state.leaveView = () => clearInterval(timer);
+};
+
 // ----- Inställningar -----
 
 views.installningar = async (main) => {
