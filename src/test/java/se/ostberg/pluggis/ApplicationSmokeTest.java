@@ -6,6 +6,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import se.ostberg.pluggis.session.StudySessionService;
@@ -22,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Startar hela Pluggis (databas, schemaläggning, WebSocket, alla tjänster) och går igenom
  * föräldravyns API. Claude är avsiktligt inte nåbar – då ska reservplanen användas.
  */
-@SpringBootTest(properties = {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:pluggis;DB_CLOSE_DELAY=-1",
         "pluggis.device-token=test-token",
         "pluggis.anthropic.api-key=test",
@@ -45,6 +54,9 @@ class ApplicationSmokeTest {
 
     @Autowired
     StudySessionService sessions;
+
+    @LocalServerPort
+    int port;
 
     private JsonNode json(String body) throws Exception {
         return mapper.readTree(body);
@@ -159,5 +171,42 @@ class ApplicationSmokeTest {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(json(reply).path("reply").asText()).isNotBlank();
+    }
+
+    @Test
+    void deviceWebSocketHandlesHelloButtonsAndRejectsBadToken() throws Exception {
+        BlockingQueue<String> received = new LinkedBlockingQueue<>();
+        var handler = new TextWebSocketHandler() {
+            @Override
+            protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+                received.add(message.getPayload());
+            }
+        };
+        StandardWebSocketClient client = new StandardWebSocketClient();
+        WebSocketSession ws = client.execute(handler,
+                "ws://localhost:" + port + "/ws/device?deviceId=tab5-ws&token=test-token").get(5, TimeUnit.SECONDS);
+
+        ws.sendMessage(new TextMessage("{\"type\":\"hello\",\"audio\":false}"));
+        assertThat(json(received.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("hello_ack");
+
+        ws.sendMessage(new TextMessage("{\"type\":\"button\",\"button\":\"photo\",\"gesture\":\"long\"}"));
+        JsonNode photo = json(received.poll(5, TimeUnit.SECONDS));
+        assertThat(photo.path("type").asText()).isEqualTo("take_photo");
+        assertThat(photo.path("uploadPath").asText()).isEqualTo("/api/flashcards/photo");
+
+        // Claude är inte nåbar – coachen ska ändå svara (med reservsvaret)
+        ws.sendMessage(new TextMessage("{\"type\":\"button\",\"button\":\"main\",\"gesture\":\"click\"}"));
+        assertThat(json(received.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("thinking");
+        JsonNode say = json(received.poll(15, TimeUnit.SECONDS));
+        assertThat(say.path("type").asText()).isEqualTo("say");
+        assertThat(say.path("text").asText()).isNotBlank();
+        ws.close();
+
+        WebSocketSession bad = client.execute(new TextWebSocketHandler(),
+                "ws://localhost:" + port + "/ws/device?deviceId=x&token=fel").get(5, TimeUnit.SECONDS);
+        for (int i = 0; i < 50 && bad.isOpen(); i++) {
+            Thread.sleep(100);
+        }
+        assertThat(bad.isOpen()).isFalse();
     }
 }
