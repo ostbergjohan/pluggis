@@ -53,6 +53,7 @@ public class CalendarSyncService {
     private final PlanningService planning;
     private final SettingsService settings;
     private final PluggisProperties props;
+    private final se.ostberg.pluggis.homework.MaterialService materials;
     private final RestClient http = RestClient.create();
 
     private volatile Instant lastSync;
@@ -60,7 +61,8 @@ public class CalendarSyncService {
     private volatile String lastError;
 
     public CalendarSyncService(HomeworkService homework, PlanningService planning, SettingsService settings,
-                               PluggisProperties props) {
+                               PluggisProperties props, se.ostberg.pluggis.homework.MaterialService materials) {
+        this.materials = materials;
         this.homework = homework;
         this.planning = planning;
         this.settings = settings;
@@ -163,7 +165,7 @@ public class CalendarSyncService {
      * Importerar posterna. {@code uids} = bara de valda (null = alla), {@code onlySchoolwork} = hoppa över
      * sådant som inte ser ut som läxor/prov. Poster långt bak i tiden eller för långt fram hoppas alltid över.
      */
-    public SyncResult importIcs(String ics, Set<String> uids, boolean onlySchoolwork) {
+    public synchronized SyncResult importIcs(String ics, Set<String> uids, boolean onlySchoolwork) {
         LocalDate today = LocalDate.now(props.zone());
         int horizon = horizon();
         var entries = IcalParser.parse(ics, props.zone());
@@ -205,31 +207,41 @@ public class CalendarSyncService {
      * Behåller den som har mest eget innehåll (plan, kortlek, delsteg, egen beskrivning)
      * och tar bort resten. Rättar också trasiga åäö i titlar. Returnerar antal borttagna.
      */
-    public int mergeDuplicates() {
+    public synchronized int mergeDuplicates() {
         Map<String, List<Homework>> groups = new LinkedHashMap<>();
-        for (Homework h : homework.calendarImported()) {
-            if (h.getTitle() != null && !h.getTitle().equals(TextFix.fixMojibake(h.getTitle()))) {
+        for (Homework h : homework.withDueDate()) {
+            if (h.getExternalId() != null && h.getTitle() != null && !h.getTitle().equals(TextFix.fixMojibake(h.getTitle()))) {
                 homework.fixTitleEncoding(h.getId());
             }
-            groups.computeIfAbsent(TextFix.key(h.getTitle()) + "|" + h.getDueDate(), k -> new ArrayList<>()).add(h);
+            String key = TextFix.key(h.getTitle());
+            groups.computeIfAbsent((key.isEmpty() ? String.valueOf(h.getTitle()) : key) + "|" + h.getDueDate(), k -> new ArrayList<>()).add(h);
         }
         int removed = 0;
         for (List<Homework> group : groups.values()) {
-            if (group.size() < 2) {
+            // Bara grupper där kalendern är inblandad – två egna läxor med samma namn rör vi inte.
+            if (group.size() < 2 || group.stream().noneMatch(h -> h.getExternalId() != null)) {
                 continue;
             }
             Homework keep = group.stream().max(Comparator.comparingInt(this::richness)
                     .thenComparing(Homework::getCreatedAt, Comparator.reverseOrder())).orElseThrow();
+            String uid = keep.getExternalId();
             for (Homework dup : group) {
                 if (dup == keep) {
                     continue;
+                }
+                if (uid == null && dup.getExternalId() != null) {
+                    uid = dup.getExternalId();
                 }
                 if (keep.getDeckId() == null && dup.getDeckId() != null) {
                     homework.linkDeck(keep.getId(), dup.getDeckId());
                 }
                 planning.deleteForHomework(dup.getId());
+                materials.deleteForHomework(dup.getId());
                 homework.delete(dup.getId());
                 removed++;
+            }
+            if (keep.getExternalId() == null && uid != null) {
+                homework.adoptExternalId(keep.getId(), uid);
             }
         }
         if (removed > 0) {

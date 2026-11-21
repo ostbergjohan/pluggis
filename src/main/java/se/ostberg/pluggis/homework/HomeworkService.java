@@ -55,6 +55,22 @@ public class HomeworkService {
                 .findFirst();
     }
 
+    /** Alla läxor med datum – för att hitta dubbletter mellan kalender och egna. */
+    @Transactional(readOnly = true)
+    public List<Homework> withDueDate() {
+        return repo.findAll().stream().filter(h -> h.getDueDate() != null).toList();
+    }
+
+    /** Låter en läxa ta över kalenderns UID (efter att dubbletten med UID:t tagits bort). */
+    @Transactional
+    public void adoptExternalId(long id, String externalId) {
+        repo.findById(id).ifPresent(h -> {
+            if (h.getExternalId() == null) {
+                h.setExternalId(externalId);
+            }
+        });
+    }
+
     @Transactional(readOnly = true)
     public List<Homework> calendarImported() {
         return repo.findByExternalIdIsNotNull();

@@ -21,9 +21,12 @@ public final class TextFix {
         return fixed.indexOf('�') >= 0 ? s : fixed;
     }
 
-    /** Jämförelsenyckel för titlar: rättad kodning, gemener, ett mellanslag. */
+    /**
+     * Jämförelsenyckel för titlar: bara a–z och 0–9 efter rättad kodning. Tål åäö som blivit
+     * "Ã¶", "?" eller "�", olika mellanslag, skiljetecken och inledande "- ".
+     */
     public static String key(String s) {
         String f = fixMojibake(s);
-        return f == null ? "" : f.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+        return f == null ? "" : f.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
     }
 }

@@ -216,6 +216,47 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void calendarMergesWithOwnHomeworkBrokenCharactersAndParallelSyncs() throws Exception {
+        String dueIso = LocalDate.now().plusDays(11).toString();
+        String date = dueIso.replace("-", "");
+        // Läxan fanns redan, inlagd för hand med lite annan stavning
+        mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"subject\":\"Matte\",\"title\":\"Matteprov - kapitel 3\",\"description\":\"s. 40-60\",\"dueDate\":\"" + dueIso + "\"}"))
+                .andExpect(status().isCreated());
+        java.util.function.BiFunction<String, String, String> feed = (uid, glosor) -> "BEGIN:VCALENDAR\r\n"
+                + "BEGIN:VEVENT\r\nUID:m-" + uid + "\r\nDTSTART;VALUE=DATE:" + date
+                + "\r\nSUMMARY:Matteprov: Kapitel 3\r\nEND:VEVENT\r\n"
+                + "BEGIN:VEVENT\r\nUID:g-" + uid + "\r\nDTSTART;VALUE=DATE:" + date
+                + "\r\nSUMMARY:" + glosor + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                .content(feed.apply("1", "Glosförhör v.48"))).andExpect(status().isOk());
+        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+                .content(feed.apply("2", "Glosf?rh?r v.48"))).andExpect(status().isOk());
+        // Två synkar samtidigt (t.ex. timsynk + knapptryck), båda med nya UID:n
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var a = pool.submit(() -> mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token")
+                .contentType("text/plain").content(feed.apply("3", "GlosfÃ¶rhÃ¶r v.48"))).andReturn());
+        var b = pool.submit(() -> mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token")
+                .contentType("text/plain").content(feed.apply("4", "Glosförhör v.48"))).andReturn());
+        a.get();
+        b.get();
+        pool.shutdown();
+
+        String list = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        java.util.List<String> titles = new java.util.ArrayList<>();
+        for (JsonNode h : json(list)) {
+            if (dueIso.equals(h.path("dueDate").asText())) {
+                titles.add(h.path("title").asText());
+            }
+        }
+        assertThat(titles).hasSize(2);
+        assertThat(titles).anyMatch(t -> t.startsWith("Matteprov"));
+        assertThat(titles).contains("Glosförhör v.48");
+    }
+
+    @Test
     void wordAndTextMaterialIsSavedOnHomeworkEvenWhenClaudeIsDown() throws Exception {
         String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
                         .contentType(MediaType.APPLICATION_JSON)
