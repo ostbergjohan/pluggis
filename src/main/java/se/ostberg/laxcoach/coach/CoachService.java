@@ -9,7 +9,10 @@ import org.springframework.stereotype.Service;
 import se.ostberg.laxcoach.claude.ClaudeClient;
 import se.ostberg.laxcoach.claude.ClaudeResponse;
 import se.ostberg.laxcoach.config.LaxcoachProperties;
+import se.ostberg.laxcoach.flashcards.FlashcardService;
 import se.ostberg.laxcoach.homework.HomeworkService;
+import se.ostberg.laxcoach.planning.PlanningService;
+import se.ostberg.laxcoach.rewards.RewardsService;
 import se.ostberg.laxcoach.session.StudySessionService;
 import se.ostberg.laxcoach.support.Prompts;
 
@@ -44,17 +47,24 @@ public class CoachService {
     private final Prompts prompts;
     private final StudySessionService sessions;
     private final HomeworkService homework;
+    private final FlashcardService flashcards;
+    private final RewardsService rewards;
+    private final PlanningService planning;
     private final LaxcoachProperties props;
     private final ObjectMapper mapper;
     private final Map<String, Conversation> conversations = new ConcurrentHashMap<>();
 
     public CoachService(ClaudeClient claude, CoachTools tools, Prompts prompts, StudySessionService sessions,
-                        HomeworkService homework, LaxcoachProperties props, ObjectMapper mapper) {
+                        HomeworkService homework, FlashcardService flashcards, RewardsService rewards,
+                        PlanningService planning, LaxcoachProperties props, ObjectMapper mapper) {
         this.claude = claude;
         this.tools = tools;
         this.prompts = prompts;
         this.sessions = sessions;
         this.homework = homework;
+        this.flashcards = flashcards;
+        this.rewards = rewards;
+        this.planning = planning;
         this.props = props;
         this.mapper = mapper;
     }
@@ -110,6 +120,9 @@ public class CoachService {
         return prompts.coach()
                 .replace("{{now}}", NOW_FORMAT.format(ZonedDateTime.now(props.zone())))
                 .replace("{{session}}", sessions.describeForPrompt(deviceId))
-                .replace("{{homework}}", homework.summaryForPrompt());
+                .replace("{{homework}}", homework.summaryForPrompt())
+                .replace("{{decks}}", flashcards.summaryForPrompt())
+                .replace("{{points}}", rewards.summaryForPrompt(deviceId))
+                .replace("{{plan}}", planning.summaryForPrompt());
     }
 }

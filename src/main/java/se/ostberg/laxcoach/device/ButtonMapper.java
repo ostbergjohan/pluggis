@@ -8,7 +8,7 @@ import java.util.Optional;
  * i systemprompten, så knapparna går att ändra utan att röra Claude-koden.
  *
  * Standardlayout för M5Stack Dual Button (U025):
- *   röd  ("photo") – klick: fota uppgiften
+ *   röd  ("photo") – klick: fota uppgiften, långt: fota glosor/anteckningar → flashkort
  *   blå  ("main")  – klick: börja/behöver hjälp, långt: avsluta passet, dubbel: behöver hjälp
  */
 public final class ButtonMapper {
@@ -16,7 +16,7 @@ public final class ButtonMapper {
     public sealed interface Action permits TakePhoto, SayToCoach {
     }
 
-    public record TakePhoto() implements Action {
+    public record TakePhoto(boolean forFlashcards) implements Action {
     }
 
     public record SayToCoach(String text) implements Action {
@@ -30,7 +30,7 @@ public final class ButtonMapper {
         String g = gesture == null ? "click" : gesture.toLowerCase();
 
         if (b.equals("photo") || b.equals("red")) {
-            return Optional.of(new TakePhoto());
+            return Optional.of(new TakePhoto(g.equals("long")));
         }
         if (b.equals("main") || b.equals("blue")) {
             return switch (g) {

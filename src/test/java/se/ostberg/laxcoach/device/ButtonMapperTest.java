@@ -12,6 +12,12 @@ class ButtonMapperTest {
     }
 
     @Test
+    void longPressOnRedPhotographsForFlashcards() {
+        var action = (ButtonMapper.TakePhoto) ButtonMapper.map("photo", "long", false).orElseThrow();
+        assertThat(action.forFlashcards()).isTrue();
+    }
+
+    @Test
     void blueClickStartsOrAsksForHelpDependingOnSession() {
         var idle = ButtonMapper.map("main", "click", false).orElseThrow();
         var busy = ButtonMapper.map("main", "click", true).orElseThrow();

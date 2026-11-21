@@ -2,8 +2,11 @@ package se.ostberg.laxcoach.device;
 
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import se.ostberg.laxcoach.flashcards.FlashcardController;
+import se.ostberg.laxcoach.flashcards.FlashcardService;
 import se.ostberg.laxcoach.homework.Homework;
 import se.ostberg.laxcoach.homework.PhotoIntakeService;
+import se.ostberg.laxcoach.rewards.RewardsService;
 import se.ostberg.laxcoach.session.StudySessionService;
 
 import java.util.stream.Collectors;
@@ -50,5 +53,27 @@ public class DeviceEventRelay {
         String titles = e.saved().stream().map(Homework::getTitle).collect(Collectors.joining(", "));
         registry.send(e.deviceId(), new DeviceMessages.Say(
                 "Jag har lagt till: " + titles + ". Ska vi börja med första steget?"));
+    }
+
+    @EventListener
+    public void onDeckCreated(FlashcardController.DeckCreated e) {
+        registry.send(e.deviceId(), new DeviceMessages.Say("Klart! Jag gjorde " + e.cardCount()
+                + " kort i \"" + e.deck().getName() + "\". Tryck på blå knappen när du vill bli förhörd."));
+    }
+
+    @EventListener
+    public void onCardPresented(FlashcardService.CardPresented e) {
+        registry.send(e.deviceId(), new DeviceMessages.Card(e.card().getId(), e.card().getFront(), e.card().getHint()));
+    }
+
+    @EventListener
+    public void onCardGraded(FlashcardService.CardGraded e) {
+        registry.send(e.deviceId(), new DeviceMessages.CardAnswer(
+                e.card().getId(), e.card().getBack(), e.correct(), e.card().getBox()));
+    }
+
+    @EventListener
+    public void onPoints(RewardsService.PointsAwarded e) {
+        registry.send(e.deviceId(), new DeviceMessages.Points(e.points(), e.weekTotal(), e.reason()));
     }
 }

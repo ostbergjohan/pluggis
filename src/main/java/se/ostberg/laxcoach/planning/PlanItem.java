@@ -1,0 +1,64 @@
+package se.ostberg.laxcoach.planning;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+
+import java.time.Instant;
+import java.time.LocalDate;
+
+/** Ett litet, konkret pluggmoment en viss dag, t.ex. "Läs s. 40–48 och skriv 3 nyckelord". */
+@Entity
+public class PlanItem {
+
+    public enum Type { READ, PRACTICE, WRITE, FLASHCARDS, REVIEW, OTHER }
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long homeworkId;
+
+    private LocalDate planDate;
+
+    @Column(length = 500)
+    private String task;
+
+    private int minutes;
+
+    @Enumerated(EnumType.STRING)
+    private Type type;
+
+    private boolean done;
+
+    private Instant doneAt;
+
+    protected PlanItem() {
+    }
+
+    public PlanItem(Long homeworkId, LocalDate planDate, String task, int minutes, Type type) {
+        this.homeworkId = homeworkId;
+        this.planDate = planDate;
+        this.task = task;
+        this.minutes = minutes;
+        this.type = type == null ? Type.OTHER : type;
+    }
+
+    public void markDone(Instant now) {
+        this.done = true;
+        this.doneAt = now;
+    }
+
+    public Long getId() { return id; }
+    public Long getHomeworkId() { return homeworkId; }
+    public LocalDate getPlanDate() { return planDate; }
+    public String getTask() { return task; }
+    public int getMinutes() { return minutes; }
+    public Type getType() { return type; }
+    public boolean isDone() { return done; }
+    public Instant getDoneAt() { return doneAt; }
+}

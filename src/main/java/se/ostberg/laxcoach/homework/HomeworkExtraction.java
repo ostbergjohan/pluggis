@@ -2,8 +2,8 @@ package se.ostberg.laxcoach.homework;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import se.ostberg.laxcoach.support.JsonExtract;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -19,7 +19,12 @@ public record HomeworkExtraction(List<Item> assignments, String note) {
             String title,
             String description,
             @JsonProperty("due_date") String dueDate,
-            List<String> steps) {
+            List<String> steps,
+            String kind) {
+
+        public Homework.Kind kindOrDefault() {
+            return kind != null && kind.trim().equalsIgnoreCase("test") ? Homework.Kind.TEST : Homework.Kind.HOMEWORK;
+        }
 
         public LocalDate dueDateOrNull() {
             if (dueDate == null || dueDate.isBlank()) {
@@ -41,18 +46,6 @@ public record HomeworkExtraction(List<Item> assignments, String note) {
      * Tolerant parser: klarar ```json-staket och text före/efter JSON-objektet.
      */
     public static HomeworkExtraction parse(String modelText, ObjectMapper mapper) {
-        if (modelText == null) {
-            throw new IllegalArgumentException("Tomt svar från modellen");
-        }
-        int start = modelText.indexOf('{');
-        int end = modelText.lastIndexOf('}');
-        if (start < 0 || end <= start) {
-            throw new IllegalArgumentException("Hittade inget JSON-objekt i modellens svar");
-        }
-        try {
-            return mapper.readValue(modelText.substring(start, end + 1), HomeworkExtraction.class);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Kunde inte tolka modellens JSON: " + e.getOriginalMessage(), e);
-        }
+        return JsonExtract.parse(modelText, mapper, HomeworkExtraction.class);
     }
 }

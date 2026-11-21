@@ -10,6 +10,9 @@ Alla meddelanden är JSON-text med fältet `type`.
 |---|---|---|
 | `text` | `text` | Det eleven sa (efter tal till text) eller skrev på tangentbordet |
 | `button` | `button` (`main`/`photo`), `gesture` (`click`/`long`/`double`) | Knapptryck från Dual Button (U025) |
+
+Knapplayout: **röd** klick = fota uppgift, röd långt = fota glosor/anteckningar → flashkort.
+**Blå** klick = börja / behöver hjälp, blå långt = avsluta passet, blå dubbel = behöver hjälp.
 | `ping` | – | Håll liv i anslutningen, svaras med `pong` |
 
 Exempel:
@@ -27,7 +30,11 @@ Exempel:
 | `say` | `text` | Visa texten och läsa upp den |
 | `timer` | `remainingSeconds`, `totalSeconds`, `task` | Rita tidsstapel / LED-list (skickas var 10:e sekund under pass) |
 | `session` | `state` (`started`/`time_up`/`finished`), `task`, `minutes` | Byta läge på skärm och LED |
-| `take_photo` | `countdownSeconds` | Visa kameraförhandsbild, räkna ner, ta JPEG och POST:a till `/api/homework/photo` |
+| `take_photo` | `countdownSeconds`, `uploadPath`, `purpose` | Visa kameraförhandsbild, räkna ner, ta JPEG och POST:a till `uploadPath` |
+| `card` | `cardId`, `front`, `hint` | Visa flashkortets framsida stort på skärmen |
+| `card_answer` | `cardId`, `back`, `correct`, `box` | Vänd kortet: visa svaret, grönt/rött, och fack 1–5 |
+| `points` | `delta`, `weekTotal`, `reason` | Visa "+3" med en liten animation och veckans summa |
+| `reminder` | `text` | Påminnelse: tydlig signal (ljud/ljus), visa och läs upp |
 | `error` | `message` | Logga |
 
 ## Foto
@@ -42,6 +49,16 @@ Svar: `{"saved":[...läxor...],"note":"..."}`. Om `deviceId` skickas med får en
 dessutom ett `say`-meddelande om vad som lades till.
 
 Samma endpoint används av iOS-genvägen: *Ta bild → Hämta innehåll från URL (POST, formulär, fält `image`)*.
+
+## Flashkort från foto
+
+```
+POST /api/flashcards/photo?deviceId=tab5-1[&hint=...][&count=20]
+Header: X-Laxcoach-Token: <token>
+Content-Type: multipart/form-data, fält "image"
+```
+
+Skapar en ny kortlek. Med `deviceId` får enheten ett `say` om hur många kort som skapades.
 
 ## Fas 2: ljud (inte byggt än)
 

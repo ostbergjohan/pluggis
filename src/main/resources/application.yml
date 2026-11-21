@@ -26,6 +26,27 @@ laxcoach:
   max-history-messages: 30
   # Efter så här många minuters tystnad börjar en ny konversation.
   conversation-idle-minutes: 30
+  planning:
+    # Dagar då planen får lägga pluggmoment
+    study-days: ${LAXCOACH_STUDY_DAYS:MONDAY,TUESDAY,WEDNESDAY,THURSDAY,SUNDAY}
+    max-minutes-per-day: ${LAXCOACH_MAX_MINUTES_PER_DAY:40}
+  calendar:
+    # iCal/webcal-länk till en skolkalender, om en finns. Tom = av.
+    ical-url: ${LAXCOACH_ICAL_URL:}
+    horizon-days: 60
+    sync-cron: "0 5 * * * *"
+  reminders:
+    enabled: ${LAXCOACH_REMINDERS_ENABLED:true}
+    # sek min tim dag mån veckodag (Europe/Stockholm)
+    start-cron: "0 30 16 * * MON-FRI"
+    nudge-cron: "0 30 18 * * MON-FRI"
+  rewards:
+    # Poäng räknas alltid. Med enabled=true nämner coachen också kronor.
+    enabled: ${LAXCOACH_REWARDS_ENABLED:true}
+    # 0.10 kr per poäng = 10 poäng per krona
+    sek-per-point: ${LAXCOACH_SEK_PER_POINT:0.10}
+    # Max kronor per vecka (0 = inget tak)
+    weekly-cap-sek: ${LAXCOACH_WEEKLY_CAP_SEK:50}
   anthropic:
     api-key: ${ANTHROPIC_API_KEY:}
     base-url: https://api.anthropic.com

@@ -92,7 +92,9 @@ public class DeviceWebSocketHandler extends TextWebSocketHandler {
                 ButtonMapper.map(msg.path("button").asText(), msg.path("gesture").asText("click"), active)
                         .ifPresent(action -> {
                             switch (action) {
-                                case ButtonMapper.TakePhoto p -> registry.send(deviceId, new DeviceMessages.TakePhoto(3));
+                                case ButtonMapper.TakePhoto p -> registry.send(deviceId, p.forFlashcards()
+                                        ? DeviceMessages.TakePhoto.flashcards()
+                                        : DeviceMessages.TakePhoto.homework());
                                 case ButtonMapper.SayToCoach s -> askCoach(deviceId, s.text());
                             }
                         });

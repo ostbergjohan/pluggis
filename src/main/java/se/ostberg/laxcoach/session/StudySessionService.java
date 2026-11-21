@@ -79,6 +79,14 @@ public class StudySessionService {
         return repo.findTop20ByDeviceIdOrderByStartedAtDesc(deviceId);
     }
 
+    /** Har ett pass startats idag (lokal tid)? Används för att inte påminna i onödan. */
+    @Transactional(readOnly = true)
+    public boolean startedToday(String deviceId, java.time.ZoneId zone) {
+        java.time.LocalDate today = java.time.LocalDate.now(clock.withZone(zone));
+        return repo.findTop20ByDeviceIdOrderByStartedAtDesc(deviceId).stream()
+                .anyMatch(s -> s.getStartedAt().atZone(zone).toLocalDate().equals(today));
+    }
+
     /** Text till coachens systemprompt. */
     @Transactional(readOnly = true)
     public String describeForPrompt(String deviceId) {
@@ -100,6 +108,14 @@ public class StudySessionService {
                 s.markTimeUpNotified();
                 events.publishEvent(new SessionTimeUp(s.getDeviceId(), s));
             }
+            // Ingen avslutade passet? Stäng det automatiskt så att poängen inte går förlorade.
+            if (now.isAfter(s.getEndsAt().plus(AUTO_FINISH_AFTER))) {
+                // Räkna passet som slut när timern gick ut, inte när vi märkte det.
+                s.finish("Avslutades automatiskt", s.getEndsAt());
+                events.publishEvent(new SessionFinished(s.getDeviceId(), s));
+            }
         }
     }
+
+    static final java.time.Duration AUTO_FINISH_AFTER = java.time.Duration.ofMinutes(15);
 }

@@ -37,10 +37,45 @@ public final class DeviceMessages {
         }
     }
 
-    /** Be enheten fota (med nedräkning) och POST:a bilden till /api/homework/photo. */
-    public record TakePhoto(String type, int countdownSeconds) {
-        public TakePhoto(int countdownSeconds) {
-            this("take_photo", countdownSeconds);
+    /**
+     * Be enheten fota (med nedräkning) och POST:a bilden till uploadPath
+     * (/api/homework/photo för uppgifter, /api/flashcards/photo för glosor/anteckningar).
+     */
+    public record TakePhoto(String type, int countdownSeconds, String uploadPath, String purpose) {
+        public static TakePhoto homework() {
+            return new TakePhoto("take_photo", 3, "/api/homework/photo", "homework");
+        }
+
+        public static TakePhoto flashcards() {
+            return new TakePhoto("take_photo", 3, "/api/flashcards/photo", "flashcards");
+        }
+    }
+
+    /** Visa framsidan av ett flashkort. */
+    public record Card(String type, long cardId, String front, String hint) {
+        public Card(long cardId, String front, String hint) {
+            this("card", cardId, front, hint);
+        }
+    }
+
+    /** Visa baksidan och om svaret var rätt. */
+    public record CardAnswer(String type, long cardId, String back, boolean correct, int box) {
+        public CardAnswer(long cardId, String back, boolean correct, int box) {
+            this("card_answer", cardId, back, correct, box);
+        }
+    }
+
+    /** Poäng delades ut – visa "+3" och veckosumman. */
+    public record Points(String type, int delta, long weekTotal, String reason) {
+        public Points(int delta, long weekTotal, String reason) {
+            this("points", delta, weekTotal, reason);
+        }
+    }
+
+    /** Påminnelse – visa tydligt (gärna med ljud) och läs upp. */
+    public record Reminder(String type, String text) {
+        public Reminder(String text) {
+            this("reminder", text);
         }
     }
 

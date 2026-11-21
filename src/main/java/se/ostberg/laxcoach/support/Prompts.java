@@ -13,10 +13,22 @@ public class Prompts {
 
     private final String coach;
     private final String extraction;
+    private final String flashcards;
+    private final String studyPlan;
 
     public Prompts() {
         this.coach = load("prompts/coach-system.md");
         this.extraction = load("prompts/homework-extraction.md");
+        this.flashcards = load("prompts/flashcards.md");
+        this.studyPlan = load("prompts/study-plan.md");
+    }
+
+    public String studyPlan() {
+        return studyPlan;
+    }
+
+    public String flashcards() {
+        return flashcards;
     }
 
     public String coach() {

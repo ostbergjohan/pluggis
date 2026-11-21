@@ -64,6 +64,16 @@ public class HomeworkController {
         return photos.intake(image.getBytes(), image.getContentType(), deviceId, hint);
     }
 
+    public record TextIntake(@NotBlank String text) {
+    }
+
+    /** Klistra in text från InfoMentors veckoplan, ett veckobrev eller liknande. */
+    @PostMapping("/text")
+    public PhotoIntakeService.IntakeResult text(@Valid @RequestBody TextIntake body,
+                                                @RequestParam(required = false) String deviceId) {
+        return photos.intakeText(body.text(), deviceId);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> badRequest(IllegalArgumentException e) {
         return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

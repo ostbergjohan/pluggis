@@ -82,13 +82,36 @@ public class PhotoIntakeService {
         message.put("role", "user");
         message.set("content", content);
 
-        ClaudeResponse response = claude.create(req, "vision");
+        return save(claude.create(req, "vision"), deviceId, Homework.Source.PHOTO);
+    }
+
+    /** Inklistrad text, t.ex. från InfoMentors veckoplan eller ett veckobrev. */
+    public IntakeResult intakeText(String text, String deviceId) {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("Ingen text");
+        }
+        if (text.length() > 30_000) {
+            throw new IllegalArgumentException("Texten är för lång – klistra in en vecka i taget");
+        }
+        String today = LocalDate.now(props.zone()).toString();
+        ObjectNode req = claude.newRequest(
+                props.anthropic().model(), 2048, prompts.extraction().replace("{{today}}", today));
+        ObjectNode message = req.putArray("messages").addObject();
+        message.put("role", "user");
+        message.put("content", "Läs ut läxor och prov ur den här texten:\n\n" + text);
+        return save(claude.create(req, "intake-text"), deviceId, Homework.Source.MANUAL);
+    }
+
+    private IntakeResult save(ClaudeResponse response, String deviceId, Homework.Source source) {
         HomeworkExtraction extraction = HomeworkExtraction.parse(response.text(), mapper);
 
         List<Homework> saved = extraction.assignmentsOrEmpty().stream()
                 .filter(item -> item.title() != null && !item.title().isBlank())
-                .map(item -> homework.add(item.subject(), item.title(), item.description(),
-                        item.dueDateOrNull(), item.steps(), Homework.Source.PHOTO))
+                .map(item -> {
+                    Homework h = homework.add(item.subject(), item.title(), item.description(),
+                            item.dueDateOrNull(), item.steps(), source);
+                    return homework.updateContent(h.getId(), null, null, item.kindOrDefault(), null).orElse(h);
+                })
                 .toList();
 
         if (deviceId != null && !deviceId.isBlank()) {

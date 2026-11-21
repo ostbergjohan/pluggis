@@ -22,6 +22,50 @@ public class HomeworkService {
         return repo.save(new Homework(subject, title, description, dueDate, steps, source));
     }
 
+    /** Skapa eller uppdatera en läxa från skolans kalender (matchas på UID). */
+    @Transactional
+    public Homework upsertFromCalendar(String externalId, String subject, String title, String description,
+                                       LocalDate dueDate, Homework.Kind kind) {
+        return repo.findByExternalId(externalId)
+                .map(h -> {
+                    h.updateFromCalendar(subject, title, description, dueDate, kind);
+                    return h;
+                })
+                .orElseGet(() -> {
+                    Homework h = new Homework(subject, title, description, dueDate, null, Homework.Source.CALENDAR);
+                    h.updateContent(null, null, kind, null);
+                    h.setExternalId(externalId);
+                    return repo.save(h);
+                });
+    }
+
+    @Transactional
+    public Optional<Homework> updateContent(long id, String description, List<String> steps,
+                                            Homework.Kind kind, LocalDate dueDate) {
+        return repo.findById(id).map(h -> {
+            h.updateContent(description, steps, kind, dueDate);
+            return h;
+        });
+    }
+
+    @Transactional
+    public Optional<Homework> linkDeck(long id, long deckId) {
+        return repo.findById(id).map(h -> {
+            h.linkDeck(deckId);
+            return h;
+        });
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Homework> findByExternalId(String externalId) {
+        return repo.findByExternalId(externalId);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Homework> get(long id) {
+        return repo.findById(id);
+    }
+
     @Transactional(readOnly = true)
     public List<Homework> open() {
         return repo.findByStatusOrderByDueDateAscCreatedAtAsc(Homework.Status.OPEN);
@@ -50,10 +94,17 @@ public class HomeworkService {
         StringBuilder sb = new StringBuilder();
         for (Homework h : open) {
             sb.append("- [id ").append(h.getId()).append("] ")
+              .append(h.getKind() == Homework.Kind.TEST ? "PROV " : "")
               .append(h.getSubject() == null ? "" : h.getSubject() + ": ")
               .append(h.getTitle());
             if (h.getDueDate() != null) {
                 sb.append(" (till ").append(h.getDueDate()).append(')');
+            }
+            if (h.getDeckId() != null) {
+                sb.append(" [kortlek ").append(h.getDeckId()).append(']');
+            }
+            if (h.getSteps().isEmpty() && (h.getDescription() == null || h.getDescription().isBlank())) {
+                sb.append(" – innehåll saknas, fråga vad som ingår");
             }
             if (!h.getSteps().isEmpty()) {
                 sb.append(" – steg: ").append(String.join(" | ", h.getSteps()));
