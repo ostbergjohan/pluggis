@@ -1,0 +1,33 @@
+name: docker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - pom.xml
+      - speech/**
+      - .github/workflows/docker.yml
+  workflow_dispatch:
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bygg Pluggis och ljudtjänsten
+        env:
+          ANTHROPIC_API_KEY: ci-dummy
+        run: docker compose build
+      - name: Starta ljudtjänsten och prova tal ↔ text
+        run: |
+          docker run -d --name speech -p 8090:8090 "$(docker compose images -q speech 2>/dev/null || echo pluggis-speech)" || \
+            docker run -d --name speech -p 8090:8090 pluggis-speech
+          for i in $(seq 1 60); do curl -fs localhost:8090/health && break; sleep 2; done
+          curl -fs -X POST localhost:8090/tts -H 'Content-Type: application/json' \
+            -d '{"text":"Hej! Nu kör vi första uppgiften."}' -o hej.wav
+          ls -la hej.wav
+          curl -fs -X POST localhost:8090/stt -F audio=@hej.wav
+          echo
+          docker logs speech | tail -20
