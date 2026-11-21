@@ -1,12 +1,21 @@
-# Allt på en maskin: docker compose up --build
+# Allt på en maskin:
+#   cp .env.example .env      # fyll i ANTHROPIC_API_KEY och PLUGGIS_DEVICE_TOKEN
+#   docker compose up --build
 # Öppna sedan http://localhost:8080
+#
+# .env är valfri (kräver Docker Compose 2.24+). Utan den kan värdena sättas i skalet:
+#   ANTHROPIC_API_KEY=sk-ant-... PLUGGIS_DEVICE_TOKEN=hemligt docker compose up --build
 services:
   pluggis:
     build: .
     ports:
       - "8080:8080"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Sätt ANTHROPIC_API_KEY i .env eller i skalet}
+      PLUGGIS_DEVICE_TOKEN: ${PLUGGIS_DEVICE_TOKEN:-}
       PLUGGIS_SPEECH_URL: http://speech:8090
     volumes:
       - pluggis-data:/app/data
