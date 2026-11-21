@@ -1,5 +1,6 @@
 package se.ostberg.pluggis.claude;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -29,6 +30,8 @@ public record ClaudeResponse(
             return new ContentBlock("text", text, null, null, null, null, null, null);
         }
 
+        /** @JsonIgnore: annars skickas den med som "toolUse" och API:et svarar 400. */
+        @JsonIgnore
         public boolean isToolUse() {
             return "tool_use".equals(type);
         }

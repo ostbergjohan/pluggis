@@ -88,5 +88,10 @@ class ClaudeClientTest {
         assertThat(back.get(0).path("type").asText()).isEqualTo("thinking");
         assertThat(back.get(0).path("signature").asText()).isEqualTo("sig==");
         assertThat(back.get(1).has("signature")).isFalse();
+        // Bara fält som Messages API känner till får skickas tillbaka
+        for (JsonNode block : back) {
+            block.fieldNames().forEachRemaining(f -> assertThat(f)
+                    .isIn("type", "text", "id", "name", "input", "thinking", "signature", "data"));
+        }
     }
 }
