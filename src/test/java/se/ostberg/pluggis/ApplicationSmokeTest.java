@@ -148,11 +148,22 @@ class ApplicationSmokeTest {
         assertThat(json(stats).path("totalCardsReviewed").asInt()).isEqualTo(1);
         mvc.perform(get("/api/devices").header(TOKEN, "test-token")).andExpect(status().isOk());
 
-        // iCal-import
-        String ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x1\r\nDTSTART;VALUE=DATE:"
-                + LocalDate.now().plusDays(3).toString().replace("-", "")
-                + "\r\nSUMMARY:Engelska: Glosförhör\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-        String imported = mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token")
+        // iCal: förhandsgranska, importera valda, prenumeration med trasig länk
+        String d3 = LocalDate.now().plusDays(3).toString().replace("-", "");
+        String ics = "BEGIN:VCALENDAR\r\n"
+                + "BEGIN:VEVENT\r\nUID:x1\r\nDTSTART;VALUE=DATE:" + d3 + "\r\nSUMMARY:Engelska: Glosförhör\r\nEND:VEVENT\r\n"
+                + "BEGIN:VEVENT\r\nUID:x2\r\nDTSTART;VALUE=DATE:" + d3 + "\r\nSUMMARY:Studiedag\r\nEND:VEVENT\r\n"
+                + "END:VCALENDAR\r\n";
+        String preview = mvc.perform(post("/api/calendar/preview").header(TOKEN, "test-token")
+                        .contentType("text/plain").content(ics))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(json(preview).size()).isEqualTo(2);
+        mvc.perform(put("/api/calendar").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"webcals://127.0.0.1:9/kalender\",\"onlySchoolwork\":true}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/calendar").header(TOKEN, "test-token")).andExpect(status().isOk());
+        String imported = mvc.perform(post("/api/calendar/import?uids=x1").header(TOKEN, "test-token")
                         .contentType("text/calendar").content(ics))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();

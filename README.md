@@ -18,7 +18,7 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 | Poäng för pluggande med streak och valfri veckopeng (tak per vecka) | ✅ |
 | Pluggplan dag för dag utifrån vad som ingår (sidor, kapitel, begrepp), omplanering | ✅ |
 | Påminnelser på Tab5 (eftermiddag + kvällsknuff, "imorgon är det prov") | ✅ |
-| Läxor in via skärmdump/foto, inklistrad text (InfoMentor) eller iCal-länk | ✅ |
+| Läxor in via InfoMentors kalenderprenumeration (webcals), .ics-fil, skärmdump eller inklistrad text | ✅ |
 | WebSocket för Tab5 (text, knappar, timer, foto, kort, poäng) | ✅ |
 | Webbgränssnitt: föräldravy (läxor, plan, flashkort, poäng, statistik) + Tab5-simulator | ✅ |
 | REST för test med curl / iOS-genväg | ✅ |
@@ -140,17 +140,20 @@ Statistik finns även som JSON: `GET /api/devices/{id}/stats?days=14`.
 
 ## Läxor in, planering och påminnelser
 
-**Skolan använder InfoMentor**, som (såvitt vi hittat) saknar iCal-export och öppet API, och
-inloggning sker oftast med BankID – därför hämtas inget automatiskt därifrån. I stället:
+**Skolan använder InfoMentor**, som har en kalenderprenumeration (`webcals://im2-api.infomentor.se/…`).
+Under **Läxor & prov → 📅 Kalender** klistrar du in länken, väljer "bara läxor och prov" och trycker
+**Spara och synka**. Den synkas sedan varje timme; ändrade datum ger ny plan. Länken är personlig –
+behandla den som ett lösenord (den sparas bara i Pluggis databas).
 
-1. **Skärmdump av veckoplanen** i InfoMentor-appen → iOS-genväg "Pluggis: läxor"
+Andra vägar in:
+
+1. **.ics-fil:** samma flik → *Välj .ics-fil*, förhandsgranska och välj vilka händelser som ska med.
+2. **Skärmdump av veckoplanen** → iOS-genväg "Pluggis: läxor"
    (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=tab5-1`,
    formulär med fältet `image`, header `X-Pluggis-Token`).
-2. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
-3. **iCal-länk** om skolan har en annan kalender: sätt `PLUGGIS_ICAL_URL` (synkas varje timme),
-   eller ladda upp en .ics till `POST /api/calendar/import`.
+3. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
 
-Claude läser ut läxa/prov, datum och vad som ingår. Saknas innehållet frågar coachen efter det.
+Kalendern ger oftast bara titel och datum – saknas innehållet frågar coachen vad som ingår. Från skärmdump och text läser Claude ut läxa/prov, datum och innehåll.
 
 **Planering:** när innehållet finns (`set_homework_content` via coachen, eller
 `POST /api/plan/homework/{id}/content`) gör Claude en plan med små moment (max ~20 min) på

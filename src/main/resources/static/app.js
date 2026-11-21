@@ -263,7 +263,7 @@ function planChecklist(items, showHomework) {
 
 views.laxor = async (main) => {
   main.append(h('h1', {}, 'Läxor & prov'),
-    h('p', { class: 'sub' }, 'Lägg till för hand, klistra in från InfoMentor eller ladda upp en skärmdump av veckoplanen.'));
+    h('p', { class: 'sub' }, 'Prenumerera på InfoMentors kalender, lägg till för hand, klistra in text eller ladda upp en skärmdump.'));
 
   const showDone = h('input', { type: 'checkbox', checked: store.get('lc.showDone', '0') === '1',
     onchange: () => { store.set('lc.showDone', showDone.checked ? '1' : '0'); render(); } });
@@ -282,6 +282,7 @@ views.laxor = async (main) => {
 
   main.append(h('div', { class: 'toolbar' },
     h('button', { class: 'primary', onclick: () => toggleForm(forms, newHomeworkForm) }, '+ Ny läxa eller prov'),
+    h('button', { onclick: () => toggleForm(forms, calendarForm) }, '📅 Kalender'),
     h('button', { onclick: () => toggleForm(forms, pasteForm) }, '📋 Klistra in text'),
     photoBtn, photoInput,
     h('span', { class: 'spacer' }),
@@ -317,6 +318,97 @@ views.laxor = async (main) => {
           render();
         } }, 'Spara'),
         h('button', { onclick: () => forms.replaceChildren() }, 'Avbryt')));
+  }
+
+  function calendarForm() {
+    const panel = h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, 'Kalender'),
+      h('div', { class: 'empty' }, h('span', { class: 'spinner' }), ' Hämtar…'));
+    (async () => {
+      const st = await api('/api/calendar');
+      const url = h('input', { value: st.url || '', placeholder: 'webcals://im2-api.infomentor.se/V1/CalendarV2/IcalSubscription/Subscription/…', autocomplete: 'off' });
+      const only = h('input', { type: 'checkbox', checked: st.onlySchoolwork !== false });
+      const status = h('p', { class: 'item-meta' }, syncText(st));
+      const previewBox = h('div');
+      const fileInput = h('input', { type: 'file', accept: '.ics,text/calendar', style: 'display:none' });
+      let fileText = null;
+
+      fileInput.addEventListener('change', async () => {
+        const f = fileInput.files[0];
+        if (!f) return;
+        fileText = await f.text();
+        const entries = await run(() => api('/api/calendar/preview', { method: 'POST', body: fileText }), fileBtn);
+        if (entries) showPreview(entries, true);
+        fileInput.value = '';
+      });
+      const fileBtn = h('button', { onclick: () => fileInput.click() }, '📂 Välj .ics-fil');
+
+      function showPreview(entries, selectable) {
+        if (!entries.length) { previewBox.replaceChildren(h('div', { class: 'empty' }, 'Kalendern var tom.')); return; }
+        const boxes = [];
+        const rows = entries.map(e => {
+          const note = !e.inRange ? 'utanför tidsfönstret' : e.alreadyImported ? 'finns redan – uppdateras'
+            : !e.schoolwork ? 'ser inte ut som läxa/prov' : '';
+          const box = h('input', { type: 'checkbox', checked: e.inRange && (e.schoolwork || !only.checked), disabled: !e.inRange || !selectable });
+          box.dataset.uid = e.uid;
+          boxes.push(box);
+          return h('tr', {}, h('td', {}, box), h('td', { style: 'white-space:nowrap' }, fmtDay(e.date)), h('td', {}, e.summary),
+            h('td', {}, kindTag(e.kind)), h('td', { class: 'item-meta' }, note));
+        });
+        const willImport = () => boxes.filter(b => b.checked && !b.disabled).length;
+        const count = h('span', { class: 'item-meta' }, '');
+        const update = () => { count.textContent = selectable ? `${willImport()} valda` : `${entries.filter(e => e.inRange && (e.schoolwork || !only.checked)).length} importeras`; };
+        boxes.forEach(b => b.addEventListener('change', update));
+        update();
+        previewBox.replaceChildren(
+          h('table', { style: 'margin-top:12px' }, h('thead', {}, h('tr', {}, ['', 'Datum', 'Händelse', 'Typ', ''].map(t => h('th', {}, t)))), h('tbody', {}, rows)),
+          h('div', { class: 'toolbar', style: 'margin-top:10px' },
+            selectable ? h('button', { class: 'primary', onclick: async (e) => {
+              const uids = boxes.filter(b => b.checked && !b.disabled).map(b => b.dataset.uid);
+              if (!uids.length) return toast('Inget valt', true);
+              const r = await run(() => api(`/api/calendar/import?uids=${enc(uids.join(','))}`, { method: 'POST', body: fileText }), e.target);
+              if (r) { toast(`Importerade ${r.imported}${r.replanned ? `, planerade om ${r.replanned}` : ''}`); forms.replaceChildren(); render(); }
+            } }, 'Importera valda') : null,
+            count));
+      }
+
+      panel.replaceChildren(h('h2', {}, 'Kalender'),
+        h('h3', {}, 'Prenumerera (synkas varje timme)'),
+        h('p', { class: 'item-meta' }, 'InfoMentor: öppna kalendern, välj prenumerera/exportera och kopiera länken (webcals://…). Google Kalender: Inställningar → kalendern → "Hemlig adress i iCal-format". Länken är personlig – behandla den som ett lösenord.'),
+        url,
+        h('label', { style: 'display:flex;gap:6px;align-items:center' }, only, 'Bara läxor och prov (hoppa över studiedagar, lov m.m.)'),
+        h('div', { class: 'toolbar', style: 'margin-top:10px' },
+          h('button', { onclick: async (e) => {
+            if (!url.value.trim()) return toast('Klistra in en länk', true);
+            const entries = await run(() => api(`/api/calendar/preview?url=${enc(url.value.trim())}`, { method: 'POST' }), e.target);
+            if (entries) showPreview(entries, false);
+          } }, 'Förhandsgranska'),
+          h('button', { class: 'primary', onclick: async (e) => {
+            const r = await run(() => api('/api/calendar', { method: 'PUT', body: { url: url.value.trim(), onlySchoolwork: only.checked } }), e.target);
+            if (r) { toast(`Sparad – importerade ${r.imported}, hoppade över ${r.skipped}`); status.textContent = syncText(await api('/api/calendar')); render(); }
+          } }, 'Spara och synka'),
+          st.url ? h('button', { onclick: async (e) => {
+            const r = await run(() => api('/api/calendar/sync', { method: 'POST' }), e.target);
+            if (r) { toast(`Synkad – ${r.imported} importerade`); status.textContent = syncText(await api('/api/calendar')); render(); }
+          } }, '↻ Synka nu') : null,
+          st.url ? h('button', { class: 'danger', onclick: async () => {
+            if (!confirm('Sluta prenumerera? Redan importerade läxor ligger kvar.')) return;
+            await run(() => api('/api/calendar', { method: 'DELETE' }), null, 'Prenumerationen borttagen');
+            forms.replaceChildren();
+          } }, 'Ta bort') : null),
+        status,
+        h('h3', { style: 'margin-top:16px' }, 'Eller importera en fil'),
+        h('div', { class: 'toolbar' }, fileBtn, fileInput, h('span', { class: 'item-meta' }, 'Du väljer själv vilka händelser som importeras.')),
+        previewBox);
+    })().catch(e => panel.replaceChildren(h('h2', {}, 'Kalender'), h('div', { class: 'empty' }, e.message)));
+    return panel;
+  }
+
+  function syncText(st) {
+    if (!st.url) return 'Ingen prenumeration än.';
+    if (st.lastError) return `Senaste synk misslyckades: ${st.lastError}`;
+    if (!st.lastSync) return 'Prenumeration sparad – synkas varje timme.';
+    const r = st.lastResult || {};
+    return `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}: ${r.imported ?? 0} importerade, ${r.skipped ?? 0} överhoppade.`;
   }
 
   function pasteForm() {

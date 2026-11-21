@@ -50,5 +50,19 @@ class IcalParserTest {
         assertThat(IcalParser.subjectFrom("Engelska: Glosförhör kap 3")).isEqualTo("Engelska");
         assertThat(IcalParser.subjectFrom("MA - Inlämning")).isEqualTo("MA");
         assertThat(IcalParser.subjectFrom("Studiedag")).isNull();
+
+        assertThat(IcalParser.looksLikeSchoolwork("Studiedag", null)).isFalse();
+        assertThat(IcalParser.looksLikeSchoolwork("Höstlov", "Skolan stängd")).isFalse();
+        assertThat(IcalParser.looksLikeSchoolwork("Läxa: SO kap 2", null)).isTrue();
+        assertThat(IcalParser.looksLikeSchoolwork("Inlämning NO-rapport", null)).isTrue();
+    }
+
+    @Test
+    void webcalLinksBecomeHttps() {
+        assertThat(CalendarSyncService.normalizeUrl("webcals://im2-api.infomentor.se/V1/x"))
+                .isEqualTo("https://im2-api.infomentor.se/V1/x");
+        assertThat(CalendarSyncService.normalizeUrl(" webcal://example.com/a.ics ")).isEqualTo("https://example.com/a.ics");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> CalendarSyncService.normalizeUrl("ftp://x"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

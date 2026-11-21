@@ -80,6 +80,16 @@ public final class IcalParser {
         return TEST_WORDS.matcher(text).find();
     }
 
+    private static final Pattern SCHOOLWORK_WORDS = Pattern.compile(
+            "läxa|läxor|läxförhör|inlämning|lämna in|uppgift|redovisning|glosor|glosförhör|förhör|prov|diagnos|test|tentamen|presentation|essä|labbrapport",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
+    /** Ser posten ut som skolarbete (läxa, inlämning, prov …) och inte som t.ex. studiedag eller lov? */
+    public static boolean looksLikeSchoolwork(String summary, String description) {
+        String text = (summary == null ? "" : summary) + " " + (description == null ? "" : description);
+        return SCHOOLWORK_WORDS.matcher(text).find();
+    }
+
     /** "Matematik: Läxa kap 3" eller "EN - Glosor" → ämnet före avgränsaren, annars null. */
     public static String subjectFrom(String summary) {
         if (summary == null) {

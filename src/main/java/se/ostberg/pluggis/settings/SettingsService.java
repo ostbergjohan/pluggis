@@ -10,6 +10,8 @@ public class SettingsService {
 
     public static final String VOICE = "speech.voice";
     public static final String SPEED = "speech.speed";
+    public static final String CALENDAR_URL = "calendar.url";
+    public static final String CALENDAR_ONLY_SCHOOLWORK = "calendar.onlySchoolwork";
 
     private final AppSettingRepository repo;
 
