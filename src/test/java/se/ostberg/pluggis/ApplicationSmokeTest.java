@@ -232,6 +232,39 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void eachDayIsGroupedPerSubjectWithNearestDeadlineFirst() throws Exception {
+        String later = LocalDate.now().plusDays(5).toString();
+        String sooner = LocalDate.now().plusDays(4).toString();
+        long a = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Gruppa A\",\"subject\":\"Engelska\",\"dueDate\":\"" + later + "\",\"steps\":[\"A1\",\"A2\",\"A3\",\"A4\"]}"))
+                .andReturn().getResponse().getContentAsString()).path("id").asLong();
+        long b = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Gruppa B\",\"subject\":\"NO\",\"dueDate\":\"" + sooner + "\",\"steps\":[\"B1\",\"B2\",\"B3\",\"B4\"]}"))
+                .andReturn().getResponse().getContentAsString()).path("id").asLong();
+        mvc.perform(post("/api/plan/homework/" + a).header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(post("/api/plan/homework/" + b).header(TOKEN, "test-token")).andExpect(status().isOk());
+        JsonNode up = json(mvc.perform(get("/api/plan/upcoming?days=6").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString());
+        java.util.Map<String, java.util.List<Long>> perDay = new java.util.LinkedHashMap<>();
+        up.forEach(i -> {
+            long hw = i.path("homeworkId").asLong();
+            if (hw == a || hw == b) {
+                perDay.computeIfAbsent(i.path("planDate").asText(), k -> new java.util.ArrayList<>()).add(hw);
+            }
+        });
+        boolean sawBoth = false;
+        for (var day : perDay.values()) {
+            // ett block per läxa: aldrig A, B, A
+            long switches = java.util.stream.IntStream.range(1, day.size()).filter(i -> !day.get(i).equals(day.get(i - 1))).count();
+            assertThat(switches).isLessThanOrEqualTo(1);
+            if (day.contains(a) && day.contains(b)) {
+                sawBoth = true;
+                assertThat(day.get(0)).isEqualTo(b); // närmast deadline först
+            }
+        }
+        assertThat(sawBoth).isTrue();
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

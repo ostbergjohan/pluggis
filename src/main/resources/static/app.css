@@ -287,3 +287,6 @@ code.sa { font-size: 13px; background: var(--bg); border: 1px solid var(--line);
 .drop-mark { height: 3px; background: var(--accent); border-radius: 2px; margin: 2px 0 2px 22px; }
 button.ghost { background: transparent; border-color: transparent; box-shadow: none; }
 button.ghost:hover { background: var(--accent-soft); }
+
+.dnd-group { font-size: 13px; font-weight: 700; color: var(--c); margin: 6px 0 0 22px; padding-left: 8px; border-left: 3px solid var(--c); }
+.dnd-row.in-group .dnd-main > div { border-left: 3px solid var(--c); padding-left: 8px; }

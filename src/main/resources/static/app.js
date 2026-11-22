@@ -803,7 +803,20 @@ views.plan = async (main) => {
     const d = parseDay(day);
     const off = studyDays.size && !studyDays.has(DOW[d.getDay()]);
     const list = h('div', { class: 'dnd-list' });
-    items.forEach(i => list.append(itemRow(i, day)));
+    let cur = null;
+    for (const i of items) {
+      const x = hwById.get(i.homeworkId);
+      const color = subjectColor(x && x.subject, x ? x.title : '');
+      if (cur !== i.homeworkId) {
+        cur = i.homeworkId;
+        const mins = items.filter(o => o.homeworkId === cur).reduce((n, o) => n + o.minutes, 0);
+        list.append(h('div', { class: 'dnd-group', style: `--c:${color}` }, `${subjectIcon(x && x.subject, x ? x.title : '')} ${x ? blockLabel(x) : 'Övrigt'}`,
+          h('span', { class: 'item-meta' }, ` · ${mins} min`)));
+      }
+      const row = itemRow(i, day);
+      row.style.setProperty('--c', color); row.classList.add('in-group');
+      list.append(row);
+    }
     if (!items.length) list.append(h('div', { class: 'dnd-empty' }, off ? 'ledig dag' : 'inget planerat – släpp här'));
     const zone = h('div', { class: 'dnd-day' + (off ? ' off' : '') },
       h('div', { class: 'day-head dnd-head' }, h('span', {}, `${fmtLong(day)}${day === todayIso() ? ' – idag' : ''}`),

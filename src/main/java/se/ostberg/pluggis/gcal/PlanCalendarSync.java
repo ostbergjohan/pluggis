@@ -244,14 +244,23 @@ public class PlanCalendarSync {
         boolean allDone = items.stream().allMatch(PlanItem::isDone);
         java.util.LinkedHashSet<String> titles = new java.util.LinkedHashSet<>();
         StringBuilder desc = new StringBuilder();
+        Long current = null;
         for (PlanItem i : items) {
             Homework h = hw.get(i.getHomeworkId());
-            String what = h == null ? "" : (h.getKind() == Homework.Kind.TEST ? "prov " : "") + h.getTitle();
             if (h != null) {
                 titles.add(h.getTitle());
             }
-            desc.append(i.isDone() ? "✅ " : "☐ ").append(i.getTask()).append(" (").append(i.getMinutes()).append(" min")
-                    .append(what.isBlank() ? "" : ", " + what).append(")\n");
+            if (!java.util.Objects.equals(current, i.getHomeworkId())) {
+                current = i.getHomeworkId();
+                int blockMin = items.stream().filter(x -> java.util.Objects.equals(x.getHomeworkId(), i.getHomeworkId()))
+                        .mapToInt(PlanItem::getMinutes).sum();
+                String head = h == null ? "Övrigt" : se.ostberg.pluggis.planning.SubjectIcon.of(h.getSubject(), h.getTitle()) + " "
+                        + (h.getSubject() == null || h.getSubject().isBlank() || h.getTitle().toLowerCase().contains(h.getSubject().toLowerCase())
+                        ? "" : h.getSubject() + " · ")
+                        + (h.getKind() == Homework.Kind.TEST ? "Prov: " : "") + h.getTitle();
+                desc.append(desc.isEmpty() ? "" : "\n").append(head).append(" – ").append(blockMin).append(" min\n");
+            }
+            desc.append(i.isDone() ? "  ✅ " : "  ☐ ").append(i.getTask()).append(" (").append(i.getMinutes()).append(" min)\n");
         }
         if (!s.getStudyCue().isBlank()) {
             desc.append("\nNär: ").append(s.getStudyCue());

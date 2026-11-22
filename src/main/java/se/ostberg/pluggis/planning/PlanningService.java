@@ -201,8 +201,7 @@ public class PlanningService {
         LocalDate today = todayDate();
         Map<Long, Optional<Homework>> cache = new HashMap<>();
         List<TodayItem> out = new ArrayList<>();
-        List<PlanItem> open = new ArrayList<>(repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today));
-        open.sort(PlanItem.ORDER);
+        List<PlanItem> open = grouped(repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today));
         for (PlanItem item : open) {
             Optional<Homework> h = cache.computeIfAbsent(item.getHomeworkId(), homework::get);
             if (h.isEmpty() || h.get().getStatus() != Homework.Status.OPEN) {
@@ -217,9 +216,7 @@ public class PlanningService {
     @Transactional(readOnly = true)
     public List<PlanItem> upcoming(int days) {
         LocalDate today = todayDate();
-        List<PlanItem> items = new ArrayList<>(repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(today, today.plusDays(Math.max(0, days))));
-        items.sort(PlanItem.ORDER);
-        return items;
+        return grouped(repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(today, today.plusDays(Math.max(0, days))));
     }
 
     @Transactional(readOnly = true)
@@ -396,6 +393,33 @@ public class PlanningService {
         List<PlanItem> day = new ArrayList<>(repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(date, date));
         day.sort(PlanItem.ORDER);
         return day;
+    }
+
+    /**
+     * Ordning inom varje dag: ett block per läxa/prov (ämne) så att eleven inte hoppar mellan ämnen –
+     * närmast deadline först, sedan viktigast, och inom blocket i planens ordning (startsteget först).
+     * Har föräldern ordnat dagen för hand gäller den ordningen.
+     */
+    public List<PlanItem> grouped(List<PlanItem> items) {
+        Map<Long, Optional<Homework>> cache = new HashMap<>();
+        java.util.function.Function<PlanItem, Optional<Homework>> hw = i -> cache.computeIfAbsent(i.getHomeworkId(), homework::get);
+        Set<LocalDate> manualDays = new HashSet<>();
+        items.stream().filter(i -> i.getSortOrder() != null).forEach(i -> manualDays.add(i.getPlanDate()));
+        java.util.Comparator<PlanItem> block = java.util.Comparator
+                .comparing((PlanItem i) -> hw.apply(i).map(Homework::getDueDate).orElse(null),
+                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                .thenComparing(i -> hw.apply(i).map(Homework::weightOrDefault).orElse(50), java.util.Comparator.reverseOrder())
+                .thenComparing(PlanItem::getHomeworkId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                .thenComparing(PlanItem::getId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
+        List<PlanItem> out = new ArrayList<>(items);
+        out.sort((a, b) -> {
+            int d = a.getPlanDate().compareTo(b.getPlanDate());
+            if (d != 0) {
+                return d;
+            }
+            return manualDays.contains(a.getPlanDate()) ? PlanItem.ORDER.compare(a, b) : block.compare(a, b);
+        });
+        return out;
     }
 
     /** Publiceras när en elevs plan har ändrats (för t.ex. Google Kalender). */

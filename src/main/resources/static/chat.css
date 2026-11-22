@@ -222,3 +222,11 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .fc-right { background: var(--accent); }
 .fc-status { text-align: center; margin-top: 12px; }
 #points[hidden], #tabbar button[hidden] { display: none !important; }
+
+.block-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px 4px; font-weight: 700; font-size: 15px;
+  border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); }
+.block-head + .row, .row.in-block { border-left: 4px solid var(--c); }
+.block-ico { font-size: 18px; }
+.block-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c); }
+.block-min { font-size: 13px; color: var(--muted); font-weight: 600; }
+.row.in-block { padding-left: 18px; }

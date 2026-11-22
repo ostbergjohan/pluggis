@@ -597,7 +597,7 @@ views.plan = async () => {
   const allDone = today.length > 0 && today.every(t => t.item.done);
   if (allDone) page.append(h('div', { class: 'day-done' }, '🎉 Allt för idag är klart! Bra jobbat.'));
   page.append(h('h3', {}, 'Idag'), today.length
-    ? h('div', { class: 'box', id: 'todayBox' }, today.map(t => planRow(t.item, titleOf(t.item.homeworkId, t.homeworkTitle), t.overdue)))
+    ? h('div', { class: 'box', id: 'todayBox' }, blocks(today.map(t => ({ item: t.item, overdue: t.overdue, title: t.homeworkTitle }))))
     : h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget planerat idag 🎉')));
   if (progress.length) page.append(h('h3', {}, 'På väg mot'), h('div', { class: 'progs' }, progress.slice(0, 5).map(progressCard)));
 
@@ -609,10 +609,33 @@ views.plan = async () => {
     later.get(i.planDate).push(i);
   }
   for (const [day, items] of later) {
-    page.append(h('h3', {}, dayName(day)), h('div', { class: 'box' }, items.map(i => planRow(i, titleOf(i.homeworkId), false))));
+    page.append(h('h3', {}, dayName(day)), h('div', { class: 'box' }, blocks(items.map(i => ({ item: i, overdue: false })))));
   }
   if (!later.size) page.append(h('p', { class: 'empty' }, 'Inget mer planerat de kommande två veckorna.'));
   return page;
+
+  /** Ett block per läxa/prov: rubrik med ämnets symbol och färg, sedan momenten. Servern har redan grupperat. */
+  function blocks(list) {
+    const out = [];
+    let cur = null;
+    for (const t of list) {
+      const id = t.item.homeworkId;
+      if (!cur || cur.id !== id) {
+        const x = hwById.get(id);
+        const color = subjectColor(x && x.subject, x ? x.title : t.title);
+        const mins = list.filter(o => o.item.homeworkId === id).reduce((n, o) => n + o.item.minutes, 0);
+        cur = { id, color };
+        out.push(h('div', { class: 'block-head', style: `--c:${color}` },
+          h('span', { class: 'block-ico' }, subjectIcon(x && x.subject, x ? x.title : t.title)),
+          h('span', { class: 'block-title' }, x ? blockLabel(x) : (t.title || 'Övrigt'), x && x.weight >= 80 ? ' ⭐' : ''),
+          h('span', { class: 'block-min' }, `${mins} min`)));
+      }
+      const row = planRow(t.item, null, t.overdue);
+      row.classList.add('in-block'); row.style.setProperty('--c', cur.color);
+      out.push(row);
+    }
+    return out;
+  }
 
   function planRow(item, homeworkTitle, overdue) {
     const tick = h('button', { class: 'tick', 'aria-label': 'Klar', disabled: item.done || null }, item.done ? '✓' : '');

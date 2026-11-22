@@ -37,7 +37,7 @@ public class ChatController {
     private static String uiVersion() {
         try {
             var md = java.security.MessageDigest.getInstance("SHA-256");
-            for (String f : java.util.List.of("chat.html", "chat.js", "chat.css")) {
+            for (String f : java.util.List.of("chat.html", "chat.js", "chat.css", "subjects.js")) {
                 try (var in = ChatController.class.getResourceAsStream("/static/" + f)) {
                     if (in != null) {
                         md.update(in.readAllBytes());
