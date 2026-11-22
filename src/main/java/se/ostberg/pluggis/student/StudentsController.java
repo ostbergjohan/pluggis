@@ -17,7 +17,7 @@ import java.util.Map;
 /** Föräldravyn: elever med kod och enhet. Nås bara med föräldrarnas token. */
 @RestController
 @RequestMapping("/api/students")
-public class StudentController {
+public class StudentsController {
 
     public record Input(String name, String deviceId) {
     }
@@ -31,7 +31,7 @@ public class StudentController {
 
     private final StudentService students;
 
-    public StudentController(StudentService students) {
+    public StudentsController(StudentService students) {
         this.students = students;
     }
 
