@@ -1250,6 +1250,7 @@ views.installningar = async (main) => {
     studentsPanel(),
     studentPanel(),
     planningPanel(),
+    googlePanel(),
     voicePanel(),
     h('section', { class: 'panel', style: 'margin-top:16px' },
       h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
@@ -1315,6 +1316,52 @@ function studentsPanel() {
   return panel;
 }
 
+function googlePanel() {
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Google Kalender'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  async function paint(st) {
+    if (!st) {
+      try { st = await api('/api/google-calendar'); } catch (e) { panel.replaceChildren(h('h2', {}, 'Google Kalender'), h('div', { class: 'empty' }, e.message)); return; }
+    }
+    const who = (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name || 'eleven';
+    const body = [h('h2', {}, `Google Kalender för ${who}`),
+      h('p', { class: 'item-meta' }, 'Planen läggs in som ett pass per dag vid pluggtiden, med dagens moment i beskrivningen och en notis när det är dags. Avbockningar syns i kalendern efter en liten stund.')];
+    if (!st.enabled) {
+      body.push(h('div', { class: 'empty', style: 'text-align:left' },
+        'Inte påslaget än. Skapa ett tjänstekonto i Google Cloud, ladda ner JSON-nyckeln och lägg den som ',
+        h('code', {}, 'secrets/google-sa.json'), ' bredvid docker-compose.yml. Starta sedan om (', h('code', {}, 'docker compose up -d'), '). Se README → Google Kalender.'));
+      panel.replaceChildren(...body);
+      return;
+    }
+    const cal = h('input', { value: st.calendarId || '', placeholder: 'xxxx@group.calendar.google.com eller elevens gmail-adress' });
+    body.push(
+      h('label', {}, '1. Dela kalendern med den här adressen (”Gör ändringar i händelser”)'),
+      h('div', { class: 'toolbar' }, h('code', { class: 'sa' }, st.serviceAccountEmail),
+        h('button', { class: 'small', onclick: async () => { try { await navigator.clipboard.writeText(st.serviceAccountEmail); toast('Kopierad'); } catch { toast(st.serviceAccountEmail); } } }, '📋')),
+      h('label', {}, '2. Kalender-id (Inställningar för kalendern → Integrera kalender)'), cal,
+      h('div', { class: 'toolbar', style: 'margin-top:12px' },
+        h('button', { class: 'primary', onclick: async (e) => {
+          const r = await run(() => api('/api/google-calendar', { method: 'PUT', body: { calendarId: cal.value } }), e.target);
+          if (r) { toast(`Synkat: ${r.result.created} nya, ${r.result.updated} ändrade, ${r.result.deleted} borttagna`); paint(r); }
+        } }, st.calendarId ? 'Spara och synka' : 'Koppla och synka'),
+        st.calendarId ? h('button', { onclick: async (e) => {
+          const r = await run(() => api('/api/google-calendar/sync', { method: 'POST' }), e.target);
+          if (r) { toast(`Synkat: ${r.result.created} nya, ${r.result.updated} ändrade, ${r.result.deleted} borttagna`); paint(r); }
+        } }, '🔄 Synka nu') : null,
+        h('span', { class: 'spacer' }),
+        st.calendarId ? h('button', { class: 'danger', onclick: async (e) => {
+          if (!confirm('Koppla bort kalendern? Kommande pluggpass tas bort ur den.')) return;
+          const r = await run(() => api('/api/google-calendar', { method: 'DELETE' }), e.target, 'Bortkopplad');
+          if (r) paint(r);
+        } }, 'Koppla bort') : null),
+      st.lastError ? h('p', { class: 'item-meta', style: 'color:var(--red)' }, '⚠️ ', st.lastError)
+        : st.lastSync ? h('p', { class: 'item-meta' }, `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}`) : null);
+    panel.replaceChildren(...body);
+  }
+  paint();
+  return panel;
+}
+
 function planningPanel() {
   const who = () => (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name;
   const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Planering'),
@@ -1332,16 +1379,22 @@ function planningPanel() {
       return h('label', { class: 'daybox' }, cb, txt);
     });
     const replan = h('input', { type: 'checkbox', checked: true });
+    const time = h('input', { type: 'time', value: s.studyTime || '16:30', step: '300' });
+    const cue = h('input', { value: s.studyCue || '', placeholder: 'T.ex. efter mellanmålet', maxlength: '80' });
     panel.replaceChildren(h('h2', {}, `Planering för ${who() || s.name || 'eleven'}`),
       h('label', {}, 'Max plugg per dag (alla läxor och prov tillsammans): ', label), minutes,
       h('p', { class: 'item-meta' }, 'För årskurs 8 brukar 20–45 minuter vara lagom en vanlig dag. Inför prov kan planen lägga mer på de sista dagarna, men aldrig över max.'),
       h('label', {}, 'Pluggdagar'), h('div', { class: 'days' }, boxes),
+      h('div', { class: 'row', style: 'margin-top:8px' },
+        h('div', {}, h('label', {}, 'Pluggtid'), time),
+        h('div', {}, h('label', {}, 'När (om-så-plan)'), cue)),
+      h('p', { class: 'item-meta' }, 'Bestäm gärna tillsammans med eleven: "När jag ätit mellanmål, då tar jag fram boken." Påminnelsen kommer vid pluggtiden och en knuff två timmar senare; passet i Google Kalender läggs då.'),
       h('label', { style: 'display:flex;gap:6px;align-items:center;margin-top:10px' }, replan, 'Gör om befintliga planer med de nya inställningarna'),
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
           const days = boxes.map(b => b.querySelector('input')).filter(c => c.checked).map(c => c.dataset.day);
           if (!days.length) return toast('Välj minst en pluggdag', true);
-          const r = await run(() => api('/api/student', { method: 'PUT', body: { maxMinutesPerDay: Number(minutes.value), studyDays: days } }), e.target);
+          const r = await run(() => api('/api/student', { method: 'PUT', body: { maxMinutesPerDay: Number(minutes.value), studyDays: days, studyTime: time.value, studyCue: cue.value } }), e.target);
           if (!r) return;
           s = r;
           if (replan.checked) {
