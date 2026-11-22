@@ -701,7 +701,17 @@ function groupByDay(items) {
 // ----- Plan -----
 
 views.plan = async (main) => {
-  main.append(h('h1', {}, 'Plan'), h('p', { class: 'sub' }, 'Det som är planerat de kommande tre veckorna. Bocka av när det är gjort.'));
+  const replanBtn = h('button', { class: 'secondary', onclick: async () => {
+    const r = await run(() => api('/api/plan/replan-all', { method: 'POST' }), replanBtn,
+      'Planerar om – tar en halv minut, sidan uppdateras sen');
+    if (r !== undefined) {
+      replanBtn.disabled = true; replanBtn.textContent = '⏳ Planerar om…';
+      setTimeout(() => { if (location.hash === '#plan') route(); }, 30000);
+    }
+  } }, '🔄 Planera om allt');
+  main.append(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap' },
+      h('h1', {}, 'Plan'), replanBtn),
+    h('p', { class: 'sub' }, 'Det som är planerat de kommande tre veckorna. Bocka av när det är gjort. "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.'));
   const [today, upcoming] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=21'), loadHomework(true)]);
   const overdue = today.filter(t => t.overdue);
   if (overdue.length) {
