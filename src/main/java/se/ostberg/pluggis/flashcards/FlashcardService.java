@@ -125,9 +125,8 @@ public class FlashcardService {
         return true;
     }
 
-    @Transactional
     /** Nollställ en kortleks framsteg (alla kort till fack 1). Returnerar antal kort. */
-    @org.springframework.transaction.annotation.Transactional
+    @Transactional
     public int resetDeck(long deckId) {
         var list = cards.findByDeckIdOrderByIdAsc(deckId);
         java.time.Instant now = java.time.Instant.now();
@@ -135,6 +134,7 @@ public class FlashcardService {
         return list.size();
     }
 
+    @Transactional
     public boolean deleteDeck(long deckId) {
         if (!decks.existsById(deckId)) {
             return false;
