@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /** Poäng och veckopeng – för föräldravyn och för enhetens poängskärm. */
 @RestController
@@ -47,6 +48,24 @@ public class RewardsController {
     @PostMapping("/payouts")
     public Payout markPaid(@PathVariable String deviceId, @RequestBody(required = false) PayoutRequest body) {
         return rewards.markPaid(deviceId, body == null ? null : body.amountSek(), body == null ? null : body.note());
+    }
+
+    public record ResetRequest(String scope, Boolean payouts) {
+    }
+
+    /** Nollställ veckans (scope=week) eller alla (scope=all) poäng; payouts=true tar även bort utbetalningar. */
+    @PostMapping("/reset")
+    public Map<String, Object> reset(@PathVariable String deviceId, @RequestBody(required = false) ResetRequest body) {
+        String scope = body == null || body.scope() == null ? "week" : body.scope();
+        long removed = rewards.reset(deviceId, scope, body != null && Boolean.TRUE.equals(body.payouts()));
+        return Map.of("removed", removed, "week", rewards.week(deviceId));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/events/{eventId}")
+    public org.springframework.http.ResponseEntity<Void> deleteEvent(@PathVariable String deviceId, @PathVariable long eventId) {
+        return rewards.deleteEvent(deviceId, eventId)
+                ? org.springframework.http.ResponseEntity.noContent().build()
+                : org.springframework.http.ResponseEntity.notFound().build();
     }
 
     @GetMapping("/payouts")

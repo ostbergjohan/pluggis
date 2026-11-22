@@ -195,6 +195,18 @@ public class PlanningService {
         return repo.findByHomeworkIdOrderByPlanDateAscIdAsc(homeworkId);
     }
 
+    /** Ångra ett avbockat moment (föräldern). Poängen för momentet tas bort. */
+    @Transactional
+    public Optional<PlanItem> undo(long itemId, String deviceId) {
+        return repo.findById(itemId).map(item -> {
+            if (item.isDone()) {
+                item.markUndone();
+                rewards.onPlanItemUndone(deviceId, item.getId());
+            }
+            return item;
+        });
+    }
+
     @Transactional
     public Optional<PlanItem> complete(long itemId, String deviceId) {
         return repo.findById(itemId).map(item -> {

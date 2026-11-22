@@ -104,6 +104,11 @@ public class FlashcardController {
     }
 
     /** Låt Claude skapa en lek från ämne och/eller text. */
+    @PostMapping("/decks/{deckId}/reset")
+    public Map<String, Integer> resetDeck(@PathVariable long deckId) {
+        return Map.of("cards", flashcards.resetDeck(deckId));
+    }
+
     @PostMapping("/generate")
     public FlashcardGenerator.Result generate(@RequestBody GenerateRequest body,
                                               @RequestParam(required = false) String deviceId) {

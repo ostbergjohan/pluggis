@@ -288,11 +288,18 @@ function planChecklist(items, showHomework) {
   return h('div', {}, items.map(t => {
     const item = t.item || t;
     const box = h('input', {
-      type: 'checkbox', checked: item.done, disabled: item.done,
+      type: 'checkbox', checked: item.done, title: item.done ? 'Klicka för att ångra' : 'Bocka av',
       onchange: async () => {
-        const ok = await run(() => api(`/api/plan/items/${item.id}/done?deviceId=${enc(state.deviceId)}`, { method: 'POST' }),
-          null, 'Bra jobbat! +3 poäng');
-        if (ok !== undefined) { row.classList.add('done'); box.disabled = true; } else box.checked = false;
+        if (box.checked) {
+          const ok = await run(() => api(`/api/plan/items/${item.id}/done?deviceId=${enc(state.deviceId)}`, { method: 'POST' }),
+            null, 'Bra jobbat! +3 poäng');
+          if (ok !== undefined) { item.done = true; row.classList.add('done'); } else box.checked = false;
+        } else {
+          if (!confirm(`Ångra att "${item.task}" är gjort? Poängen för det tas bort.`)) { box.checked = true; return; }
+          const ok = await run(() => api(`/api/plan/items/${item.id}/undo?deviceId=${enc(state.deviceId)}`, { method: 'POST' }),
+            null, 'Ångrat – momentet är inte gjort');
+          if (ok !== undefined) { item.done = false; row.classList.remove('done'); } else box.checked = true;
+        }
       },
     });
     const row = h('label', { class: 'check' + (item.done ? ' done' : '') }, box,
@@ -744,6 +751,11 @@ views.kort = async (main) => {
           h('button', { class: 'small', onclick: () => showDeck(d.deck) }, 'Kort'), ' ',
           h('button', { class: 'small primary', onclick: () => quiz(d.deck) }, 'Öva'), ' ',
           h('button', { class: 'small', onclick: () => exportDeck(d.deck) }, 'Anki'), ' ',
+          h('button', { class: 'small', title: 'Börja om: alla kort till fack 1', onclick: async () => {
+            if (!confirm(`Nollställa framstegen i "${d.deck.name}"? Alla kort börjar om i fack 1.`)) return;
+            const r = await run(() => api(`/api/flashcards/decks/${d.deck.id}/reset`, { method: 'POST' }), null, 'Kortleken börjar om');
+            if (r) render();
+          } }, '↺'), ' ',
           h('button', { class: 'small danger', onclick: async () => {
             if (!confirm(`Ta bort leken "${d.deck.name}"?`)) return;
             await run(() => api(`/api/flashcards/decks/${d.deck.id}`, { method: 'DELETE' }), null, 'Borttagen');
@@ -897,13 +909,33 @@ views.poang = async (main) => {
   main.append(h('div', { class: 'grid cols-2', style: 'margin-top:16px' },
     h('section', { class: 'panel' }, h('h2', {}, 'Senaste poängen'),
       events.length ? h('table', {}, h('tbody', {}, events.map(e => h('tr', {},
-        h('td', {}, fmtDay(e.awardedOn)), h('td', {}, e.reason), h('td', { style: 'text-align:right;font-weight:600' }, `+${e.points}`)))))
+        h('td', {}, fmtDay(e.awardedOn)), h('td', {}, e.reason), h('td', { style: 'text-align:right;font-weight:600' }, `+${e.points}`),
+        h('td', { style: 'width:1%' }, h('button', { class: 'small danger', title: 'Ta bort de här poängen', onclick: async (ev) => {
+          if (!confirm(`Ta bort ${e.points} poäng (${e.reason || 'poäng'})?`)) return;
+          const r = await run(() => api(`${base}/events/${e.id}`, { method: 'DELETE' }), ev.target, 'Borttaget');
+          if (r !== undefined) route();
+        } }, '✕'))))))
         : h('div', { class: 'empty' }, 'Inga poäng än.')),
     h('section', { class: 'panel' }, h('h2', {}, 'Utbetalningar'),
       payouts.length ? h('table', {}, h('tbody', {}, payouts.map(p => h('tr', {},
         h('td', {}, new Date(p.paidAt).toLocaleDateString('sv-SE')), h('td', {}, `vecka ${fmtDay(p.weekStart)}`),
         h('td', { style: 'text-align:right' }, kr(p.amountSek))))))
         : h('div', { class: 'empty' }, 'Inga utbetalningar än.'))));
+
+  // Nollställ
+  const alsoPayouts = h('input', { type: 'checkbox' });
+  const reset = (scope) => async (e) => {
+    const what = scope === 'all' ? 'ALLA poäng (även streaken)' : 'den här veckans poäng';
+    if (!confirm(`Nollställa ${what}${alsoPayouts.checked ? ' och utbetalningarna' : ''}? Det går inte att ångra.`)) return;
+    const r = await run(() => api(`${base}/reset`, { method: 'POST', body: { scope, payouts: alsoPayouts.checked } }), e.target);
+    if (r) { toast(`Nollställt – ${r.removed} poänghändelser borttagna`); route(); }
+  };
+  main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Nollställ'),
+    h('p', { class: 'item-meta' }, 'Till exempel efter att ha testat, eller för att börja om en ny period. Enskilda poäng tar du bort med ✕ ovan.'),
+    h('label', { style: 'display:flex;gap:6px;align-items:center' }, alsoPayouts, 'Ta även bort utbetalningarna för samma period'),
+    h('div', { class: 'toolbar', style: 'margin-top:10px' },
+      h('button', { onclick: reset('week') }, 'Nollställ veckans poäng'),
+      h('button', { class: 'danger', onclick: reset('all') }, 'Nollställ alla poäng'))));
 };
 
 // ----- Tab5-simulator -----

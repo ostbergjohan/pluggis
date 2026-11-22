@@ -58,6 +58,9 @@ class ApplicationSmokeTest {
     @org.springframework.beans.factory.annotation.Autowired
     org.springframework.jdbc.core.JdbcTemplate jdbc;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    se.ostberg.pluggis.planning.PlanItemRepository planItems;
+
     @Autowired
     ObjectMapper mapper;
 
@@ -455,6 +458,46 @@ class ApplicationSmokeTest {
                 .header(TOKEN, "test-token")).andExpect(status().isNoContent());
         Integer left = jdbc.queryForObject("select count(*) from homework where student_key = ?", Integer.class, String.valueOf(lisaId));
         assertThat(left).isZero();
+    }
+
+    @Test
+    void parentCanUndoPlanItemsAndResetPoints() throws Exception {
+        String dev = "reset-tab";
+        var item = planItems.save(new se.ostberg.pluggis.planning.PlanItem(999L, LocalDate.now(), "Läs s. 10", 10,
+                se.ostberg.pluggis.planning.PlanItem.Type.READ));
+        mvc.perform(post("/api/plan/items/" + item.getId() + "/done").param("deviceId", dev).header(TOKEN, "test-token"))
+                .andExpect(status().isOk());
+        long afterDone = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).path("weekPoints").asLong();
+        assertThat(afterDone).isGreaterThanOrEqualTo(3);
+
+        String undone = mvc.perform(post("/api/plan/items/" + item.getId() + "/undo").param("deviceId", dev).header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(undone).path("done").asBoolean()).isFalse();
+        long afterUndo = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).path("weekPoints").asLong();
+        assertThat(afterUndo).isEqualTo(afterDone - 3);
+
+        // Bonus, ta bort en händelse, nollställ veckan
+        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").header(TOKEN, "test-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"points\":20,\"reason\":\"Test\"}")).andExpect(status().isOk());
+        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").header(TOKEN, "test-token")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"points\":5,\"reason\":\"Test 2\"}")).andExpect(status().isOk());
+        JsonNode events = json(mvc.perform(get("/api/devices/" + dev + "/rewards/events").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString());
+        long bonusId = events.get(0).path("id").asLong();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/devices/" + dev + "/rewards/events/" + bonusId)
+                .header(TOKEN, "test-token")).andExpect(status().isNoContent());
+        String reset = mvc.perform(post("/api/devices/" + dev + "/rewards/reset").header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"week\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(reset).path("week").path("weekPoints").asLong()).isZero();
+
+        // Elevkoden når inte ångra/nollställ
+        String kid = json(mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Testis\"}")).andReturn().getResponse().getContentAsString()).path("code").asText();
+        mvc.perform(post("/api/plan/items/" + item.getId() + "/undo").header(TOKEN, kid)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/devices/" + dev + "/rewards/reset").header(TOKEN, kid)).andExpect(status().isForbidden());
     }
 
     private static TextWebSocketHandler collect(BlockingQueue<String> into) {

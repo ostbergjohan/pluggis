@@ -68,6 +68,12 @@ public class PlanningController {
         return Map.of("started", true);
     }
 
+    /** Ångra avbockning (bara föräldern – elevkoden når inte den här). */
+    @PostMapping("/items/{itemId}/undo")
+    public ResponseEntity<PlanItem> undo(@PathVariable long itemId, @RequestParam(required = false) String deviceId) {
+        return ResponseEntity.of(planning.undo(itemId, deviceId));
+    }
+
     @PostMapping("/items/{itemId}/done")
     public ResponseEntity<PlanItem> done(@PathVariable long itemId, @RequestParam(required = false) String deviceId) {
         return ResponseEntity.of(planning.complete(itemId, deviceId));

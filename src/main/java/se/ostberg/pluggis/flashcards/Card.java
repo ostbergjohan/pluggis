@@ -84,6 +84,15 @@ public class Card {
         }
     }
 
+    /** Börja om: tillbaka till fack 1, redo att övas nu. */
+    public void resetProgress(Instant now) {
+        this.box = 1;
+        this.dueAt = now;
+        this.timesCorrect = 0;
+        this.timesWrong = 0;
+        this.lastReviewedAt = null;
+    }
+
     public void edit(String front, String back, String hint) {
         if (front != null && !front.isBlank()) {
             this.front = front.trim();

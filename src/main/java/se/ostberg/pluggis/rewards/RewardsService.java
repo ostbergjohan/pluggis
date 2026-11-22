@@ -110,6 +110,39 @@ public class RewardsService {
         award(deviceId, PointEvent.Kind.PLAN_ITEM_DONE, RewardRules.PLAN_ITEM_DONE, "Klart: " + task, ref);
     }
 
+    /** Ångrat moment i planen: poängen för det tas bort (de kommer tillbaka om det bockas av igen). */
+    @Transactional
+    public void onPlanItemUndone(String deviceId, long planItemId) {
+        if (deviceId != null) {
+            points.deleteByDeviceIdAndRefKey(deviceId, "plan:" + planItemId);
+        }
+    }
+
+    /** Föräldern tar bort en enskild poänghändelse (t.ex. felaktig bonus). */
+    @Transactional
+    public boolean deleteEvent(String deviceId, long eventId) {
+        return points.deleteByIdAndDeviceId(eventId, deviceId) > 0;
+    }
+
+    /**
+     * Nollställ poäng. {@code week}: den här veckans poäng. {@code all}: alla poäng (och därmed streaken).
+     * Med {@code payouts} tas även utbetalningarna för samma period bort. Returnerar antal borttagna poänghändelser.
+     */
+    @Transactional
+    public long reset(String deviceId, String scope, boolean payoutsToo) {
+        if ("all".equalsIgnoreCase(scope)) {
+            if (payoutsToo) {
+                payouts.deleteByDeviceId(deviceId);
+            }
+            return points.deleteByDeviceId(deviceId);
+        }
+        LocalDate start = weekStart(today());
+        if (payoutsToo) {
+            payouts.deleteByDeviceIdAndWeekStart(deviceId, start);
+        }
+        return points.deleteByDeviceIdAndAwardedOnBetween(deviceId, start, start.plusDays(6));
+    }
+
     /** En förälder kan dela ut extrapoäng ("bra jobbat med provet!"). */
     @Transactional
     public void bonus(String deviceId, int bonusPoints, String reason) {

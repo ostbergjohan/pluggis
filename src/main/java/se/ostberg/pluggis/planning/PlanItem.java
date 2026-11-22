@@ -58,6 +58,11 @@ public class PlanItem {
         this.doneAt = now;
     }
 
+    public void markUndone() {
+        this.done = false;
+        this.doneAt = null;
+    }
+
     public Long getId() { return id; }
     public Long getHomeworkId() { return homeworkId; }
     public LocalDate getPlanDate() { return planDate; }

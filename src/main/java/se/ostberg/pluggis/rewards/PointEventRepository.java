@@ -23,5 +23,13 @@ public interface PointEventRepository extends JpaRepository<PointEvent, Long> {
 
     List<PointEvent> findTop50ByDeviceIdOrderByCreatedAtDesc(String deviceId);
 
+    long deleteByDeviceId(String deviceId);
+
+    long deleteByDeviceIdAndAwardedOnBetween(String deviceId, LocalDate from, LocalDate to);
+
+    long deleteByDeviceIdAndRefKey(String deviceId, String refKey);
+
+    long deleteByIdAndDeviceId(Long id, String deviceId);
+
     List<PointEvent> findByDeviceIdAndAwardedOnGreaterThanEqual(String deviceId, LocalDate from);
 }

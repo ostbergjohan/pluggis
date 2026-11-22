@@ -13,4 +13,8 @@ public interface PayoutRepository extends JpaRepository<Payout, Long> {
     BigDecimal paidForWeek(String deviceId, LocalDate weekStart);
 
     List<Payout> findTop20ByDeviceIdOrderByPaidAtDesc(String deviceId);
+
+    long deleteByDeviceId(String deviceId);
+
+    long deleteByDeviceIdAndWeekStart(String deviceId, LocalDate weekStart);
 }
