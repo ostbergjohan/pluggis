@@ -307,6 +307,7 @@ Grundtanken är att **belöna ansträngning mer än rätt svar** – det är van
 | Streak (dagar i rad med pass) | 3 × antal dagar (max 7) |
 | Bonus från förälder | valfritt |
 
+- **Av/på per elev:** Inställningar → Eleven och coachen → *Använd poäng*. Av döljer poängknappen och fliken Poäng i elevchatten, poängnotiser i chatten och på Tab5, och coachen nämner inte poäng eller pengar. Poängen räknas ändå i bakgrunden.
 - Poäng dras **aldrig** av.
 - Kronor: `PLUGGIS_SEK_PER_POINT` (standard 0,10 = 10 poäng/krona) med tak `PLUGGIS_WEEKLY_CAP_SEK`
   (standard 50 kr/vecka). Sätt `PLUGGIS_REWARDS_ENABLED=false` om coachen inte ska prata om pengar.
