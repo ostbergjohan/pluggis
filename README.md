@@ -100,6 +100,27 @@ iOS-genväg ── POST /api/homework/photo ─┘ claude/   tunn klient mot Mes
 - **Pass och läxor** skickas med i systemprompten varje anrop, så coachen vet läget
   även efter omstart. Själva samtalet hålls i minnet och nollställs efter 30 min tystnad.
 
+## Köra på ditt Claude-abonnemang (Claude Code)
+
+I stället för en API-nyckel kan Pluggis köra Claude via det officiella programmet `claude -p`
+(Claude Code), som då drar från ditt Pro/Max-abonnemang. Claude Code finns redan i Docker-avbilden.
+
+1. På din dator: installera Claude Code och kör `claude setup-token` (loggar in i webbläsaren och skriver ut en token, giltig ett år).
+2. I `.env`: lämna `ANTHROPIC_API_KEY` tom och sätt
+   ```
+   PLUGGIS_CLAUDE_BACKEND=claude-code
+   CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...
+   ```
+3. `docker compose up --build`. Loggen visar "Claude körs via Claude Code".
+
+Att tänka på:
+- Svaren strömmas inte, och varje anrop startar programmet – räkna med någon sekund längre väntan i röst.
+- Pluggis delar abonnemangets gränser med din egen användning av Claude och Claude Code.
+- Anthropics villkor: abonnemangets gränser gäller "vanlig, individuell användning", och tjänster för andra
+  användare ska använda API-nyckel. Det här är tänkt för eget bruk hemma. Läs
+  [villkoren](https://code.claude.com/docs/en/legal-and-compliance) och byt till API-nyckel om det ändras.
+- Token är personlig – lägg den bara i `.env`, aldrig i git.
+
 ## Modeller och ljud
 
 | Jobb | Standard | Varför |

@@ -44,6 +44,9 @@ public class ClaudeClient {
     public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props,
                         ClaudeCodeRunner claudeCode) {
         this.claudeCode = claudeCode != null && claudeCode.enabled() ? claudeCode : null;
+        org.slf4j.LoggerFactory.getLogger(ClaudeClient.class).info(this.claudeCode != null
+                ? "Claude körs via Claude Code (claude -p) på ditt abonnemang"
+                : "Claude körs via API-nyckel");
         this.cfg = props.anthropic();
         this.mapper = mapper;
         this.meters = meters;
