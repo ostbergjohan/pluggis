@@ -234,9 +234,16 @@ dagarna är repetition och flashkort. Avbockade moment ger poäng och ligger kva
 plugg den dagen, alla läxor och prov tillsammans). Kryssa i *Gör om befintliga planer* så planeras allt om.
 Standard för nya elever: `PLUGGIS_MAX_MINUTES_PER_DAY` (40) och `PLUGGIS_STUDY_DAYS`.
 
-**Påminnelser:** kl. 16:30 (vardagar) säger Tab5 vad som står först på dagens plan och vad som
-ska in imorgon, och kl. 18:30 kommer en mjuk knuff om inget pass startats. Tiderna ändras med
-`pluggis.reminders.start-cron` / `nudge-cron`.
+**Anpassat för ADHD:**
+- Varje dag börjar med ett **startsteg** på 2–5 minuter ("läs bara rubrikerna"), så det är lätt att komma igång.
+- Aldrig två läsmoment i rad; repetition först med boken framme, sedan utan (som på provet).
+- **Buffert:** planen fyller bara ~80 % av max per dag och lämnar en lätt reservdag före provet.
+- **Varje natt** (03:30) planeras det som ligger efter om, inom max per dag – i stället för att staplas på dagen efter.
+- **Hela dagen klar** ger +5 i bonus, och chatten visar nedräkning och "% klart" per prov/läxa (coachen nämner det också).
+- **Pluggtid och om-så-plan** per elev (Inställningar → Planering), t.ex. "16:15, efter mellanmålet".
+
+**Påminnelser:** vid elevens pluggtid (standard 16:30) säger Tab5/chatten vad som står först på dagens plan
+och vad som ska in imorgon, och två timmar senare kommer en mjuk knuff om inget pass startats. Bara på pluggdagarna.
 
 ```bash
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
@@ -248,6 +255,27 @@ curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
 curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/today
 curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/upcoming?days=14
 ```
+
+## Google Kalender
+
+Planen kan läggas in i en Google Kalender: **ett pass per dag** vid elevens pluggtid, lika långt som dagens
+moment, med momenten (☐/✅) i beskrivningen och en notis när det är dags. Avbockningar syns efter ca 15 sekunder,
+och varje natt rullas fönstret (3 veckor) fram. Pluggis rör bara sina egna pass.
+
+Pluggis använder ett **tjänstekonto** och pratar själv med Google – ingenting behöver öppnas mot internet.
+
+1. [console.cloud.google.com](https://console.cloud.google.com): skapa ett projekt (t.ex. *pluggis*).
+2. *APIs & Services → Library*: aktivera **Google Calendar API**.
+3. *IAM & Admin → Service Accounts → Create*: namn *pluggis*, inga roller behövs. Öppna kontot →
+   *Keys → Add key → JSON*. Spara filen som `secrets/google-sa.json` bredvid `docker-compose.yml`.
+4. `docker compose up -d` – loggen visar "Google Kalender påslagen (tjänstekonto …)".
+5. I Google Kalender: skapa gärna en egen kalender (*Pluggis – Fred*), öppna dess inställningar →
+   *Dela med specifika personer* → lägg till tjänstekontots adress med **Gör ändringar i händelser**.
+   Kopiera **Kalender-id** under *Integrera kalender*.
+6. Pluggis → Inställningar → **Google Kalender** → klistra in kalender-id → *Koppla och synka*.
+   Dela kalendern med eleven så dyker passen upp i elevens telefon.
+
+Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 
 ## Flashkort
 
