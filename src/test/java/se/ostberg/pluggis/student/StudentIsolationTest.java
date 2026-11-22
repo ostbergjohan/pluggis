@@ -65,9 +65,10 @@ class StudentIsolationTest {
         call(as(post("/api/plan/homework/" + hw), student));
         call(as(post("/api/flashcards/decks"), student).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Lek " + word + "\",\"homeworkId\":" + hw + ",\"cards\":[{\"front\":\"Fråga " + word + "\",\"back\":\"Svar\"}]}"));
-        mvc.perform(as(multipart("/api/homework/upload"), student)
-                .file(new MockMultipartFile("file", "anteckning-" + word + ".txt", "text/plain", ("Material " + word).getBytes(StandardCharsets.UTF_8)))
-                .param("homeworkId", String.valueOf(hw)));
+        var up = multipart("/api/homework/upload")
+                .file(new MockMultipartFile("file", "anteckning-" + word + ".txt", "text/plain", ("Material " + word).getBytes(StandardCharsets.UTF_8)));
+        up.param("homeworkId", String.valueOf(hw));
+        mvc.perform(as(up, student));
     }
 
     private String everything(String student) throws Exception {
