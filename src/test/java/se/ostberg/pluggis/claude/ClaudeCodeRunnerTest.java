@@ -66,7 +66,9 @@ class ClaudeCodeRunnerTest {
         assertThat(r.toolUses()).singleElement().satisfies(t -> assertThat(t.name()).isEqualTo("list_homework"));
         assertThat(r.usage().inputTokens()).isEqualTo(100);
 
-        ClaudeResponse plain = runner.parse("{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"{\\\"a\\\":1}\"}", false);
+        ClaudeResponse plain = runner.parse("{\"type\":\"system\",\"subtype\":\"init\"}\n"
+                + "{\"type\":\"assistant\",\"message\":{}}\n"
+                + "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"{\\\"a\\\":1}\"}\n", false);
         assertThat(plain.text()).isEqualTo("{\"a\":1}");
         assertThat(plain.wantsTools()).isFalse();
 

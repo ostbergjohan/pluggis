@@ -119,7 +119,7 @@ public class ClaudeCodeRunner {
         JsonNode tools = request.path("tools");
         boolean withTools = tools.isArray() && !tools.isEmpty();
         List<String> args = new ArrayList<>(List.of(props.commandOrDefault(), "-p",
-                "--input-format", "stream-json", "--output-format", "json",
+                "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                 "--tools", "", "--strict-mcp-config", "--no-session-persistence",
                 "--permission-mode", "dontAsk",
                 "--max-turns", withTools ? "3" : "2"));
@@ -274,18 +274,28 @@ public class ClaudeCodeRunner {
         return new ClaudeResponse(result.path("session_id").asText(null), content, tools ? "tool_use" : "end_turn", usage);
     }
 
-    /** Sista raden som är ett JSON-objekt (Claude Code skriver normalt bara en). */
+    /** Resultatraden ({"type":"result",...}) i stream-json-utdata; annars sista JSON-raden. */
     private JsonNode lastJson(String stdout) {
         String[] lines = stdout.trim().split("\n");
+        JsonNode lastObject = null;
         for (int i = lines.length - 1; i >= 0; i--) {
             String l = lines[i].trim();
             if (l.startsWith("{")) {
                 try {
-                    return mapper.readTree(l);
+                    JsonNode n = mapper.readTree(l);
+                    if ("result".equals(n.path("type").asText())) {
+                        return n;
+                    }
+                    if (lastObject == null) {
+                        lastObject = n;
+                    }
                 } catch (IOException e) {
                     log.debug("Kunde inte läsa rad från Claude Code: {}", e.toString());
                 }
             }
+        }
+        if (lastObject != null) {
+            return lastObject;
         }
         try {
             return stdout.isBlank() ? null : mapper.readTree(stdout);
