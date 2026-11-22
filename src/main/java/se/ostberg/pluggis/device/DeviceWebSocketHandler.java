@@ -38,8 +38,12 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
     private final PluggisProperties props;
     private final ObjectMapper mapper;
 
+    private final se.ostberg.pluggis.chat.ChatAccess chat;
+
     public DeviceWebSocketHandler(DeviceRegistry registry, VoiceService voice, StudySessionService sessions,
-                                  PluggisProperties props, ObjectMapper mapper) {
+                                  PluggisProperties props, ObjectMapper mapper,
+                                  se.ostberg.pluggis.chat.ChatAccess chat) {
+        this.chat = chat;
         this.registry = registry;
         this.voice = voice;
         this.sessions = sessions;
@@ -53,7 +57,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         String deviceId = query.getFirst(DEVICE_ID);
         String token = query.getFirst("token");
 
-        if (deviceId == null || deviceId.isBlank() || !props.tokenMatches(token)) {
+        if (deviceId == null || deviceId.isBlank() || !(props.tokenMatches(token) || chat.matches(token))) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("deviceId eller token saknas/fel"));
             return;
         }
@@ -82,7 +86,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         switch (msg.path("type").asText()) {
             case "hello" -> {
                 // {"type":"hello","audio":true,"audioFormat":"wav"} – vill enheten ha uppläst ljud?
-                registry.setWantsAudio(deviceId, msg.path("audio").asBoolean(false));
+                registry.setWantsAudio(deviceId, session, msg.path("audio").asBoolean(false));
                 session.getAttributes().put(AUDIO_FORMAT, msg.path("audioFormat").asText("wav"));
                 registry.send(deviceId, Map.of("type", "hello_ack", "audio", registry.wantsAudio(deviceId)));
             }

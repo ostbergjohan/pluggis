@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: "22"
       - name: Kontrollera webbgränssnittets JavaScript
-        run: node --check src/main/resources/static/app.js
+        run: node --check src/main/resources/static/app.js && node --check src/main/resources/static/chat.js
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

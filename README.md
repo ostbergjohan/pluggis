@@ -162,7 +162,26 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
 | Tab5-simulator | Ansluter via samma WebSocket som Tab5: knappar, timer, kort, poäng, foto – med uppläsning och mikrofon (svenska) i webbläsaren |
 | Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
-| Inställningar | Token, enhets-id, röst och tempo, och instruktion för iOS-genvägen |
+| Inställningar | Token, enhets-id, elevens namn och coachens ton, elevlänk till mobilen, röst och tempo, iOS-genvägen |
+
+### Elevchatt i mobilen
+
+`/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
+🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
+material (foto, skärmdump, Word, PDF) till en läxa eller som ny läxa.
+
+- **Inställningar → Elevchatt i mobilen → Skapa elevlänk.** Skicka länken till elevens telefon, öppna i
+  Safari → Dela → *Lägg till på hemskärmen*.
+- Elevlänken har en egen nyckel som bara når det eleven behöver – inte inställningar, poängbonus,
+  utbetalningar, kalender eller loggar. *Ny länk* gör den gamla ogiltig.
+- Chatten pratar som samma enhet som Tab5, så pass, poäng och samtal hänger ihop. Tab5 och mobilen kan vara
+  anslutna samtidigt.
+
+### Eleven och coachens ton
+
+Under **Inställningar → Eleven och coachen**: elevens namn, coachens ton (lugn, rak, lekfull, som en äldre
+kompis eller som en idrottscoach) och egna önskemål. Det läggs till efter coachens fasta regler – coachen
+ger fortfarande inga färdiga svar.
 
 Statistik finns även som JSON: `GET /api/devices/{id}/stats?days=14`.
 

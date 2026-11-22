@@ -23,81 +23,88 @@ public class DeviceRegistry {
     private static final int SEND_TIME_LIMIT_MS = 5_000;
     private static final int BUFFER_LIMIT_BYTES = 4 * 1024 * 1024;
 
-    private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
-    private final Set<String> audioDevices = ConcurrentHashMap.newKeySet();
+    /** Per enhet: alla öppna anslutningar (Tab5, simulatorn, elevchatten i mobilen) → vill den ha ljud? */
+    private final Map<String, Map<String, Conn>> devices = new ConcurrentHashMap<>();
     private final ObjectMapper mapper;
+
+    private record Conn(WebSocketSession session, boolean audio) {
+    }
 
     public DeviceRegistry(ObjectMapper mapper) {
         this.mapper = mapper;
     }
 
+    /** Flera anslutningar per enhet är ok: Tab5 och mobilen ser samma samtal. */
     void register(String deviceId, WebSocketSession raw) {
         WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(raw, SEND_TIME_LIMIT_MS, BUFFER_LIMIT_BYTES);
-        WebSocketSession previous = sessions.put(deviceId, safe);
-        if (previous != null && previous.isOpen() && !previous.getId().equals(raw.getId())) {
-            try {
-                previous.close();
-            } catch (IOException ignored) {
-                // gammal anslutning, inget att göra
-            }
-        }
+        devices.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>()).put(raw.getId(), new Conn(safe, false));
     }
 
     void unregister(String deviceId, WebSocketSession raw) {
-        sessions.computeIfPresent(deviceId, (id, s) -> {
-            if (s.getId().equals(raw.getId())) {
-                audioDevices.remove(deviceId);
-                return null;
-            }
-            return s;
+        devices.computeIfPresent(deviceId, (id, conns) -> {
+            conns.remove(raw.getId());
+            return conns.isEmpty() ? null : conns;
         });
     }
 
-    /** Enheten har sagt (i "hello") att den vill ha uppläst ljud. */
-    void setWantsAudio(String deviceId, boolean wantsAudio) {
-        if (wantsAudio) {
-            audioDevices.add(deviceId);
-        } else {
-            audioDevices.remove(deviceId);
+    /** Anslutningen har sagt (i "hello") om den vill ha uppläst ljud. */
+    void setWantsAudio(String deviceId, WebSocketSession raw, boolean wantsAudio) {
+        Map<String, Conn> conns = devices.get(deviceId);
+        if (conns != null) {
+            conns.computeIfPresent(raw.getId(), (k, c) -> new Conn(c.session(), wantsAudio));
         }
     }
 
+    /** Vill någon anslutning för enheten ha ljud? */
     public boolean wantsAudio(String deviceId) {
-        return audioDevices.contains(deviceId);
+        return open(deviceId).stream().anyMatch(Conn::audio);
     }
 
     public void sendBinary(String deviceId, byte[] data) {
-        WebSocketSession s = sessions.get(deviceId);
-        if (s == null || !s.isOpen()) {
-            return;
-        }
-        try {
-            s.sendMessage(new BinaryMessage(data));
-        } catch (IOException | IllegalStateException e) {
-            log.warn("Kunde inte skicka ljud till {}: {}", deviceId, e.toString());
+        for (Conn c : open(deviceId)) {
+            if (!c.audio()) {
+                continue;
+            }
+            try {
+                c.session().sendMessage(new BinaryMessage(data));
+            } catch (IOException | IllegalStateException e) {
+                log.warn("Kunde inte skicka ljud till {}: {}", deviceId, e.toString());
+            }
         }
     }
 
     public boolean isConnected(String deviceId) {
-        WebSocketSession s = sessions.get(deviceId);
-        return s != null && s.isOpen();
+        return !open(deviceId).isEmpty();
     }
 
     public Set<String> connected() {
-        return Set.copyOf(sessions.keySet());
+        return devices.keySet().stream().filter(this::isConnected).collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private java.util.List<Conn> open(String deviceId) {
+        Map<String, Conn> conns = devices.get(deviceId);
+        return conns == null ? java.util.List.of()
+                : conns.values().stream().filter(c -> c.session().isOpen()).toList();
     }
 
     public void send(String deviceId, Object payload) {
-        WebSocketSession s = sessions.get(deviceId);
-        if (s == null || !s.isOpen()) {
+        java.util.List<Conn> conns = open(deviceId);
+        if (conns.isEmpty()) {
             return;
         }
+        TextMessage text;
         try {
-            s.sendMessage(new TextMessage(mapper.writeValueAsString(payload)));
+            text = new TextMessage(mapper.writeValueAsString(payload));
         } catch (JsonProcessingException e) {
             log.error("Kunde inte serialisera meddelande till {}", deviceId, e);
-        } catch (IOException | IllegalStateException e) {
-            log.warn("Kunde inte skicka till {}: {}", deviceId, e.toString());
+            return;
+        }
+        for (Conn c : conns) {
+            try {
+                c.session().sendMessage(text);
+            } catch (IOException | IllegalStateException e) {
+                log.warn("Kunde inte skicka till {}: {}", deviceId, e.toString());
+            }
         }
     }
 }

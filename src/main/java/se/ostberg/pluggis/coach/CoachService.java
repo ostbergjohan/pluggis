@@ -55,9 +55,13 @@ public class CoachService {
     private final ObjectMapper mapper;
     private final Map<String, Conversation> conversations = new ConcurrentHashMap<>();
 
+    private final se.ostberg.pluggis.settings.StudentProfile student;
+
     public CoachService(ClaudeClient claude, CoachTools tools, Prompts prompts, StudySessionService sessions,
                         HomeworkService homework, FlashcardService flashcards, RewardsService rewards,
-                        PlanningService planning, PluggisProperties props, ObjectMapper mapper) {
+                        PlanningService planning, PluggisProperties props, ObjectMapper mapper,
+                        se.ostberg.pluggis.settings.StudentProfile student) {
+        this.student = student;
         this.claude = claude;
         this.tools = tools;
         this.prompts = prompts;
@@ -89,7 +93,8 @@ public class CoachService {
             StringBuilder spoken = new StringBuilder();
             try {
                 for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
-                    ObjectNode req = claude.newRequest(props.anthropic().coach(), prompts.coach(), statePrompt(deviceId));
+                    ObjectNode req = claude.newRequest(props.anthropic().coach(),
+                            prompts.coach() + student.promptSection(), statePrompt(deviceId));
                     req.set("tools", tools.definitions());
                     req.set("messages", conv.toJson());
 

@@ -52,6 +52,9 @@ class ApplicationSmokeTest {
     @org.springframework.beans.factory.annotation.Autowired
     se.ostberg.pluggis.homework.HomeworkService homeworkService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    se.ostberg.pluggis.settings.StudentProfile studentProfile;
+
     @Autowired
     ObjectMapper mapper;
 
@@ -295,6 +298,64 @@ class ApplicationSmokeTest {
         assertThat(found).isEqualTo(1);
         mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token")).andExpect(status().isBadRequest());
         assertThat(homeworkService.summaryForPrompt()).doesNotContain("Aktivitetsdag");
+    }
+
+    @Test
+    void studentLinkOnlyReachesWhatTheStudentNeeds() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
+                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Fred\",\"tone\":\"lekfull\",\"extra\":\"Gillar fotboll\"}"))
+                .andExpect(status().isOk());
+        assertThat(studentProfile.promptSection()).contains("Fred", "humor", "fotboll", "inga färdiga svar");
+
+        String link = mvc.perform(post("/api/chat/link").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String path = json(link).path("path").asText();
+        assertThat(path).startsWith("/chat.html#t=");
+        String kid = path.substring(path.indexOf("t=") + 2);
+
+        String me = mvc.perform(get("/api/chat/me").header(TOKEN, kid))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(me).path("name").asText()).isEqualTo("Fred");
+        mvc.perform(get("/api/plan/today").header(TOKEN, kid)).andExpect(status().isOk());
+        mvc.perform(get("/api/homework").header(TOKEN, kid)).andExpect(status().isOk());
+        mvc.perform(get("/api/devices/tab5-1/rewards").header(TOKEN, kid)).andExpect(status().isOk());
+        // Inte föräldradelarna
+        mvc.perform(get("/api/student").header(TOKEN, kid)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/chat/link").header(TOKEN, kid)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/calendar").header(TOKEN, kid)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/logs").header(TOKEN, kid)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/devices/tab5-1/rewards/bonus").header(TOKEN, kid)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"points\":500}")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/homework").header(TOKEN, "fel")).andExpect(status().isUnauthorized());
+
+        // WebSocket: elevlänken och Tab5 på samma enhet samtidigt – båda får svaren
+        BlockingQueue<String> tab5 = new LinkedBlockingQueue<>();
+        BlockingQueue<String> phone = new LinkedBlockingQueue<>();
+        StandardWebSocketClient client = new StandardWebSocketClient();
+        WebSocketSession a = client.execute(collect(tab5),
+                "ws://localhost:" + port + "/ws/device?deviceId=delad&token=test-token").get(5, TimeUnit.SECONDS);
+        WebSocketSession b = client.execute(collect(phone),
+                "ws://localhost:" + port + "/ws/device?deviceId=delad&token=" + kid).get(5, TimeUnit.SECONDS);
+        b.sendMessage(new TextMessage("{\"type\":\"ping\"}"));
+        assertThat(json(phone.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("pong");
+        assertThat(json(tab5.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("pong");
+        assertThat(a.isOpen()).isTrue();
+        a.close();
+        b.close();
+
+        // Ny länk → den gamla slutar fungera
+        mvc.perform(post("/api/chat/link").header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(get("/api/chat/me").header(TOKEN, kid)).andExpect(status().isUnauthorized());
+    }
+
+    private static TextWebSocketHandler collect(BlockingQueue<String> into) {
+        return new TextWebSocketHandler() {
+            @Override
+            protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+                into.add(message.getPayload());
+            }
+        };
     }
 
     @Test

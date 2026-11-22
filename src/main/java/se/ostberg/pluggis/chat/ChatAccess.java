@@ -1,0 +1,83 @@
+package se.ostberg.pluggis.chat;
+
+import org.springframework.stereotype.Service;
+import se.ostberg.pluggis.settings.SettingsService;
+
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
+import java.util.Optional;
+import java.util.regex.Pattern;
+
+/**
+ * Elevlänken: en egen token för elevchatten i mobilen, skild från föräldrarnas.
+ * Med den når man bara det eleven behöver (chatta, se planen och läxorna, bocka av, ladda upp material)
+ * – inte inställningar, poängbonus, utbetalningar, kalender eller loggar.
+ */
+@Service
+public class ChatAccess {
+
+    public static final String TOKEN_KEY = "chat.token";
+    public static final String DEVICE_KEY = "chat.deviceId";
+
+    /** Metod + sökväg som elevlänken får använda. */
+    private static final Pattern[] ALLOWED = {
+            Pattern.compile("GET /api/chat/me"),
+            Pattern.compile("GET /api/plan/(today|upcoming)"),
+            Pattern.compile("POST /api/plan/items/\\d+/done"),
+            Pattern.compile("GET /api/homework"),
+            Pattern.compile("GET /api/homework/\\d+/material"),
+            Pattern.compile("POST /api/homework/upload"),
+            Pattern.compile("GET /api/devices/[^/]+/rewards"),
+    };
+
+    private final SettingsService settings;
+    private final SecureRandom random = new SecureRandom();
+
+    public ChatAccess(SettingsService settings) {
+        this.settings = settings;
+    }
+
+    public Optional<String> token() {
+        return settings.get(TOKEN_KEY).filter(t -> !t.isBlank());
+    }
+
+    /** Ny token – den gamla länken slutar fungera. */
+    public String rotate() {
+        byte[] b = new byte[24];
+        random.nextBytes(b);
+        String t = HexFormat.of().formatHex(b);
+        settings.put(TOKEN_KEY, t);
+        return t;
+    }
+
+    public void disable() {
+        settings.put(TOKEN_KEY, "");
+    }
+
+    /** Vilken enhet chatten pratar som – samma som Tab5, så att pass, poäng och samtal hänger ihop. */
+    public String deviceId(String fallback) {
+        return settings.get(DEVICE_KEY).filter(d -> !d.isBlank()).orElse(fallback);
+    }
+
+    public void setDeviceId(String deviceId) {
+        settings.put(DEVICE_KEY, deviceId == null ? "" : deviceId.trim());
+    }
+
+    public boolean matches(String candidate) {
+        return candidate != null && token()
+                .map(t -> MessageDigest.isEqual(t.getBytes(StandardCharsets.UTF_8), candidate.getBytes(StandardCharsets.UTF_8)))
+                .orElse(false);
+    }
+
+    public static boolean allowed(String method, String path) {
+        String key = method + " " + path;
+        for (Pattern p : ALLOWED) {
+            if (p.matcher(key).matches()) {
+                return true;
+            }
+        }
+        return false;
+    }
+}

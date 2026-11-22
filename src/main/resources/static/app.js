@@ -830,7 +830,7 @@ views.poang = async (main) => {
 
 views.simulator = async (main) => {
   main.append(h('h1', {}, 'Tab5-simulator'),
-    h('p', { class: 'sub' }, `Testa coachen som om du satt vid Tab5. Ansluter som "${state.deviceId}" – är riktiga Tab5 ansluten med samma id kopplas den ner så länge.`));
+    h('p', { class: 'sub' }, `Testa coachen som om du satt vid Tab5. Ansluter som "${state.deviceId}" – riktiga Tab5 och elevchatten med samma id ser samma samtal.`));
 
   const stateLine = h('div', { class: 'state' }, 'Inte ansluten');
   const timer = h('div', { class: 'timerbar', style: 'display:none' }, h('div', { style: 'width:100%' }));
@@ -1136,6 +1136,8 @@ views.installningar = async (main) => {
         } }, 'Spara och testa')),
       result,
       h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.')),
+    studentPanel(),
+    chatLinkPanel(),
     voicePanel(),
     h('section', { class: 'panel', style: 'margin-top:16px' },
       h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
@@ -1145,6 +1147,68 @@ views.installningar = async (main) => {
         h('li', {}, 'Metod POST, Rubriker: X-Pluggis-Token = din token, Begärans brödtext: Formulär, fält "image" = Genvägsindata.'),
         h('li', {}, 'Lägg till "Visa resultat". Dela sedan skärmdumpen av veckoplanen till genvägen.'))));
 };
+
+function studentPanel() {
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Eleven och coachen'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  (async () => {
+    let s;
+    try { s = await api('/api/student'); } catch (e) { panel.replaceChildren(h('h2', {}, 'Eleven och coachen'), h('div', { class: 'empty' }, e.message)); return; }
+    const name = h('input', { value: s.name || '', placeholder: 'T.ex. Fred', maxlength: '40' });
+    const tone = h('select', {}, s.tones.map(t => h('option', { value: t.id }, t.label)));
+    tone.value = s.tone;
+    const toneHelp = h('p', { class: 'item-meta' });
+    const showHelp = () => { toneHelp.textContent = (s.tones.find(t => t.id === tone.value) || {}).instruction || ''; };
+    tone.addEventListener('change', showHelp); showHelp();
+    const extra = h('textarea', { rows: 3, maxlength: '600',
+      placeholder: 'Valfritt. T.ex. "Han gillar fotboll – använd gärna fotbollsexempel. Påminn om att dricka vatten."' }, s.extra || '');
+    panel.replaceChildren(h('h2', {}, 'Eleven och coachen'),
+      h('div', { class: 'row' },
+        h('div', {}, h('label', {}, 'Elevens namn'), name),
+        h('div', {}, h('label', {}, 'Coachens ton'), tone)),
+      toneHelp,
+      h('label', {}, 'Egna önskemål till coachen'), extra,
+      h('p', { class: 'item-meta' }, 'Läggs till efter coachens fasta regler. Coachen ger fortfarande inga färdiga svar, oavsett vad som står här.'),
+      h('div', { class: 'toolbar', style: 'margin-top:12px' },
+        h('button', { class: 'primary', onclick: async (e) => {
+          const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value } }), e.target, 'Sparat – gäller från nästa svar');
+          if (r) s = r;
+        } }, 'Spara')));
+  })();
+  return panel;
+}
+
+function chatLinkPanel() {
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Elevchatt i mobilen'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  async function paint(r) {
+    const url = r.path ? location.origin + r.path : null;
+    const device = h('input', { value: r.deviceId || state.deviceId });
+    const body = [h('h2', {}, 'Elevchatt i mobilen'),
+      h('p', { class: 'item-meta' }, 'En egen sida för eleven: chatta med Pluggis, se planen, bocka av och ladda upp material. Elevlänken har en egen nyckel som bara når det – inte inställningar, poängbonus eller kalendern.')];
+    if (url) {
+      const linkBox = h('input', { value: url, readonly: true, onclick: (e) => e.target.select() });
+      body.push(h('label', {}, 'Elevlänk (skicka till elevens iPhone)'), linkBox,
+        h('div', { class: 'toolbar', style: 'margin-top:8px' },
+          h('button', { onclick: async () => { try { await navigator.clipboard.writeText(url); toast('Kopierad'); } catch { linkBox.select(); toast('Markerad – kopiera med Cmd+C'); } } }, '📋 Kopiera'),
+          navigator.share ? h('button', { onclick: () => navigator.share({ title: 'Pluggis', url }).catch(() => {}) }, '📤 Dela') : null,
+          h('a', { href: url, target: '_blank', rel: 'noopener', class: 'button-link' }, 'Öppna'),
+          h('span', { class: 'spacer' }),
+          h('button', { onclick: async (e) => { if (!confirm('Skapa en ny länk? Den gamla slutar fungera.')) return; const n = await run(() => api('/api/chat/link', { method: 'POST' }), e.target, 'Ny länk skapad'); if (n) paint(n); } }, '🔄 Ny länk'),
+          h('button', { class: 'danger', onclick: async (e) => { if (!confirm('Stänga av elevlänken?')) return; const n = await run(() => api('/api/chat/link', { method: 'DELETE' }), e.target, 'Avstängd'); if (n) paint(n); } }, 'Stäng av')),
+        h('p', { class: 'item-meta' }, 'På iPhone: öppna länken i Safari → Dela → "Lägg till på hemskärmen", så blir det en egen app-ikon. Länken fungerar som en nyckel – dela den bara med eleven.'));
+    } else {
+      body.push(h('div', { class: 'toolbar' },
+        h('button', { class: 'primary', onclick: async (e) => { const n = await run(() => api('/api/chat/link', { method: 'POST' }), e.target, 'Elevlänk skapad'); if (n) paint(n); } }, 'Skapa elevlänk')));
+    }
+    body.push(h('label', {}, 'Chatten pratar som enhet'), device,
+      h('p', { class: 'item-meta' }, 'Samma id som Tab5, så hänger pass, poäng och samtal ihop mellan Tab5 och mobilen.'),
+      h('div', { class: 'toolbar' }, h('button', { onclick: async (e) => { const n = await run(() => api('/api/chat/link', { method: 'PUT', body: { deviceId: device.value.trim() } }), e.target, 'Sparat'); if (n) paint(n); } }, 'Spara enhet')));
+    panel.replaceChildren(...body);
+  }
+  api('/api/chat/link').then(paint).catch(e => panel.replaceChildren(h('h2', {}, 'Elevchatt i mobilen'), h('div', { class: 'empty' }, e.message)));
+  return panel;
+}
 
 function voicePanel() {
   const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Röst'),

@@ -196,3 +196,34 @@ td input { padding: 5px 8px; }
 
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg) } }
+
+.button-link {
+  display: inline-flex; align-items: center; padding: 8px 14px; border: 1px solid var(--line);
+  border-radius: 8px; text-decoration: none; font-size: 14px; color: var(--ink); background: var(--panel);
+}
+
+/* ---- Mobil (iPhone m.fl.) ---- */
+@media (max-width: 680px) {
+  .topbar {
+    flex-wrap: wrap; gap: 6px 10px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 6px;
+  }
+  .brand { flex: 1; }
+  .tabs { order: 3; flex-basis: 100%; margin: 0 -12px; padding: 0 8px 2px; -webkit-overflow-scrolling: touch; }
+  .tabs a { padding: 8px 10px; font-size: 15px; }
+  .main { padding: 16px 12px calc(60px + env(safe-area-inset-bottom, 0px)); }
+  h1 { font-size: 21px; }
+  .grid.cols-2, .grid.cols-4 { grid-template-columns: 1fr; }
+  .grid.cols-4 { grid-template-columns: 1fr 1fr; }
+  .panel { padding: 14px 12px; overflow-x: auto; }
+  .row { grid-template-columns: 1fr; }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar .spacer { display: none; }
+  /* ≥16px så att Safari inte zoomar in vid inmatning */
+  input, select, textarea, button { font-size: 16px; }
+  table { font-size: 14px; }
+  th, td { padding: 6px 6px; }
+  .item-head { flex-wrap: wrap; }
+  .item-head .item-meta { flex-basis: 100%; }
+  .kpi .value { font-size: 22px; }
+  .toasts { left: 12px; right: 12px; transform: none; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+}

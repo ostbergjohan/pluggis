@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Pluggis">
+  <meta name="theme-color" content="#2f7a66">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Pluggis</title>
+  <link rel="stylesheet" href="chat.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="title"><span class="logo" aria-hidden="true">◐</span> Pluggis</div>
+    <div class="chips">
+      <span class="chip" id="points" title="Poäng den här veckan">– p</span>
+      <button class="chip icon" id="speak" title="Läs upp svaren" aria-pressed="false">🔈</button>
+      <span class="dot" id="conn" title="Anslutning"></span>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="chatt" class="on"><span>💬</span>Chatt</button>
+    <button data-tab="plan"><span>🗓</span>Plan</button>
+    <button data-tab="laxor"><span>📚</span>Läxor</button>
+  </nav>
+
+  <div id="sheet" class="sheet" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+  <script src="chat.js"></script>
+</body>
+</html>
