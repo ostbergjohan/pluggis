@@ -430,7 +430,8 @@ views.laxor = async (main) => {
   }
 
   function calendarForm() {
-    const panel = h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, 'Kalender'),
+    const kid = (state.students || []).find(x => String(x.id) === String(state.studentId));
+    const panel = h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, kid && state.students.length > 1 ? `Kalender för ${kid.name}` : 'Kalender'),
       h('div', { class: 'empty' }, h('span', { class: 'spinner' }), ' Hämtar…'));
     (async () => {
       const st = await api('/api/calendar');
@@ -1736,6 +1737,16 @@ async function route() {
   const fresh = h('div');
   try {
     await render(fresh);
+    // Flera elever: visa tydligt vems sida det är, så att inget läggs in på fel elev
+    const who = state.students && state.students.length > 1 && !['kostnad', 'logg'].includes(view)
+      ? state.students.find(s => String(s.id) === String(state.studentId)) : null;
+    if (who) {
+      const others = state.students.filter(s => s !== who);
+      fresh.prepend(h('div', { class: 'who-bar' }, '👤 ', h('strong', {}, who.name || `Elev ${who.id}`),
+        h('span', { class: 'item-meta' }, ' – läxor, prov, kalender, plan, material, kort och poäng här gäller bara den här eleven. '),
+        others.map(o => h('button', { class: 'ghost small', onclick: () => { $('#studentSel').value = String(o.id); selectStudent(o); } },
+          `Byt till ${o.name || 'elev ' + o.id}`))));
+    }
     main.replaceChildren(fresh);
   } catch (e) {
     main.replaceChildren(h('section', { class: 'panel' }, h('h2', {}, 'Kunde inte ladda'),

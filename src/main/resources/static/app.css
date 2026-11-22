@@ -290,3 +290,6 @@ button.ghost:hover { background: var(--accent-soft); }
 
 .dnd-group { font-size: 13px; font-weight: 700; color: var(--c); margin: 6px 0 0 22px; padding-left: 8px; border-left: 3px solid var(--c); }
 .dnd-row.in-group .dnd-main > div { border-left: 3px solid var(--c); padding-left: 8px; }
+
+.who-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; margin-bottom: 14px;
+  border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--line); font-size: 14px; }
