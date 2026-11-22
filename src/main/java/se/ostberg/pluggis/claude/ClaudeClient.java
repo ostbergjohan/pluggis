@@ -34,8 +34,16 @@ public class ClaudeClient {
     private final ObjectMapper mapper;
     private final MeterRegistry meters;
     private final PluggisProperties.Anthropic cfg;
+    private final ClaudeCodeRunner claudeCode;
 
     public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props) {
+        this(builder, mapper, meters, props, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props,
+                        ClaudeCodeRunner claudeCode) {
+        this.claudeCode = claudeCode != null && claudeCode.enabled() ? claudeCode : null;
         this.cfg = props.anthropic();
         this.mapper = mapper;
         this.meters = meters;
@@ -90,7 +98,7 @@ public class ClaudeClient {
         Timer.Sample sample = Timer.start(meters);
         String outcome = "error";
         try {
-            ClaudeResponse response = rest.post()
+            ClaudeResponse response = claudeCode != null ? claudeCode.run(request) : rest.post()
                     .uri("/v1/messages")
                     .body(request)
                     .retrieve()
@@ -105,6 +113,15 @@ public class ClaudeClient {
 
     /** Strömmande anrop. {@code onText} får textbitar i den ordning de kommer. */
     public ClaudeResponse stream(ObjectNode request, String purpose, Consumer<String> onText) {
+        if (claudeCode != null) {
+            // Claude Code-läget strömmar inte: hela svaret kommer på en gång och läses upp mening för mening.
+            ClaudeResponse response = create(request, purpose);
+            String text = response.text();
+            if (onText != null && !text.isEmpty()) {
+                onText.accept(text);
+            }
+            return response;
+        }
         ObjectNode req = request.deepCopy();
         req.put("stream", true);
         long start = System.nanoTime();
@@ -163,6 +180,11 @@ public class ClaudeClient {
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "output").increment(u.outputTokens());
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_read").increment(u.cacheReadInputTokens());
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_write").increment(u.cacheCreationInputTokens());
+    }
+
+    /** "claude-code" när Claude körs via abonnemanget, annars "api". */
+    public String backend() {
+        return claudeCode != null ? "claude-code" : "api";
     }
 
     public PluggisProperties.Anthropic config() {

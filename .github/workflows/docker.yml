@@ -9,6 +9,7 @@ on:
       - pom.xml
       - speech/**
       - .github/workflows/docker.yml
+      - src/main/java/se/ostberg/pluggis/claude/**
   workflow_dispatch:
 
 jobs:
@@ -32,3 +33,12 @@ jobs:
             echo "$v: $(stat -c %s "$v.wav") byte → $(curl -fs -X POST localhost:8090/stt -F audio=@"$v.wav")"
           done
           docker logs speech | tail -20
+      - name: Claude Code finns i Pluggis-avbilden och startar som vanlig användare
+        run: |
+          img=$(docker images --format '{{.Repository}}' | grep -E '^pluggis(-pluggis)?$' | head -1)
+          echo "avbild: $img"
+          docker run --rm --entrypoint claude "$img" --version
+          # Utan token ska det bli ett begripligt fel, inte en krasch
+          echo '{"type":"user","message":{"role":"user","content":"hej"}}' | \
+            docker run --rm -i --entrypoint claude "$img" -p --input-format stream-json --output-format json \
+              --tools "" --no-session-persistence --max-turns 1 | head -c 600 || true

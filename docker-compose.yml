@@ -14,7 +14,10 @@ services:
       - path: .env
         required: false
     environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Sätt ANTHROPIC_API_KEY i .env eller i skalet}
+      # Antingen API-nyckel, eller PLUGGIS_CLAUDE_BACKEND=claude-code + CLAUDE_CODE_OAUTH_TOKEN (abonnemanget).
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PLUGGIS_CLAUDE_BACKEND: ${PLUGGIS_CLAUDE_BACKEND:-api}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       PLUGGIS_DEVICE_TOKEN: ${PLUGGIS_DEVICE_TOKEN:-}
       PLUGGIS_SPEECH_URL: http://speech:8090
     volumes:
