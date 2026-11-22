@@ -191,11 +191,11 @@ Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och p
 
 `/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
 🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
-material (foto, skärmdump, Word, PDF), och se poängen.
+material (foto, skärmdump, Word, PDF), öva flashkort själv (fliken **Kort**: visa svar, rätt/fel, uppläsning – ger poäng men syns inte på Tab5), och se poängen.
 
 - Eleven öppnar `/chat.html` och skriver in sin kod – eller får länken med koden (`/chat.html#k=KOD`) via
   *Kopiera länk* / *Dela* under Inställningar → Elever. Öppna i Safari → Dela → *Lägg till på hemskärmen*.
-- Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning och poäng – inte inställningar,
+- Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning, kortlekar (öva, inte ändra) och poäng – inte inställningar,
   poängbonus, utbetalningar, kalender, loggar eller syskonens data.
 - Tryck på Pluggis-namnet i chatten för att logga ut (t.ex. på en delad telefon).
 - Tab5 och mobilen för samma elev kan vara anslutna samtidigt och ser samma samtal.
