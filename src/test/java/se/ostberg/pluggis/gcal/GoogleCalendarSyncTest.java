@@ -132,6 +132,7 @@ class GoogleCalendarSyncTest {
                 ObjectNode ev = (ObjectNode) M.readTree(ex.getRequestBody());
                 String newId = "ev" + IDS.incrementAndGet();
                 ev.put("id", newId);
+                ev.put("htmlLink", "https://calendar.google.com/event?eid=" + newId);
                 EVENTS.put(newId, ev);
                 send(ex, 200, ev.toString());
             }
@@ -205,6 +206,10 @@ class GoogleCalendarSyncTest {
         assertThat(day1.path("start").path("dateTime").asText()).contains("T16:15");
         assertThat(day1.path("end").path("dateTime").asText()).contains("T16:35");
         assertThat(day1.path("reminders").path("overrides").get(0).path("minutes").asInt()).isZero();
+
+        JsonNode st = call(get("/api/google-calendar").header("X-Pluggis-Token", "test-token"));
+        assertThat(st.path("upcoming")).hasSize(2);
+        assertThat(st.path("upcoming").get(0).path("link").asText()).startsWith("https://calendar.google.com/event");
 
         // Inget ändrat → inget att göra
         JsonNode again = call(post("/api/google-calendar/sync").header("X-Pluggis-Token", "test-token"));

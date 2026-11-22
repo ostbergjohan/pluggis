@@ -91,7 +91,29 @@ public class PlanCalendarSync {
         m.put("calendarId", s.getGoogleCalendarId());
         m.put("lastSync", lastSync.get(s.getId()));
         m.put("lastError", lastError.get(s.getId()));
+        m.put("upcoming", upcomingLinks(s));
         return m;
+    }
+
+    /** De närmaste passen som Pluggis lagt in, med länk till Google Kalender (för att se att de finns). */
+    private List<Map<String, String>> upcomingLinks(Student s) {
+        String cal = s.getGoogleCalendarId();
+        if (!enabled() || cal == null || cal.isBlank()) {
+            return List.of();
+        }
+        try {
+            LocalDate today = LocalDate.now(props.zone());
+            return google.listOwn(cal.trim(), s.key(), start(today, LocalTime.MIN), start(today.plusDays(gprops.days() + 1), LocalTime.MIN))
+                    .stream()
+                    .sorted(java.util.Comparator.comparing(e -> e.path("start").path("dateTime").asText("")))
+                    .limit(5)
+                    .map(e -> Map.of("start", e.path("start").path("dateTime").asText(""),
+                            "summary", e.path("summary").asText(""),
+                            "link", e.path("htmlLink").asText("")))
+                    .toList();
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     @EventListener

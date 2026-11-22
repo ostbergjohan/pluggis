@@ -1355,7 +1355,12 @@ function googlePanel() {
           if (r) paint(r);
         } }, 'Koppla bort') : null),
       st.lastError ? h('p', { class: 'item-meta', style: 'color:var(--red)' }, '⚠️ ', st.lastError)
-        : st.lastSync ? h('p', { class: 'item-meta' }, `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}`) : null);
+        : st.lastSync ? h('p', { class: 'item-meta' }, `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}`) : null,
+      (st.upcoming || []).length ? h('div', {}, h('label', {}, 'Närmaste passen i kalendern'),
+        h('ul', { class: 'gcal-list' }, st.upcoming.map(ev => h('li', {},
+          h('span', { class: 'item-meta' }, new Date(ev.start).toLocaleString('sv-SE', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })), ' ',
+          ev.link ? h('a', { href: ev.link, target: '_blank', rel: 'noopener' }, ev.summary) : ev.summary))))
+        : st.calendarId ? h('p', { class: 'item-meta' }, 'Inga kommande pass i kalendern – finns det en plan de närmaste tre veckorna?') : null);
     panel.replaceChildren(...body);
   }
   paint();
