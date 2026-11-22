@@ -18,6 +18,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record ClaudeCodeProperties(String backend, String command, int timeoutSeconds, int maxConcurrent,
                                    java.util.List<String> apiPurposes) {
 
+    /** Två konstruktorer: tala om för Spring vilken som binder konfigurationen. */
+    @org.springframework.boot.context.properties.bind.ConstructorBinding
+    public ClaudeCodeProperties {
+    }
+
     public ClaudeCodeProperties(String backend, String command, int timeoutSeconds, int maxConcurrent) {
         this(backend, command, timeoutSeconds, maxConcurrent, null);
     }
