@@ -96,6 +96,7 @@ public class SpeechClient {
      * Piper-tempo (length_scale, större = långsammare).
      */
     public byte[] synthesize(String text, String voice, double lengthScale) {
+        text = SpokenText.forSpeech(text);
         String chosen = voice == null || voice.isBlank() ? defaultVoice() : voice;
         if (AzureTts.isAzureVoice(chosen) && azure != null) {
             if (azure.available()) {

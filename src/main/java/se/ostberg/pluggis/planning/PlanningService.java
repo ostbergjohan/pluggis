@@ -36,7 +36,7 @@ import java.util.Set;
 public class PlanningService {
 
     private static final Logger log = LoggerFactory.getLogger(PlanningService.class);
-    private static final DateTimeFormatter DAY_LABEL = DateTimeFormatter.ofPattern("EEEE d/M", Locale.forLanguageTag("sv-SE"));
+    private static final DateTimeFormatter DAY_LABEL = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.forLanguageTag("sv-SE"));
 
     public record PlanResult(Homework homework, List<PlanItem> items, String note) {
     }

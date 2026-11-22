@@ -12,6 +12,9 @@ import java.util.Optional;
 public class HomeworkService {
 
     private final HomeworkRepository repo;
+    /** Som det ska sägas – coachens svar läses upp. */
+    private static final java.time.format.DateTimeFormatter SPOKEN_DAY =
+            java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.forLanguageTag("sv-SE"));
     private java.time.ZoneId zone = java.time.ZoneId.of("Europe/Stockholm");
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -209,8 +212,9 @@ public class HomeworkService {
               .append(h.getSubject() == null ? "" : h.getSubject() + ": ")
               .append(h.getTitle());
             if (h.getDueDate() != null) {
-                sb.append(isPast(h) ? " (datumet " + h.getDueDate() + " har passerat – fråga om den är gjord)"
-                        : " (till " + h.getDueDate() + ")");
+                String day = SPOKEN_DAY.format(h.getDueDate());
+                sb.append(isPast(h) ? " (datumet " + day + " har passerat – fråga om den är gjord)"
+                        : " (till " + day + ")");
             }
             if (h.getDeckId() != null) {
                 sb.append(" [kortlek ").append(h.getDeckId()).append(']');
