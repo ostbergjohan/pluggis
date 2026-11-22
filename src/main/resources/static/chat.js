@@ -25,9 +25,13 @@ function h(tag, attrs, ...kids) {
 
 // ---- Token: från länken (#t=…) första gången, sedan sparad i telefonen ----
 (function takeTokenFromLink() {
-  const m = location.hash.match(/[#&]t=([^&]+)/);
+  // #k=K7M2Q (elevkod) eller den äldre långa länken #t=…
+  const m = location.hash.match(/[#&][kt]=([^&]+)/);
   if (m) {
-    store.set('pluggis.chat.token', decodeURIComponent(m[1]));
+    const prev = store.get('pluggis.chat.token', '');
+    const next = decodeURIComponent(m[1]).trim().toUpperCase().length === 5 ? decodeURIComponent(m[1]).trim().toUpperCase() : decodeURIComponent(m[1]);
+    if (prev !== next) store.set('pluggis.chat.history', '[]'); // ny elev på telefonen – börja om chatten
+    store.set('pluggis.chat.token', next);
     history.replaceState(null, '', location.pathname);
   }
 })();
@@ -50,7 +54,9 @@ async function api(path, opts = {}) {
   if (opts.form) body = opts.form;
   else if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(opts.body); }
   const res = await fetch(path, { method: opts.method || 'GET', headers, body });
-  if (res.status === 401 || res.status === 403) throw Object.assign(new Error('Länken fungerar inte längre – be om en ny'), { auth: true });
+  if (res.status === 429) throw new Error('För många felaktiga försök – vänta en stund');
+  if (res.status === 401) throw Object.assign(new Error('Koden fungerar inte – be om en ny'), { auth: true });
+  if (res.status === 403) throw new Error('Det här går inte att göra från elevchatten');
   if (!res.ok) {
     let msg = `Något gick fel (${res.status})`;
     try { const j = await res.json(); msg = j.error || j.message || msg; } catch { /* inte json */ }
@@ -296,7 +302,7 @@ function connect() {
   ws.onclose = (e) => {
     if (S.ws === ws) S.ws = null;
     $('#conn').className = 'dot off';
-    if (e.code === 1008) { addMsg('err', 'Länken fungerar inte – be om en ny elevlänk.'); return; }
+    if (e.code === 1008) { addMsg('err', 'Koden fungerar inte – be om en ny.'); return; }
     const wait = Math.min(15000, 1000 * 2 ** S.retry++);
     setTimeout(() => { if (document.visibilityState === 'visible') connect(); }, wait);
   };
@@ -708,22 +714,35 @@ async function show(tab) {
   }
 }
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
+// Logga ut (t.ex. byta elev på en delad telefon): tryck på Pluggis-namnet
+document.querySelector('.title').addEventListener('click', () => {
+  if (!confirm(`Logga ut${S.name ? ' ' + S.name : ''} från Pluggis på den här telefonen?`)) return;
+  store.set('pluggis.chat.token', ''); store.set('pluggis.chat.history', '[]');
+  S.token = ''; S.history = [];
+  if (S.ws) { try { S.ws.close(); } catch { /* */ } S.ws = null; }
+  askForLink();
+});
 $('#points').addEventListener('click', () => show('poang'));
 
 // ---- Start ----
 function askForLink() {
-  const input = h('input', { placeholder: 'Klistra in elevlänken eller koden', autocapitalize: 'off', autocorrect: 'off' });
+  const input = h('input', { class: 'code-input', placeholder: 'ABC12', maxlength: '12', autocapitalize: 'characters',
+    autocorrect: 'off', autocomplete: 'one-time-code', spellcheck: 'false', inputmode: 'text' });
+  const go = () => {
+    const v = input.value.trim(); const m = v.match(/[#&][kt]=([^&\s]+)/);
+    const code = m ? decodeURIComponent(m[1]) : v.replace(/[\s-]/g, '').toUpperCase();
+    if (!code) return;
+    if (code !== S.token) store.set('pluggis.chat.history', '[]');
+    S.token = code; S.history = JSON.parse(store.get('pluggis.chat.history', '[]'));
+    store.set('pluggis.chat.token', S.token);
+    start();
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   $('#view').replaceChildren(h('div', { class: 'login' },
-    h('h2', {}, 'Hej! 👋'), h('p', {}, 'Öppna elevlänken du fått, eller klistra in den här.'), input,
-    h('button', { class: 'big', onclick: () => {
-      const v = input.value.trim(); const m = v.match(/[#&]t=([^&\s]+)/);
-      S.token = m ? decodeURIComponent(m[1]) : v;
-      store.set('pluggis.chat.token', S.token);
-      // Varje tryck håller ljudet upplåst (iOS stänger av det när appen legat i bakgrunden)
-document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
-document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
-start();
-    } }, 'Fortsätt')));
+    h('h2', {}, 'Hej! 👋'), h('p', {}, 'Skriv in din kod till Pluggis.'), input,
+    h('button', { class: 'big', onclick: go }, 'Logga in'),
+    h('p', { style: 'color:var(--muted);font-size:14px' }, 'Koden har 5 tecken och finns hos den som satt upp Pluggis.')));
+  setTimeout(() => input.focus(), 50);
 }
 
 async function start() {
@@ -735,7 +754,7 @@ async function start() {
     if (S.voice === 'pluggis' && !S.serverVoice) S.voice = 'telefon';
     store.set('pluggis.chat.device', S.deviceId);
   } catch (e) {
-    if (e.auth) { askForLink(); toast(e.message, true); return; }
+    if (e.auth) { askForLink(); if (S.token) toast('Koden fungerar inte – kolla att den är rätt', true); return; }
   }
   paintSpeak();
   connect();

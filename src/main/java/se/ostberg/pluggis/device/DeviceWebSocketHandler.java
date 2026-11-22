@@ -86,7 +86,8 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         registry.register(deviceId, session);
         log.info("Enhet ansluten: {}", deviceId);
 
-        sessions.active(deviceId).ifPresent(s -> registry.send(deviceId,
+        String device = deviceId;
+        sessions.active(device).ifPresent(s -> registry.send(device,
                 DeviceMessages.SessionState.started(s.getTask(), s.getPlannedMinutes())));
     }
 

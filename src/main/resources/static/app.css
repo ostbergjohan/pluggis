@@ -229,3 +229,8 @@ td input { padding: 5px 8px; }
 }
 
 .group-head { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }
+
+.student-sel { font: inherit; font-size: 15px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--accent-soft); color: var(--accent); font-weight: 600; max-width: 160px; }
+.student-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 10px; }
+.code { font: 700 24px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 4px; color: var(--accent); }
+@media (max-width: 680px) { .student-sel { order: 2; } }
