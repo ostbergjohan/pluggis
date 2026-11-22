@@ -41,7 +41,7 @@ class ClaudeCodeRunnerTest {
         assertThat(p.args()).startsWith("claude", "-p").contains("--tools", "", "--model", "claude-haiku-5-5",
                 "--effort", "low", "--json-schema", "--system-prompt-file", "--no-session-persistence");
         String system = Files.readString(dir.resolve("system.md"));
-        assertThat(system).contains("Du är Pluggis.", "Läget: inga läxor.", "list_homework", "tool_calls");
+        assertThat(system).contains("Du är Pluggis.", "Läget: inga läxor.", "list_homework", "tool_calls", "reply");
 
         JsonNode line = mapper.readTree(p.stdin());
         assertThat(line.path("type").asText()).isEqualTo("user");
@@ -79,6 +79,24 @@ class ClaudeCodeRunnerTest {
                 {"type":"assistant","message":{"content":[]},"error":"authentication_failed","is_api_error_message":true}
                 {"type":"result","duration_api_ms":0,"total_cost_usd":0,"terminal_reason":"api_error","is_error":true}
                 """, false)).hasMessageContaining("CLAUDE_CODE_OAUTH_TOKEN");
+    }
+
+    @Test
+    void doesNotEchoTheStudentsOwnMessage() throws Exception {
+        var runner = new ClaudeCodeRunner(new ClaudeCodeProperties("claude-code", null, 0, 0), mapper);
+        ClaudeResponse r = runner.parse("""
+                {"type":"result","subtype":"success","structured_output":{"reply":"jag vill plugga matte. Toppen! Vad ska vi börja med?","tool_calls":[]}}
+                """, true, "jag vill plugga matte");
+        assertThat(r.text()).isEqualTo("Toppen! Vad ska vi börja med?");
+        ClaudeResponse only = runner.parse("""
+                {"type":"result","subtype":"success","structured_output":{"reply":"Jag vill plugga matte","tool_calls":[{"name":"list_homework","input":{}}]}}
+                """, true, "jag vill plugga matte");
+        assertThat(only.text()).isEmpty();
+        assertThat(only.wantsTools()).isTrue();
+        // Korta meddelanden lämnas ifred
+        assertThat(ClaudeCodeRunner.stripEcho("Hej Fred! Ska vi köra?", "hej")).isEqualTo("Hej Fred! Ska vi köra?");
+        assertThat(ClaudeCodeRunner.stripEcho("Vad bra att du hör av dig.", "Kan du hjälpa mig med engelska?"))
+                .isEqualTo("Vad bra att du hör av dig.");
     }
 
     @Test

@@ -44,7 +44,8 @@ public class ClaudeCodeRunner {
 
             ## Verktyg
             Du kan använda verktygen nedan. Svara ALLTID enligt JSON-schemat:
-            - "text": det du säger till eleven (kan vara tomt om du först behöver ett verktyg).
+            - "reply": DITT svar till eleven, som det ska sägas högt. Upprepa aldrig elevens meddelande.
+              Kan vara tomt om du först behöver ett verktyg.
             - "tool_calls": verktyg du vill köra nu, med "name" och "input" enligt verktygets schema. Tom lista om inga.
             När du anropar verktyg får du resultaten i nästa meddelande och svarar sedan eleven.
             Hitta aldrig på verktygsresultat.
@@ -95,7 +96,7 @@ public class ClaudeCodeRunner {
                 proc.destroyForcibly();
                 throw new IllegalStateException("Claude Code svarade inte inom " + props.timeout() + " s");
             }
-            return parse(Files.readString(outFile, StandardCharsets.UTF_8), p.withTools());
+            return parse(Files.readString(outFile, StandardCharsets.UTF_8), p.withTools(), p.lastUserText());
         } catch (IOException e) {
             throw new IllegalStateException("Kunde inte köra Claude Code (" + props.commandOrDefault()
                     + "). Är det installerat och inloggat?", e);
@@ -108,7 +109,7 @@ public class ClaudeCodeRunner {
         }
     }
 
-    record Prepared(List<String> args, String stdin, boolean withTools) {
+    record Prepared(List<String> args, String stdin, boolean withTools, String lastUserText) {
     }
 
     /** Bygger kommandorad och indata. Paket-synlig för test. */
@@ -163,7 +164,7 @@ public class ClaudeCodeRunner {
         ObjectNode message = line.putObject("message");
         message.put("role", "user");
         message.set("content", content(request.path("messages")));
-        return new Prepared(args, mapper.writeValueAsString(line) + "\n", withTools);
+        return new Prepared(args, mapper.writeValueAsString(line) + "\n", withTools, lastUserText(request.path("messages")));
     }
 
     /**
@@ -229,11 +230,32 @@ public class ClaudeCodeRunner {
         return sb.toString().trim();
     }
 
+    /** Elevens senaste egna text (inte verktygssvar). */
+    private static String lastUserText(JsonNode messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            JsonNode m = messages.get(i);
+            if (!"user".equals(m.path("role").asText())) {
+                continue;
+            }
+            JsonNode c = m.path("content");
+            if (c.isTextual()) {
+                return c.asText();
+            }
+            for (JsonNode b : c) {
+                if ("text".equals(b.path("type").asText())) {
+                    return b.path("text").asText();
+                }
+            }
+        }
+        return null;
+    }
+
     private ObjectNode schema(List<String> toolNames) {
         ObjectNode s = mapper.createObjectNode();
         s.put("type", "object");
         ObjectNode p = s.putObject("properties");
-        p.putObject("text").put("type", "string");
+        p.putObject("reply").put("type", "string")
+                .put("description", "Ditt eget svar till eleven (aldrig en upprepning av elevens meddelande)");
         ObjectNode calls = p.putObject("tool_calls");
         calls.put("type", "array");
         ObjectNode item = calls.putObject("items");
@@ -243,12 +265,39 @@ public class ClaudeCodeRunner {
         toolNames.forEach(names::add);
         ip.putObject("input").put("type", "object");
         item.putArray("required").add("name").add("input");
-        s.putArray("required").add("text").add("tool_calls");
+        s.putArray("required").add("reply").add("tool_calls");
         return s;
     }
 
-    /** Claude Codes JSON-resultat → ClaudeResponse. Paket-synlig för test. */
+    /**
+     * Om svaret börjar med elevens eget meddelande (modellen "ekar" det) tas det bort,
+     * så att det varken visas eller läses upp.
+     */
+    static String stripEcho(String reply, String userText) {
+        if (reply == null || userText == null || userText.isBlank()) {
+            return reply;
+        }
+        String r = reply.trim();
+        String u = userText.trim().replaceAll("[\\s\\p{Punct}]+$", "");
+        // Korta meddelanden ("hej", "ok") liknar ofta början på ett vanligt svar ("Hej Fred!") – rör inte dem.
+        if (u.length() < 12) {
+            return reply;
+        }
+        if (r.replaceAll("[\\s\\p{Punct}]+$", "").equalsIgnoreCase(u)) {
+            return "";
+        }
+        if (r.length() > u.length() && r.regionMatches(true, 0, u, 0, u.length())) {
+            return r.substring(u.length()).replaceFirst("^[\\s\\p{Punct}–—]+", "").trim();
+        }
+        return reply;
+    }
+
     ClaudeResponse parse(String stdout, boolean withTools) throws IOException {
+        return parse(stdout, withTools, null);
+    }
+
+    /** Claude Codes JSON-resultat → ClaudeResponse. Paket-synlig för test. */
+    ClaudeResponse parse(String stdout, boolean withTools, String lastUserText) throws IOException {
         JsonNode result = lastJson(stdout);
         if (result == null) {
             throw new IllegalStateException("Claude Code gav inget svar");
@@ -270,7 +319,8 @@ public class ClaudeCodeRunner {
         boolean tools = false;
         JsonNode structured = result.path("structured_output");
         if (withTools && structured.isObject()) {
-            String text = structured.path("text").asText("");
+            String text = structured.path("reply").asText(structured.path("text").asText(""));
+            text = stripEcho(text, lastUserText);
             if (!text.isBlank()) {
                 content.add(ClaudeResponse.ContentBlock.text(text));
             }
