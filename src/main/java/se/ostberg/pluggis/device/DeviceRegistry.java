@@ -68,9 +68,27 @@ public class DeviceRegistry {
             try {
                 c.session().sendMessage(new BinaryMessage(data));
             } catch (IOException | IllegalStateException e) {
-                log.warn("Kunde inte skicka ljud till {}: {}", deviceId, e.toString());
+                drop(deviceId, c, "ljud", e);
             }
         }
+    }
+
+    /**
+     * En anslutning som inte går att skicka till (t.ex. en iPhone som lagt appen i bakgrunden utan att
+     * säga hejdå) tas bort direkt, så att vi inte fortsätter skicka in i tomma intet.
+     */
+    private void drop(String deviceId, Conn c, String what, Exception e) {
+        Map<String, Conn> conns = devices.get(deviceId);
+        if (conns != null) {
+            conns.values().remove(c);
+        }
+        try {
+            c.session().close();
+        } catch (IOException | IllegalStateException ignored) {
+            // redan stängd
+        }
+        log.info("Tog bort en död anslutning för {} (kunde inte skicka {}: {})", deviceId, what,
+                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
     }
 
     public boolean isConnected(String deviceId) {
@@ -103,7 +121,7 @@ public class DeviceRegistry {
             try {
                 c.session().sendMessage(text);
             } catch (IOException | IllegalStateException e) {
-                log.warn("Kunde inte skicka till {}: {}", deviceId, e.toString());
+                drop(deviceId, c, "meddelande", e);
             }
         }
     }

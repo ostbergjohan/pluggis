@@ -91,7 +91,6 @@ const dayName = (iso) => {
 // iPhone spelar bara upp ljud som "låsts upp" av ett tryck – det görs när man väljer läge och när man skickar.
 const VOICE_MODES = ['av', 'pluggis', 'telefon'];
 let audioCtx = null;
-let playChain = Promise.resolve();
 
 function unlockAudio() {
   // iOS 17+: spela även när telefonen står på ljudlöst (sidoknappen)
@@ -118,7 +117,7 @@ async function testServerVoice() {
       headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: S.name ? `Hej ${S.name}! Nu läser jag upp svaren.` : 'Hej! Nu läser jag upp svaren.' }) });
     if (!res.ok) throw new Error(String(res.status));
-    playServerAudio(await res.arrayBuffer(), true);
+    await playBuffer(await res.arrayBuffer());
   } catch {
     toast('Kunde inte hämta Pluggis röst – är ljudtjänsten igång?', true);
   }
@@ -145,34 +144,69 @@ function speakPhone(text) {
   }
 }
 
-/** Text från coachen: läs upp med telefonens röst (Pluggis röst kommer som ljud från servern). */
+/** Text från coachen: läs upp med telefonens röst eller Pluggis röst. */
 function speak(text) {
   if (S.voice === 'telefon') speakPhone(text);
+  else if (S.voice === 'pluggis') speakServer(text);
 }
 
-/** Ljud (wav) från servern – spelas i ordning. */
-function playServerAudio(arrayBuffer, force) {
-  if ((S.voice !== 'pluggis' && !force) || !arrayBuffer) return;
-  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return playWithElement(arrayBuffer); } }
-  const copy = arrayBuffer.slice(0);
-  playChain = playChain.then(async () => {
+// Pluggis röst hämtas över vanlig HTTP, mening för mening (nästa hämtas medan den förra spelas).
+// Tål mobilnät och att iPhone lägger appen i bakgrunden bättre än ljud över WebSocket.
+let speechRun = 0;
+let currentSource = null;
+function sentences(text) {
+  const parts = (text.match(/[^.!?…]+[.!?…]+["”»)]*\s*|[^.!?…]+$/g) || [text]).map(x => x.trim()).filter(Boolean);
+  const out = [];
+  for (const p of parts) {
+    if (out.length && (out[out.length - 1].length + p.length) < 120) out[out.length - 1] += ' ' + p;
+    else out.push(p.length > 280 ? p.slice(0, 280) : p);
+  }
+  return out;
+}
+async function fetchVoice(text) {
+  const res = await fetch('/api/speech/preview', { method: 'POST',
+    headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!res.ok) throw new Error(String(res.status));
+  return res.arrayBuffer();
+}
+async function speakServer(text) {
+  const run = ++speechRun;
+  stopServerAudio();
+  const list = sentences(text);
+  let next = list.length ? fetchVoice(list[0]) : null;
+  for (let i = 0; i < list.length; i++) {
+    let buf;
+    try { buf = await next; } catch { if (run === speechRun) toast('Kunde inte hämta Pluggis röst', true); return; }
+    if (run !== speechRun) return;               // ett nytt svar har kommit – sluta läsa det gamla
+    next = i + 1 < list.length ? fetchVoice(list[i + 1]) : null;
+    await playBuffer(buf);
+    if (run !== speechRun) return;
+  }
+}
+function stopServerAudio() {
+  try { if (currentSource) currentSource.stop(); } catch { /* redan slut */ }
+  currentSource = null;
+}
+function playBuffer(arrayBuffer) {
+  return new Promise(async (resolve) => {
+    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return playWithElement(arrayBuffer).then(resolve); } }
     if (audioCtx.state !== 'running') {
       try { await audioCtx.resume(); } catch { /* kräver tryck */ }
-      if (audioCtx.state !== 'running') { toast('Tryck någonstans på skärmen så hörs Pluggis'); }
+      if (audioCtx.state !== 'running') toast('Tryck någonstans på skärmen så hörs Pluggis');
     }
-    await new Promise((resolve) => {
-      const play = (buf) => {
-        const src = audioCtx.createBufferSource();
-        src.buffer = buf; src.connect(audioCtx.destination);
-        src.onended = resolve; src.start(0);
-      };
-      const fail = () => { playWithElement(copy).then(resolve); };
-      try {
-        const p = audioCtx.decodeAudioData(copy, play, fail);
-        if (p && p.catch) p.catch(fail);
-      } catch { fail(); }
-    });
-  }).catch(() => {});
+    const play = (buf) => {
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf; src.connect(audioCtx.destination);
+      src.onended = () => { if (currentSource === src) currentSource = null; resolve(); };
+      currentSource = src;
+      src.start(0);
+    };
+    const fail = () => { playWithElement(arrayBuffer).then(resolve); };
+    try {
+      const p = audioCtx.decodeAudioData(arrayBuffer.slice(0), play, fail);
+      if (p && p.catch) p.catch(fail);
+    } catch { fail(); }
+  });
 }
 
 /** Reserv: vanligt <audio>-element (om Web Audio inte kan avkoda). */
@@ -192,7 +226,8 @@ function setVoice(mode) {
   store.set('pluggis.chat.voice', mode);
   paintSpeak();
   unlockAudio();
-  if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify({ type: 'hello', audio: mode === 'pluggis', audioFormat: 'webm' }));
+  if (mode !== 'pluggis') { speechRun++; stopServerAudio(); }
+  if (mode !== 'telefon' && window.speechSynthesis) speechSynthesis.cancel();
 }
 
 $('#speak').addEventListener('click', () => {
@@ -220,7 +255,7 @@ function connect() {
   ws.onopen = () => {
     S.retry = 0;
     $('#conn').className = 'dot on';
-    ws.send(JSON.stringify({ type: 'hello', audio: S.voice === 'pluggis', audioFormat: 'webm' }));
+    ws.send(JSON.stringify({ type: 'hello', audio: false }));
   };
   ws.onclose = (e) => {
     if (S.ws === ws) S.ws = null;
@@ -230,7 +265,7 @@ function connect() {
     setTimeout(() => { if (document.visibilityState === 'visible') connect(); }, wait);
   };
   ws.onmessage = (e) => {
-    if (typeof e.data !== 'string') { playServerAudio(e.data); return; }
+    if (typeof e.data !== 'string') return;
     let m; try { m = JSON.parse(e.data); } catch { return; }
     onServer(m);
   };
