@@ -31,6 +31,8 @@ för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg 
 
 ## Kom igång
 
+**Nycklar, tokens och konton som behövs** (måste/valfritt, var du får dem, vad de kostar): se [docs/konfiguration.md](docs/konfiguration.md).
+
 Kräver Java 21 och Maven.
 
 ```bash
