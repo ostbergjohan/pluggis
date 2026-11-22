@@ -119,6 +119,11 @@ och strömmad – medan foto, planer, flashkort och material går på abonnemang
 (gräns nådd, utloggat) tas jobbet med API-nyckeln i stället. Vilka jobb som går via API styrs med
 `PLUGGIS_CLAUDE_API_PURPOSES` (standard `coach`).
 
+**Byta läge i admin:** under fliken **Kostnad** väljer du *Bara API-nyckel*, *Hybrid* eller *Bara abonnemanget*.
+Valet gäller direkt och sparas (även efter omstart); `.env` är bara standardläget. Lägen som inte kan fungera
+(t.ex. abonnemanget utan `CLAUDE_CODE_OAUTH_TOKEN`) nekas med en förklaring. Där syns också om nyckel, token och
+`claude`-programmet finns, lyckade/misslyckade anrop via abonnemanget, senaste fel och hur ofta hybrid fallit tillbaka.
+
 Att tänka på:
 - I läget `claude-code` strömmas svaren inte, och varje anrop startar programmet – räkna med någon sekund längre väntan i röst.
 - Pluggis delar abonnemangets gränser med din egen användning av Claude och Claude Code.
