@@ -27,9 +27,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "pluggis.anthropic.api-key=test",
         "pluggis.anthropic.base-url=http://127.0.0.1:9",
         "spring.datasource.url=jdbc:h2:mem:isolation;DB_CLOSE_DELAY=-1",
+        "pluggis.speech.base-url=",
         "pluggis.calendar.sync-cron=-",
-        "pluggis.planning.replan-cron=-",
-        "pluggis.google.sync-cron=-"
+        "pluggis.reminders.start-cron=-",
+        "pluggis.reminders.nudge-cron=-"
 })
 class StudentIsolationTest {
 
