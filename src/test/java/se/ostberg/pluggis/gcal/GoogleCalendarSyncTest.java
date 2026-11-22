@@ -200,7 +200,7 @@ class GoogleCalendarSyncTest {
                 .filter(e -> e.path("extendedProperties").path("private").path("pluggisDay").asText().equals(d1.toString()))
                 .findFirst().orElseThrow();
         assertThat(day1.path("summary").asText()).isEqualTo("📚 Plugg 20 min: NO-prov fotosyntes");
-        assertThat(day1.path("description").asText()).contains("☐ Läs rubrikerna s. 40–48 (5 min, prov NO-prov fotosyntes)")
+        assertThat(day1.path("description").asText()).contains("☐ Läs rubrikerna s. 40–48 (5 min, NO-prov fotosyntes)")
                 .contains("När: efter mellanmålet");
         assertThat(day1.path("start").path("dateTime").asText()).contains("T16:15");
         assertThat(day1.path("end").path("dateTime").asText()).contains("T16:35");
