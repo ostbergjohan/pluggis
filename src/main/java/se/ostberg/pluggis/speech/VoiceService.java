@@ -83,7 +83,7 @@ public class VoiceService {
     }
 
     private void reply(String deviceId, String userText) {
-        boolean audio = speech.enabled() && registry.wantsAudio(deviceId);
+        boolean audio = speech.ttsEnabled() && registry.wantsAudio(deviceId);
         if (!audio) {
             registry.send(deviceId, new DeviceMessages.Say(coach.chat(deviceId, userText)));
             return;
@@ -132,7 +132,7 @@ public class VoiceService {
 
     private void respondTextOnly(String deviceId, String text) {
         registry.send(deviceId, new DeviceMessages.Say(text));
-        if (speech.enabled() && registry.wantsAudio(deviceId)) {
+        if (speech.ttsEnabled() && registry.wantsAudio(deviceId)) {
             try {
                 byte[] wav = speak(text);
                 registry.send(deviceId, new DeviceMessages.Audio("wav", 0, text, wav.length));

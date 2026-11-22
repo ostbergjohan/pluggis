@@ -17,6 +17,8 @@ import java.util.Map;
 /**
  * Klient mot pluggis-speech (se katalogen speech/): tal till text med KB-Whisper
  * och text till tal med Piper. Körs lokalt i hemlabbet – barnets röst lämnar aldrig huset.
+ * Valfritt: Azures neurala svenska röster för uppläsning (bara coachens svarstext skickas dit);
+ * vid fel tar Piper över.
  */
 @Component
 public class SpeechClient {
@@ -24,8 +26,15 @@ public class SpeechClient {
     private final RestClient rest;
     private final MeterRegistry meters;
     private final boolean enabled;
+    private final AzureTts azure;
 
     public SpeechClient(RestClient.Builder builder, MeterRegistry meters, PluggisProperties props) {
+        this(builder, meters, props, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public SpeechClient(RestClient.Builder builder, MeterRegistry meters, PluggisProperties props, AzureTts azure) {
+        this.azure = azure != null && azure.enabled() ? azure : null;
         this.meters = meters;
         PluggisProperties.Speech cfg = props.speech();
         this.enabled = cfg != null && cfg.enabled();
@@ -39,8 +48,19 @@ public class SpeechClient {
                 .build();
     }
 
+    /** Ljudtjänsten (KB-Whisper + Piper) finns. Krävs för tal till text. */
     public boolean enabled() {
         return enabled;
+    }
+
+    /** Uppläsning finns – via Piper och/eller Azure. */
+    public boolean ttsEnabled() {
+        return enabled || azure != null;
+    }
+
+    /** Röst att använda när föräldern inte valt någon: Azure Sofie om Azure finns, annars Pipers standard. */
+    public String defaultVoice() {
+        return azure != null ? AzureTts.PREFIX + AzureTts.VOICES.get(0).id() : null;
     }
 
     /** Ljud (wav, webm/opus, ogg …) → text. */
@@ -76,6 +96,24 @@ public class SpeechClient {
      * Piper-tempo (length_scale, större = långsammare).
      */
     public byte[] synthesize(String text, String voice, double lengthScale) {
+        String chosen = voice == null || voice.isBlank() ? defaultVoice() : voice;
+        if (AzureTts.isAzureVoice(chosen) && azure != null) {
+            if (azure.available()) {
+                try {
+                    return azure.synthesize(text, chosen, 1.0 / (lengthScale <= 0 ? 1.0 : lengthScale));
+                } catch (RuntimeException e) {
+                    if (!enabled) {
+                        throw e;
+                    }
+                }
+            }
+            if (!enabled) {
+                throw new IllegalStateException("Azure-rösten är tillfälligt pausad och Piper finns inte");
+            }
+            voice = null; // Piper med standardrösten
+        } else if (AzureTts.isAzureVoice(chosen)) {
+            voice = null; // Azure-röst vald men ingen nyckel längre
+        }
         requireEnabled();
         Map<String, Object> body = new HashMap<>();
         body.put("text", text);
@@ -97,8 +135,27 @@ public class SpeechClient {
 
     /** Röster som ljudtjänsten har, t.ex. [{"id":"sv_SE-nst-medium","name":"nst",...}]. */
     public JsonNode voices() {
-        requireEnabled();
-        return rest.get().uri("/voices").retrieve().body(JsonNode.class);
+        com.fasterxml.jackson.databind.node.ArrayNode all = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+        if (azure != null) {
+            for (AzureTts.Voice v : AzureTts.VOICES) {
+                all.addObject().put("id", AzureTts.PREFIX + v.id()).put("name", v.name())
+                        .put("quality", "Azure, " + v.gender()).put("default", all.isEmpty());
+            }
+        }
+        if (enabled) {
+            JsonNode piper = rest.get().uri("/voices").retrieve().body(JsonNode.class);
+            if (piper != null) {
+                for (JsonNode v : piper) {
+                    com.fasterxml.jackson.databind.node.ObjectNode copy = v.deepCopy();
+                    if (azure != null) {
+                        copy.put("default", false);
+                    }
+                    copy.put("quality", (v.path("quality").asText("").isBlank() ? "" : v.path("quality").asText() + ", ") + "Piper, lokal");
+                    all.add(copy);
+                }
+            }
+        }
+        return all;
     }
 
     private void requireEnabled() {

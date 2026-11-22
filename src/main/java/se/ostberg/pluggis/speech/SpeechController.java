@@ -38,10 +38,10 @@ public class SpeechController {
     @GetMapping
     public Map<String, Object> status() {
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("enabled", speech.enabled());
-        out.put("voice", settings.voice());
+        out.put("enabled", speech.ttsEnabled());
+        out.put("voice", settings.voice() != null ? settings.voice() : speech.defaultVoice());
         out.put("speed", settings.speed());
-        if (speech.enabled()) {
+        if (speech.ttsEnabled()) {
             try {
                 JsonNode voices = speech.voices();
                 out.put("voices", voices);
@@ -66,7 +66,7 @@ public class SpeechController {
     /** Provlyssna en röst innan den sparas. */
     @PostMapping(value = "/preview", produces = "audio/wav")
     public ResponseEntity<byte[]> preview(@RequestBody(required = false) PreviewRequest body) {
-        if (!speech.enabled()) {
+        if (!speech.ttsEnabled()) {
             return ResponseEntity.status(503).contentType(MediaType.TEXT_PLAIN)
                     .body("Ljudtjänsten är inte påslagen".getBytes());
         }

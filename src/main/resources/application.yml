@@ -87,6 +87,11 @@ pluggis:
     # pluggis-speech (se speech/). Tomt = ingen ljudväg.
     base-url: ${PLUGGIS_SPEECH_URL:}
     timeout-seconds: 30
+  # Valfritt: Azures neurala svenska röster (Sofie, Hillevi, Mattias). Skapa en Speech-resurs med
+  # prisnivå Free (F0) – 0,5 miljoner tecken/månad gratis, kan inte debiteras. Piper tar över vid fel.
+  azure-tts:
+    key: ${AZURE_SPEECH_KEY:}
+    region: ${AZURE_SPEECH_REGION:swedencentral}
 
 management:
   endpoints:

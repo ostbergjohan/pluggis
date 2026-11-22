@@ -19,6 +19,9 @@ services:
       PLUGGIS_CLAUDE_BACKEND: ${PLUGGIS_CLAUDE_BACKEND:-api}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       PLUGGIS_CLAUDE_API_PURPOSES: ${PLUGGIS_CLAUDE_API_PURPOSES:-coach}
+      # Valfritt: Azures svenska röster (gratisnivån F0). Tomt = bara Piper.
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-swedencentral}
       PLUGGIS_DEVICE_TOKEN: ${PLUGGIS_DEVICE_TOKEN:-}
       PLUGGIS_SPEECH_URL: http://speech:8090
     volumes:

@@ -33,7 +33,7 @@ public class ChatController {
     @GetMapping("/me")
     public Map<String, Object> me() {
         return Map.of("deviceId", access.deviceId(DEFAULT_DEVICE), "name", student.name(),
-                "serverVoice", speech.enabled());
+                "serverVoice", speech.ttsEnabled());
     }
 
     @GetMapping("/link")
