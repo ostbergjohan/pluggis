@@ -111,7 +111,9 @@ public class PlanningService {
     public int replanAll() {
         LocalDate today = todayDate();
         int n = 0;
-        for (Homework h : homework.openSchoolwork()) {
+        List<Homework> open = new ArrayList<>(homework.openSchoolwork());
+        open.sort(java.util.Comparator.comparing(Homework::getDueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+        for (Homework h : open) {
             if (h.getDueDate() == null || h.getDueDate().isBefore(today)
                     || repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
                 continue;
@@ -153,6 +155,15 @@ public class PlanningService {
         }
         if (drafts.isEmpty()) {
             drafts = PlanDays.fallback(h, remainingSteps(h, done), days, h.getDeckId() != null);
+        }
+
+        // Hård spärr: Claude får förslag, men koden ser till att max per dag håller
+        PlanDays.Fitted fitted = PlanDays.fitToBudget(drafts, days, busyMinutes(h, days), maxMinutesPerDay());
+        drafts = fitted.drafts();
+        if (fitted.overflowMinutes() > 0) {
+            String warn = "Det får inte plats inom max " + maxMinutesPerDay() + " min/dag – ca "
+                    + fitted.overflowMinutes() + " min för mycket. Höj max eller välj fler pluggdagar.";
+            note = note == null || note.isBlank() ? warn : note + " " + warn;
         }
 
         repo.deleteOpenForHomework(homeworkId);
@@ -370,13 +381,7 @@ public class PlanningService {
         days.forEach(d -> ask.append(d).append(" (").append(DAY_LABEL.format(d)).append("), "));
         ask.append('\n');
         if (!days.isEmpty()) {
-            // Andra läxors moment samma dagar räknas in i dagens max
-            java.util.Map<LocalDate, Integer> busy = new java.util.TreeMap<>();
-            for (PlanItem other : repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(days.get(0), days.get(days.size() - 1))) {
-                if (!other.getHomeworkId().equals(h.getId()) && !other.isDone()) {
-                    busy.merge(other.getPlanDate(), other.getMinutes(), Integer::sum);
-                }
-            }
+            java.util.Map<LocalDate, Integer> busy = busyMinutes(h, days);
             if (!busy.isEmpty()) {
                 ask.append("Redan planerat för andra läxor (räknas in i max per dag): ");
                 busy.forEach((d, m) -> ask.append(d).append(": ").append(m).append(" min, "));
@@ -394,6 +399,20 @@ public class PlanningService {
         msg.put("role", "user");
         msg.put("content", ask.toString());
         return JsonExtract.parse(claude.create(req, "planning").text(), mapper, GeneratedPlan.class);
+    }
+
+    /** Andra läxors ogjorda moment per dag – räknas in i dagens max. */
+    private java.util.Map<LocalDate, Integer> busyMinutes(Homework h, List<LocalDate> days) {
+        java.util.Map<LocalDate, Integer> busy = new java.util.TreeMap<>();
+        if (days.isEmpty()) {
+            return busy;
+        }
+        for (PlanItem other : repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(days.get(0), days.get(days.size() - 1))) {
+            if (!other.getHomeworkId().equals(h.getId()) && !other.isDone()) {
+                busy.merge(other.getPlanDate(), other.getMinutes(), Integer::sum);
+            }
+        }
+        return busy;
     }
 
     /** Släpp bara igenom moment på tillåtna dagar, med rimlig längd och känd typ. */

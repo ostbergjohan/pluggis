@@ -38,6 +38,45 @@ public final class PlanDays {
         return days;
     }
 
+    /** Resultat av {@link #fitToBudget}: momenten och hur många minuter som inte fick plats under taket. */
+    public record Fitted(List<Draft> drafts, int overflowMinutes) {
+    }
+
+    /**
+     * Hård spärr för max minuter per dag (alla läxor tillsammans). Ett moment som inte ryms flyttas
+     * till närmaste tidigare dag med plats, annars närmaste senare. Ryms det ingenstans läggs det på
+     * dagen med minst plugg och räknas som överskott.
+     */
+    public static Fitted fitToBudget(List<Draft> drafts, List<LocalDate> days, java.util.Map<LocalDate, Integer> busy, int max) {
+        java.util.Map<LocalDate, Integer> load = new java.util.HashMap<>();
+        days.forEach(d -> load.put(d, busy.getOrDefault(d, 0)));
+        List<Draft> sorted = new ArrayList<>(drafts);
+        sorted.sort(java.util.Comparator.comparing(Draft::date));
+        List<Draft> out = new ArrayList<>();
+        int overflow = 0;
+        for (Draft d : sorted) {
+            LocalDate target = d.date();
+            if (load.getOrDefault(target, 0) + d.minutes() > max) {
+                target = null;
+                int idx = days.indexOf(d.date());
+                for (int i = idx - 1; i >= 0 && target == null; i--) {
+                    if (load.get(days.get(i)) + d.minutes() <= max) target = days.get(i);
+                }
+                for (int i = idx + 1; i < days.size() && target == null; i++) {
+                    if (load.get(days.get(i)) + d.minutes() <= max) target = days.get(i);
+                }
+                if (target == null) {
+                    target = days.stream().min(java.util.Comparator.comparing(load::get)).orElse(d.date());
+                    overflow += Math.max(0, load.getOrDefault(target, 0) + d.minutes() - max);
+                }
+            }
+            load.merge(target, d.minutes(), Integer::sum);
+            out.add(target.equals(d.date()) ? d : new Draft(target, d.task(), d.minutes(), d.type()));
+        }
+        out.sort(java.util.Comparator.comparing(Draft::date));
+        return new Fitted(out, overflow);
+    }
+
     /**
      * Reservplan om Claude inte svarar: delsteg fördelas jämnt över dagarna.
      * Inför prov sparas sista dagen till repetition (och kortleken, om det finns en).
