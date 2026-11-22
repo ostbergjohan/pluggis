@@ -556,12 +556,20 @@ function progressCard(p) {
 
 views.plan = async () => {
   const page = h('div', { class: 'page' }, h('h2', {}, 'Planen'));
-  const [today, upcoming, progress] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=14'),
-    api('/api/plan/progress').catch(() => [])]);
+  const [today, upcoming, progress, hw] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=14'),
+    api('/api/plan/progress').catch(() => []), api('/api/homework?openOnly=false').catch(() => [])]);
+  const hwById = new Map(hw.map(x => [x.id, x]));
+  // Ämne + titel, t.ex. "NO · Prov fotosyntes" (ämnet bara om det inte redan står i titeln)
+  const titleOf = (id, fallback) => {
+    const x = hwById.get(id);
+    if (!x) return fallback || null;
+    const subj = (x.subject || '').trim();
+    return subj && !x.title.toLowerCase().includes(subj.toLowerCase()) ? `${subj} · ${x.title}` : x.title;
+  };
   const allDone = today.length > 0 && today.every(t => t.item.done);
   if (allDone) page.append(h('div', { class: 'day-done' }, '🎉 Allt för idag är klart! Bra jobbat.'));
   page.append(h('h3', {}, 'Idag'), today.length
-    ? h('div', { class: 'box', id: 'todayBox' }, today.map(t => planRow(t.item, t.homeworkTitle, t.overdue)))
+    ? h('div', { class: 'box', id: 'todayBox' }, today.map(t => planRow(t.item, titleOf(t.item.homeworkId, t.homeworkTitle), t.overdue)))
     : h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget planerat idag 🎉')));
   if (progress.length) page.append(h('h3', {}, 'På väg mot'), h('div', { class: 'progs' }, progress.slice(0, 5).map(progressCard)));
 
@@ -573,7 +581,7 @@ views.plan = async () => {
     later.get(i.planDate).push(i);
   }
   for (const [day, items] of later) {
-    page.append(h('h3', {}, dayName(day)), h('div', { class: 'box' }, items.map(i => planRow(i, null, false))));
+    page.append(h('h3', {}, dayName(day)), h('div', { class: 'box' }, items.map(i => planRow(i, titleOf(i.homeworkId), false))));
   }
   if (!later.size) page.append(h('p', { class: 'empty' }, 'Inget mer planerat de kommande två veckorna.'));
   return page;
