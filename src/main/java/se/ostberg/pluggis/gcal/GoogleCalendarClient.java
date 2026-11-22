@@ -136,13 +136,39 @@ public class GoogleCalendarClient {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(s.getBytes(StandardCharsets.UTF_8));
     }
 
+    /** Om den angivna filen saknas: ta en JSON-fil i samma mapp som är en tjänstekontonyckel, oavsett namn. */
+    static Path findServiceAccountKey(Path dir) {
+        if (dir == null || !Files.isDirectory(dir)) {
+            return null;
+        }
+        try (var files = Files.list(dir)) {
+            Path found = files.filter(f -> f.toString().endsWith(".json")).filter(f -> {
+                try {
+                    String s = Files.readString(f);
+                    return s.contains("\"service_account\"") && s.contains("private_key");
+                } catch (java.io.IOException e) {
+                    return false;
+                }
+            }).sorted().findFirst().orElse(null);
+            if (found != null) {
+                log.info("Använder Google-nyckeln {}", found.getFileName());
+            }
+            return found;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
     static ServiceAccount load(GoogleProperties props, ObjectMapper mapper) {
         try {
             String json = props.serviceAccountJson();
             if ((json == null || json.isBlank()) && props.serviceAccountFile() != null && !props.serviceAccountFile().isBlank()) {
                 Path p = Path.of(props.serviceAccountFile().trim());
                 if (!Files.exists(p)) {
-                    log.info("Ingen Google-nyckel ({}) – Google Kalender är avstängt", p);
+                    p = findServiceAccountKey(p.getParent());
+                }
+                if (p == null || !Files.exists(p)) {
+                    log.info("Ingen Google-nyckel ({}) – Google Kalender är avstängt", props.serviceAccountFile());
                     return null;
                 }
                 json = Files.readString(p);
