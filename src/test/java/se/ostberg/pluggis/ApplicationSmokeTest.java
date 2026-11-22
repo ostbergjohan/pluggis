@@ -222,6 +222,16 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void chatFilesAreRevalidatedAndChatKnowsItsVersion() throws Exception {
+        String cc = mvc.perform(get("/chat.js")).andExpect(status().isOk()).andReturn().getResponse().getHeader("Cache-Control");
+        assertThat(cc).contains("no-cache");
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        assertThat(json(mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
+                .path("version").asText()).hasSize(12);
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

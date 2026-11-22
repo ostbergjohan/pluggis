@@ -4,6 +4,13 @@ spring:
   threads:
     virtual:
       enabled: true
+  # Webbsidorna: fråga alltid servern om det finns en ny version (304 om inte – billigt).
+  # Annars kan telefonens "app" på hemskärmen köra gammal kod länge.
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true
   datasource:
     url: jdbc:h2:file:./data/pluggis;AUTO_SERVER=TRUE
     username: sa

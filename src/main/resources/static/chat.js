@@ -359,7 +359,23 @@ function connect() {
     onServer(m);
   };
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { checkAlive(); refreshPoints(); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { checkAlive(); refreshPoints(); checkVersion(); } });
+
+/**
+ * Ny version på servern? Hemskärms-appen på iPhone laddas inte om när man växlar tillbaka till den,
+ * så vi frågar när appen kommer fram (och var tionde minut) och laddar om när eleven inte är mitt i något.
+ */
+let versionTimer = null;
+async function checkVersion() {
+  if (!S.version) return;
+  let v;
+  try { v = (await api('/api/chat/me')).version; } catch { return; }
+  if (!v || v === S.version) return;
+  const busy = () => (document.querySelector('textarea') || {}).value || readingBtn || !$('#sheet').hidden;
+  const reload = () => { if (busy()) { clearTimeout(versionTimer); versionTimer = setTimeout(reload, 15000); return; } location.reload(); };
+  reload();
+}
+setInterval(() => { if (document.visibilityState === 'visible') checkVersion(); }, 10 * 60 * 1000);
 window.addEventListener('pageshow', () => checkAlive());
 window.addEventListener('online', () => checkAlive());
 // Livstecken: iOS kan lämna en anslutning som ser öppen ut men är död. Svarar den inte på ping
@@ -1047,6 +1063,7 @@ async function start() {
     S.name = me.name || '';
     S.serverVoice = !!me.serverVoice;
     S.points = me.pointsEnabled !== false;
+    S.version = me.version || null;
     paintPoints();
     if (S.voice === 'pluggis' && !S.serverVoice) S.voice = 'telefon';
     store.set('pluggis.chat.device', S.deviceId);

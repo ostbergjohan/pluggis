@@ -31,12 +31,31 @@ public class ChatController {
         this.speech = speech;
     }
 
+    /** Fingeravtryck av chattens filer – ändras när en ny version byggs, så telefonen vet att den ska ladda om. */
+    static final String UI_VERSION = uiVersion();
+
+    private static String uiVersion() {
+        try {
+            var md = java.security.MessageDigest.getInstance("SHA-256");
+            for (String f : java.util.List.of("chat.html", "chat.js", "chat.css")) {
+                try (var in = ChatController.class.getResourceAsStream("/static/" + f)) {
+                    if (in != null) {
+                        md.update(in.readAllBytes());
+                    }
+                }
+            }
+            return java.util.HexFormat.of().formatHex(md.digest()).substring(0, 12);
+        } catch (Exception e) {
+            return String.valueOf(System.currentTimeMillis());
+        }
+    }
+
     /** Vad elevchatten behöver veta vid start. */
     @GetMapping("/me")
     public Map<String, Object> me() {
         var me = students.current();
         return Map.of("deviceId", me.getDeviceId(), "name", me.getName(), "studentId", me.getId(),
-                "serverVoice", speech.ttsEnabled(), "pointsEnabled", me.isPointsEnabled());
+                "serverVoice", speech.ttsEnabled(), "pointsEnabled", me.isPointsEnabled(), "version", UI_VERSION);
     }
 
     @GetMapping("/link")
