@@ -140,6 +140,11 @@ Byt med `PLUGGIS_COACH_MODEL` m.fl. (se `.env.example`). Coachens fasta regler o
 cachas (prompt caching); bara "läget just nu" och samtalet skickas fullt varje gång.
 Svaret strömmas och delas upp i meningar som läses upp en i taget.
 
+**Azures svenska röster (valfritt, gratis):** sätt `AZURE_SPEECH_KEY` och `AZURE_SPEECH_REGION` i `.env`
+(en Speech-resurs med prisnivå *Free F0* – 0,5 miljoner tecken/månad, kan inte debiteras). Då finns
+Sofie, Hillevi och Mattias under Inställningar → Röst, med Sofie som standard. Bara coachens svarstext
+skickas till Azure. Går Azure inte (fel eller månadsgränsen nådd) tar Piper över automatiskt.
+
 **Ljudtjänsten** (`speech/`) kör lokalt: KB-Whisper small (Kungliga bibliotekets svenska Whisper)
 via faster-whisper, och Piper med svensk röst. Enklast:
 
