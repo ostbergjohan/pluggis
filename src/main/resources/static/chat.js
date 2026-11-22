@@ -178,8 +178,29 @@ function svVoice() {
 }
 if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', () => {});
 
+/** Samma som serverns SpokenText: datum, veckor, sidor och klockslag som ord (bråk lämnas orörda). */
+const MONTHS = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli', 'augusti', 'september', 'oktober', 'november', 'december'];
+function forSpeech(t) {
+  if (!t) return t;
+  const year = new Date().getFullYear();
+  return t
+    .replace(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g, (m, y, mo, d) => (mo >= 1 && mo <= 12 && d >= 1 && d <= 31)
+      ? `${+d} ${MONTHS[mo - 1]}${+y === year ? '' : ' ' + y}` : m)
+    .replace(/(^|[^\p{L}])(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|mån|tis|ons|tors|fre|lör|sön|den|till|på|från|senast|före|efter|innan|prov|provet|förhör|inlämning)\s+(\d{1,2})\/(\d{1,2})(?![\d/])/giu,
+      (m, pre, w, d, mo) => (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) ? `${pre}${w} ${+d} ${MONTHS[mo - 1]}` : m)
+    .replace(/\bv(?:ecka)?\.?\s?(\d{1,2})\b/gi, 'vecka $1')
+    .replace(/\b(?:s|sid)\.\s?(\d+)\s?[–—-]\s?(\d+)\b/gi, 'sidorna $1 till $2')
+    .replace(/\b(?:s|sid)\.\s?(\d+)\b/gi, 'sidan $1')
+    .replace(/\b(?:kl\.?\s?)?([01]?\d|2[0-3]):([0-5]\d)\b/gi, (m, hh, mm) => `klockan ${+hh}${mm === '00' ? '' : ' och ' + +mm}`)
+    .replace(/\bkl\.\s?/gi, 'klockan ')
+    .replace(/(\d)\s?[–—]\s?(\d)/g, '$1 till $2')
+    .replace(/\bt\.ex\.?/gi, 'till exempel').replace(/\bbl\.a\.?/gi, 'bland annat').replace(/\bosv\.?/gi, 'och så vidare')
+    .replace(/[*_#`>]+/g, '').replace(/\p{Extended_Pictographic}/gu, '').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
 function speakPhone(text) {
   if (!window.speechSynthesis || !text) return;
+  text = forSpeech(text);
   const u = new SpeechSynthesisUtterance(text);
   u.lang = 'sv-SE'; u.rate = 1.0; u.volume = 1;
   const v = svVoice(); if (v) u.voice = v;
@@ -729,7 +750,7 @@ async function readAloud(text, btn) {
     await speakServer(text);
     if (speechRun === run && readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; }
   } else if (window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(forSpeech(text));
     u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
     u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
     speechSynthesis.speak(u);
