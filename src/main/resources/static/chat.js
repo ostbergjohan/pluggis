@@ -37,7 +37,8 @@ const S = {
   deviceId: store.get('pluggis.chat.device', 'tab5-1'),
   name: '',
   ws: null, retry: 0, tab: 'chatt',
-  speak: store.get('pluggis.chat.speak', '0') === '1',
+  voice: store.get('pluggis.chat.voice', store.get('pluggis.chat.speak', '0') === '1' ? 'telefon' : 'av'),
+  serverVoice: false,
   history: JSON.parse(store.get('pluggis.chat.history', '[]') || '[]'),
   session: null, thinking: false,
 };
@@ -84,35 +85,94 @@ const dayName = (iso) => {
   return new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' }).format(parseDay(iso));
 };
 
-// ---- Uppläsning (telefonens egen röst) ----
-function speak(text) {
-  if (!S.speak || !window.speechSynthesis || !text) return;
+// ---- Uppläsning ----
+// Tre lägen: av, "pluggis" (Pluggis egen röst från servern, samma som Tab5) eller "telefon" (iPhones röst).
+// iPhone spelar bara upp ljud som "låsts upp" av ett tryck – det görs när man väljer läge och när man skickar.
+const VOICE_MODES = ['av', 'pluggis', 'telefon'];
+let audioCtx = null;
+let playChain = Promise.resolve();
+
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    // En kort tystnad låser upp uppspelningen på iOS
+    const buf = audioCtx.createBuffer(1, 1, 22050);
+    const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
+  } catch { /* ingen Web Audio */ }
+  if (S.voice === 'telefon' && window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+  }
+}
+
+function svVoice() {
+  if (!window.speechSynthesis) return null;
+  const voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('sv'));
+  return voices.find(v => /alva|klara|premium|enhanced|förbättrad/i.test(v.name)) || voices[0] || null;
+}
+if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', () => {});
+
+function speakPhone(text) {
+  if (!window.speechSynthesis || !text) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'sv-SE';
-  const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith('sv'));
-  if (v) u.voice = v;
+  u.lang = 'sv-SE'; u.rate = 1.0;
+  const v = svVoice(); if (v) u.voice = v;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
-$('#speak').addEventListener('click', () => {
-  S.speak = !S.speak;
-  store.set('pluggis.chat.speak', S.speak ? '1' : '0');
+
+/** Text från coachen: läs upp med telefonens röst (Pluggis röst kommer som ljud från servern). */
+function speak(text) {
+  if (S.voice === 'telefon') speakPhone(text);
+}
+
+/** Ljud (wav) från servern – spelas i ordning. */
+function playServerAudio(arrayBuffer) {
+  if (S.voice !== 'pluggis' || !audioCtx) return;
+  const copy = arrayBuffer.slice(0);
+  playChain = playChain.then(() => new Promise((resolve) => {
+    audioCtx.decodeAudioData(copy, (buf) => {
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf; src.connect(audioCtx.destination);
+      src.onended = resolve; src.start(0);
+    }, () => resolve());
+  })).catch(() => {});
+}
+
+function setVoice(mode) {
+  S.voice = mode;
+  store.set('pluggis.chat.voice', mode);
   paintSpeak();
-  if (S.speak && window.speechSynthesis) speechSynthesis.speak(new SpeechSynthesisUtterance('')); // låser upp ljud på iPhone
-  toast(S.speak ? 'Pluggis läser upp svaren' : 'Uppläsning av');
+  unlockAudio();
+  if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify({ type: 'hello', audio: mode === 'pluggis', audioFormat: 'webm' }));
+}
+
+$('#speak').addEventListener('click', () => {
+  const modes = S.serverVoice ? VOICE_MODES : ['av', 'telefon'];
+  const next = modes[(modes.indexOf(S.voice) + 1) % modes.length] || 'av';
+  setVoice(next);
+  if (next === 'pluggis') toast('🔊 Pluggis läser upp svaren');
+  else if (next === 'telefon') { toast('📱 Telefonens röst läser upp svaren'); speakPhone('Hej! Nu läser jag upp svaren.'); }
+  else toast('🔇 Uppläsning av');
 });
-function paintSpeak() { $('#speak').textContent = S.speak ? '🔊' : '🔈'; $('#speak').setAttribute('aria-pressed', String(S.speak)); }
+function paintSpeak() {
+  const b = $('#speak');
+  b.textContent = S.voice === 'av' ? '🔇' : S.voice === 'pluggis' ? '🔊' : '📱🔊';
+  b.setAttribute('aria-pressed', String(S.voice !== 'av'));
+  b.title = { av: 'Uppläsning av – tryck för att slå på', pluggis: 'Pluggis röst läser upp – tryck för att byta', telefon: 'Telefonens röst läser upp – tryck för att byta' }[S.voice];
+}
 
 // ---- WebSocket till coachen ----
 function connect() {
   if (S.ws && S.ws.readyState <= 1) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws/device?deviceId=${enc(S.deviceId)}&token=${enc(S.token)}`);
+  ws.binaryType = 'arraybuffer';
   S.ws = ws;
   ws.onopen = () => {
     S.retry = 0;
     $('#conn').className = 'dot on';
-    ws.send(JSON.stringify({ type: 'hello', audio: false }));
+    ws.send(JSON.stringify({ type: 'hello', audio: S.voice === 'pluggis', audioFormat: 'webm' }));
   };
   ws.onclose = (e) => {
     if (S.ws === ws) S.ws = null;
@@ -122,7 +182,7 @@ function connect() {
     setTimeout(() => { if (document.visibilityState === 'visible') connect(); }, wait);
   };
   ws.onmessage = (e) => {
-    if (typeof e.data !== 'string') return;
+    if (typeof e.data !== 'string') { playServerAudio(e.data); return; }
     let m; try { m = JSON.parse(e.data); } catch { return; }
     onServer(m);
   };
@@ -221,12 +281,14 @@ views.chatt = () => {
   function sendText() {
     const text = input.value.trim();
     if (!text) return;
+    unlockAudio();
     if (send({ type: 'text', text })) {
       addMsg('me', text);
       input.value = ''; input.style.height = 'auto';
     }
   }
   function press(button, gesture, label) {
+    unlockAudio();
     if (send({ type: 'button', button, gesture })) addMsg('note', label);
   }
   function listen() {
@@ -236,7 +298,9 @@ views.chatt = () => {
     rec.onresult = (e) => { input.value = e.results[0][0].transcript; sendText(); };
     rec.onerror = () => toast('Hörde inte – testa igen', true);
     rec.onend = () => { mic.classList.remove('rec'); mic.textContent = '🎤'; };
-    rec.start();
+    rec.document.addEventListener('touchend', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
+start();
   }
 
   const msgs = h('div', { class: 'msgs', id: 'msgs' });
@@ -421,22 +485,28 @@ function askForLink() {
       const v = input.value.trim(); const m = v.match(/[#&]t=([^&\s]+)/);
       S.token = m ? decodeURIComponent(m[1]) : v;
       store.set('pluggis.chat.token', S.token);
-      start();
+      document.addEventListener('touchend', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
+start();
     } }, 'Fortsätt')));
 }
 
 async function start() {
-  paintSpeak();
   try {
     const me = await api('/api/chat/me');
     S.deviceId = me.deviceId || S.deviceId;
     S.name = me.name || '';
+    S.serverVoice = !!me.serverVoice;
+    if (S.voice === 'pluggis' && !S.serverVoice) S.voice = 'telefon';
     store.set('pluggis.chat.device', S.deviceId);
   } catch (e) {
     if (e.auth) { askForLink(); toast(e.message, true); return; }
   }
+  paintSpeak();
   connect();
   refreshPoints();
   show('chatt');
 }
+document.addEventListener('touchend', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
 start();

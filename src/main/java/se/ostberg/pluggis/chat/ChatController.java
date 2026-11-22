@@ -20,16 +20,20 @@ public class ChatController {
 
     private final ChatAccess access;
     private final se.ostberg.pluggis.settings.StudentProfile student;
+    private final se.ostberg.pluggis.speech.SpeechClient speech;
 
-    public ChatController(ChatAccess access, se.ostberg.pluggis.settings.StudentProfile student) {
+    public ChatController(ChatAccess access, se.ostberg.pluggis.settings.StudentProfile student,
+                          se.ostberg.pluggis.speech.SpeechClient speech) {
         this.access = access;
         this.student = student;
+        this.speech = speech;
     }
 
     /** Vad elevchatten behöver veta vid start. */
     @GetMapping("/me")
     public Map<String, Object> me() {
-        return Map.of("deviceId", access.deviceId(DEFAULT_DEVICE), "name", student.name());
+        return Map.of("deviceId", access.deviceId(DEFAULT_DEVICE), "name", student.name(),
+                "serverVoice", speech.enabled());
     }
 
     @GetMapping("/link")
