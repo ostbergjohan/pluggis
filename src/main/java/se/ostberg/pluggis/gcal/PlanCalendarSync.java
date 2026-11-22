@@ -95,6 +95,15 @@ public class PlanCalendarSync {
         return m;
     }
 
+    /** Får Google att öppna länken med kalenderns konto även när flera konton är inloggade (annars u/0). */
+    static String withAuthUser(String link, String calendarId) {
+        if (link.isBlank() || !calendarId.contains("@") || calendarId.endsWith("calendar.google.com")) {
+            return link;
+        }
+        return link + (link.contains("?") ? "&" : "?") + "authuser="
+                + java.net.URLEncoder.encode(calendarId, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     /** De närmaste passen som Pluggis lagt in, med länk till Google Kalender (för att se att de finns). */
     private List<Map<String, String>> upcomingLinks(Student s) {
         String cal = s.getGoogleCalendarId();
@@ -109,7 +118,7 @@ public class PlanCalendarSync {
                     .limit(5)
                     .map(e -> Map.of("start", e.path("start").path("dateTime").asText(""),
                             "summary", e.path("summary").asText(""),
-                            "link", e.path("htmlLink").asText("")))
+                            "link", withAuthUser(e.path("htmlLink").asText(""), cal.trim())))
                     .toList();
         } catch (RuntimeException e) {
             return List.of();

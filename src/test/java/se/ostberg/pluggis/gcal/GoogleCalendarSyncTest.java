@@ -210,6 +210,8 @@ class GoogleCalendarSyncTest {
         JsonNode st = call(get("/api/google-calendar").header("X-Pluggis-Token", "test-token"));
         assertThat(st.path("upcoming")).hasSize(2);
         assertThat(st.path("upcoming").get(0).path("link").asText()).startsWith("https://calendar.google.com/event");
+        assertThat(PlanCalendarSync.withAuthUser("https://www.google.com/calendar/event?eid=x", "fred@gmail.com"))
+                .isEqualTo("https://www.google.com/calendar/event?eid=x&authuser=fred%40gmail.com");
 
         // Inget ändrat → inget att göra
         JsonNode again = call(post("/api/google-calendar/sync").header("X-Pluggis-Token", "test-token"));
