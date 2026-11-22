@@ -245,9 +245,18 @@ public class ClaudeCodeRunner {
         if (result == null) {
             throw new IllegalStateException("Claude Code gav inget svar");
         }
-        if (result.path("is_error").asBoolean(false) || "error".equals(result.path("subtype").asText(""))) {
-            String why = result.path("result").asText(result.path("subtype").asText("okänt fel"));
-            throw new IllegalStateException("Claude Code: " + why);
+        if (stdout.contains("\"authentication_failed\"")) {
+            throw new IllegalStateException("Claude Code är inte inloggat – kontrollera CLAUDE_CODE_OAUTH_TOKEN "
+                    + "(skapa en ny med \"claude setup-token\")");
+        }
+        if (stdout.contains("\"rate_limit\"")) {
+            throw new IllegalStateException("Abonnemangets gräns är nådd just nu – försök igen senare");
+        }
+        if (result.path("is_error").asBoolean(false) || result.path("subtype").asText("").startsWith("error")
+                || "api_error".equals(result.path("terminal_reason").asText(""))) {
+            String why = result.path("result").asText("");
+            throw new IllegalStateException("Claude Code: " + (why.isBlank()
+                    ? result.path("terminal_reason").asText(result.path("subtype").asText("okänt fel")) : why));
         }
         List<ClaudeResponse.ContentBlock> content = new ArrayList<>();
         boolean tools = false;

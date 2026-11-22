@@ -72,8 +72,13 @@ class ClaudeCodeRunnerTest {
         assertThat(plain.text()).isEqualTo("{\"a\":1}");
         assertThat(plain.wantsTools()).isFalse();
 
-        assertThatThrownBy(() -> runner.parse("{\"type\":\"result\",\"is_error\":true,\"result\":\"Not logged in\"}", false))
-                .hasMessageContaining("Not logged in");
+        assertThatThrownBy(() -> runner.parse("{\"type\":\"result\",\"is_error\":true,\"result\":\"Something broke\"}", false))
+                .hasMessageContaining("Something broke");
+        // Så ser det ut utan giltig token (från CI)
+        assertThatThrownBy(() -> runner.parse("""
+                {"type":"assistant","message":{"content":[]},"error":"authentication_failed","is_api_error_message":true}
+                {"type":"result","duration_api_ms":0,"total_cost_usd":0,"terminal_reason":"api_error","is_error":true}
+                """, false)).hasMessageContaining("CLAUDE_CODE_OAUTH_TOKEN");
     }
 
     @Test
