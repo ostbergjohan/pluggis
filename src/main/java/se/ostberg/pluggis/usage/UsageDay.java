@@ -14,14 +14,14 @@ import java.time.LocalDate;
  * Kostnaden räknas ut när anropet görs, så gamla dagar behåller det pris som gällde då.
  */
 @Entity
-@Table(name = "usage_day", indexes = @Index(name = "ix_usage_day", columnList = "day"))
+@Table(name = "usage_day", indexes = @Index(name = "ix_usage_day", columnList = "usage_date"))
 public class UsageDay {
 
     @Id
     @GeneratedValue
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "usage_date", nullable = false)
     private LocalDate day;
     private Long studentId;
     @Column(nullable = false, length = 40)
