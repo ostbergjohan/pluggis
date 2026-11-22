@@ -740,17 +740,110 @@ views.plan = async (main) => {
   } }, '🔄 Planera om allt');
   main.append(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap' },
       h('h1', {}, 'Plan'), replanBtn),
-    h('p', { class: 'sub' }, 'Det som är planerat de kommande tre veckorna. Bocka av när det är gjort. "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.'));
-  const [today, upcoming] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=21'), loadHomework(true)]);
+    h('p', { class: 'sub' }, 'Tre veckor framåt. Bocka av när det är gjort. Dra ⠿ för att flytta ett moment till en annan dag eller ändra ordning (eller ⋯ i mobilen). "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.'));
+  const [today, upcoming, , st] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=20'), loadHomework(true),
+    api('/api/student').catch(() => ({}))]);
+  const max = st.maxMinutesPerDay || 40;
+  const studyDays = new Set(st.studyDays || []);
+  const DOW = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+  const hwById = new Map(state.homework.map(x => [x.id, x]));
+  const titleOf = (id) => { const x = hwById.get(id); return x ? [x.subject, x.title].filter(Boolean).join(' · ') : `Läxa ${id}`; };
+
   const overdue = today.filter(t => t.overdue);
+  const manual = state.homework.filter(x => x.manualPlan && x.status === 'OPEN');
+  if (manual.length) {
+    main.append(h('p', { class: 'item-meta', style: 'margin:-4px 0 12px' }, '✋ Flyttat för hand: ', manual.map(x => x.title).join(', '),
+      '. Dessa planeras inte om automatiskt på natten – tryck Planera på läxan om Pluggis ska ta över igen.'));
+  }
+
+  let dragId = null;
+  const byDay = new Map();
+  for (const i of upcoming) { if (!byDay.has(i.planDate)) byDay.set(i.planDate, []); byDay.get(i.planDate).push(i); }
+
+  async function arrange(day, ids) {
+    const r = await run(() => api(`/api/plan/days/${day}`, { method: 'PUT', body: { ids } }));
+    if (r !== undefined) route();
+  }
+  const openIds = (day) => (byDay.get(day) || []).filter(i => !i.done).map(i => i.id);
+  function moveTo(id, day, index) {
+    const ids = openIds(day).filter(x => x !== id);
+    ids.splice(index == null ? ids.length : Math.max(0, Math.min(index, ids.length)), 0, id);
+    arrange(day, ids);
+  }
+
+  function itemRow(t, day) {
+    const item = t.item || t;
+    const x = hwById.get(item.homeworkId);
+    const row = h('div', { class: 'dnd-row' + (item.done ? ' is-done' : ''), draggable: item.done ? null : 'true' });
+    row.dataset.id = item.id;
+    const tools = h('div', { class: 'dnd-tools', hidden: true });
+    const handle = item.done ? h('span', { class: 'dnd-handle off' }, '') : h('span', { class: 'dnd-handle', title: 'Dra för att flytta' }, '⠿');
+    const more = item.done ? null : h('button', { class: 'ghost small', title: 'Flytta', onclick: (e) => {
+      e.preventDefault(); tools.hidden = !tools.hidden;
+      if (tools.hidden || tools.childElementCount) return;
+      const date = h('input', { type: 'date', value: item.planDate, min: todayIso() });
+      if (x && x.dueDate) { const d = parseDay(x.dueDate); d.setDate(d.getDate() - 1); date.max = d.toLocaleDateString('sv-SE'); }
+      const ids = day ? openIds(day) : [];
+      const pos = ids.indexOf(item.id);
+      tools.append(h('label', { class: 'item-meta' }, 'Flytta till '), date,
+        h('button', { class: 'small', onclick: () => { if (date.value) moveTo(item.id, date.value, null); } }, 'Flytta'),
+        day && pos > 0 ? h('button', { class: 'small', title: 'Upp', onclick: () => moveTo(item.id, day, pos - 1) }, '↑') : null,
+        day && pos >= 0 && pos < ids.length - 1 ? h('button', { class: 'small', title: 'Ner', onclick: () => moveTo(item.id, day, pos + 1) }, '↓') : null);
+    } }, '⋯');
+    const check = planChecklist([{ item, homeworkTitle: titleOf(item.homeworkId), overdue: t.overdue }], true);
+    row.append(h('div', { class: 'dnd-main' }, handle, h('div', { style: 'flex:1;min-width:0' }, check), more), tools);
+    row.addEventListener('dragstart', (e) => { dragId = item.id; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(item.id)); });
+    row.addEventListener('dragend', () => { row.classList.remove('dragging'); document.querySelectorAll('.drop-mark').forEach(m => m.remove()); });
+    return row;
+  }
+
+  function dayZone(day) {
+    const items = byDay.get(day) || [];
+    const total = items.reduce((n, i) => n + i.minutes, 0);
+    const d = parseDay(day);
+    const off = studyDays.size && !studyDays.has(DOW[d.getDay()]);
+    const list = h('div', { class: 'dnd-list' });
+    items.forEach(i => list.append(itemRow(i, day)));
+    if (!items.length) list.append(h('div', { class: 'dnd-empty' }, off ? 'ledig dag' : 'inget planerat – släpp här'));
+    const zone = h('div', { class: 'dnd-day' + (off ? ' off' : '') },
+      h('div', { class: 'day-head dnd-head' }, h('span', {}, `${fmtLong(day)}${day === todayIso() ? ' – idag' : ''}`),
+        total ? h('span', { class: 'item-meta' + (total > max ? ' over' : '') }, `${total} / ${max} min`) : null),
+      list);
+    const indexAt = (y) => {
+      const rows = [...list.querySelectorAll('.dnd-row:not(.is-done)')].filter(r => Number(r.dataset.id) !== dragId);
+      let i = 0; for (const r of rows) { const b = r.getBoundingClientRect(); if (y > b.top + b.height / 2) i++; }
+      return { i, rows };
+    };
+    zone.addEventListener('dragover', (e) => {
+      if (dragId == null) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.drop-mark').forEach(m => m.remove());
+      const { i, rows } = indexAt(e.clientY);
+      const mark = h('div', { class: 'drop-mark' });
+      if (rows[i]) list.insertBefore(mark, rows[i]); else list.append(mark);
+    });
+    zone.addEventListener('dragleave', (e) => { if (!zone.contains(e.relatedTarget)) zone.querySelectorAll('.drop-mark').forEach(m => m.remove()); });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (dragId == null) return;
+      const { i } = indexAt(e.clientY);
+      const id = dragId; dragId = null;
+      moveTo(id, day, i);
+    });
+    return zone;
+  }
+
   if (overdue.length) {
-    main.append(h('section', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, 'Ligger efter'), planChecklist(overdue, true)));
+    main.append(h('section', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, 'Ligger efter'),
+      h('div', { class: 'dnd-list' }, overdue.map(t => itemRow(t, null))),
+      h('p', { class: 'item-meta' }, 'Dra till en dag nedan, eller tryck ⋯ och välj dag.')));
   }
   const panel = h('section', { class: 'panel' });
   if (!upcoming.length) panel.append(h('div', { class: 'empty' }, 'Inget planerat. Gå till Läxor & prov, fyll i vad som ingår och tryck Planera.'));
-  for (const [day, items] of groupByDay(upcoming)) {
-    panel.append(h('div', { class: 'day-head' }, `${fmtLong(day)}${day === todayIso() ? ' – idag' : ''}`),
-      planChecklist(items.map(i => ({ item: i, homeworkTitle: homeworkTitle(i.homeworkId) })), true));
+  const start = parseDay(todayIso());
+  for (let n = 0; n <= 20; n++) {
+    const d = new Date(start); d.setDate(d.getDate() + n);
+    panel.append(dayZone(d.toLocaleDateString('sv-SE')));
   }
   main.append(panel);
 };

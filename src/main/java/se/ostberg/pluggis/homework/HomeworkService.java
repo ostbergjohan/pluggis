@@ -152,6 +152,11 @@ public class HomeworkService {
     }
 
     @Transactional
+    public void setManualPlan(long id, boolean manual) {
+        repo.findById(id).ifPresent(h -> h.setManualPlan(manual));
+    }
+
+    @Transactional
     public boolean delete(long id) {
         if (!repo.existsById(id)) {
             return false;

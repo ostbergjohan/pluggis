@@ -36,6 +36,8 @@ public class Homework {
     private String subject;
     /** Hur viktigt (10–100 %, steg om 10). null = normalt (50 %). Styr hur mycket tid planen lägger. */
     private Integer weight;
+    /** Föräldern har flyttat moment för hand – nattlig/automatisk omplanering låter planen vara. */
+    private Boolean manualPlan;
 
     private String title;
 
@@ -105,6 +107,10 @@ public class Homework {
     }
 
     public Integer getWeight() { return weight; }
+
+    public boolean isManualPlan() { return Boolean.TRUE.equals(manualPlan); }
+
+    public void setManualPlan(boolean manual) { this.manualPlan = manual; }
 
     /** Vikten som används i planeringen: 50 % om inget är valt. */
     public int weightOrDefault() { return weight == null ? 50 : weight; }

@@ -61,6 +61,19 @@ public class PlanningController {
     }
 
     /** Gör om alla planer för vald elev i bakgrunden (Claude tar några sekunder per läxa). */
+    public record ArrangeRequest(List<Long> ids) {
+    }
+
+    /** Dra och släpp: lägg momenten {@code ids} på dagen {@code date} i den ordningen (bara föräldern). */
+    @org.springframework.web.bind.annotation.PutMapping("/days/{date}")
+    public ResponseEntity<?> arrange(@PathVariable LocalDate date, @RequestBody ArrangeRequest body) {
+        try {
+            return ResponseEntity.ok(planning.arrangeDay(date, body.ids() == null ? List.of() : body.ids()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/replan-all")
     public Map<String, Object> replanAll() {
         Runnable job = se.ostberg.pluggis.student.StudentContext.wrap(() -> planning.replanAll());

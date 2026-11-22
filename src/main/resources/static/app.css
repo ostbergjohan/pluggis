@@ -268,3 +268,22 @@ code.sa { font-size: 13px; background: var(--bg); border: 1px solid var(--line);
 .stage-item img, .stage-doc { width: 44px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; }
 .stage-doc { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--muted); }
 .stage-item .item-meta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dnd-day { border-top: 1px solid var(--line); padding: 2px 0 6px; }
+.dnd-day:first-child { border-top: 0; }
+.dnd-day.off .dnd-head > span:first-child { color: var(--muted); }
+.dnd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dnd-head .over { color: var(--red); font-weight: 700; }
+.dnd-list { min-height: 8px; }
+.dnd-row { border-radius: 8px; }
+.dnd-row.dragging { opacity: .4; }
+.dnd-main { display: flex; align-items: center; gap: 6px; }
+.dnd-handle { cursor: grab; color: var(--muted); font-size: 18px; width: 16px; text-align: center; user-select: none; }
+.dnd-handle.off { cursor: default; }
+.dnd-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 0 8px 22px; }
+.dnd-tools[hidden] { display: none; }
+.dnd-empty { color: var(--muted); font-size: 13px; padding: 6px 22px; border: 1px dashed transparent; border-radius: 8px; }
+.dnd-day:hover .dnd-empty { border-color: var(--line); }
+.drop-mark { height: 3px; background: var(--accent); border-radius: 2px; margin: 2px 0 2px 22px; }
+button.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+button.ghost:hover { background: var(--accent-soft); }

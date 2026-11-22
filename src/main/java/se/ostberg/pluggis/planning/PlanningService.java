@@ -116,7 +116,7 @@ public class PlanningService {
         open.sort(java.util.Comparator.comparing(Homework::getDueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
                 .thenComparing(Homework::weightOrDefault, java.util.Comparator.reverseOrder()));
         for (Homework h : open) {
-            if (h.getDueDate() == null || h.getDueDate().isBefore(today)
+            if (h.getDueDate() == null || h.getDueDate().isBefore(today) || h.isManualPlan()
                     || repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
                 continue;
             }
@@ -169,6 +169,9 @@ public class PlanningService {
         }
 
         repo.deleteOpenForHomework(homeworkId);
+        if (h.isManualPlan()) {
+            homework.setManualPlan(homeworkId, false); // ny plan = Pluggis tar över igen
+        }
         List<PlanItem> saved = repo.saveAll(drafts.stream()
                 .map(d -> new PlanItem(homeworkId, d.date(), d.task(), d.minutes(), d.type()))
                 .toList());
@@ -198,7 +201,9 @@ public class PlanningService {
         LocalDate today = todayDate();
         Map<Long, Optional<Homework>> cache = new HashMap<>();
         List<TodayItem> out = new ArrayList<>();
-        for (PlanItem item : repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today)) {
+        List<PlanItem> open = new ArrayList<>(repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today));
+        open.sort(PlanItem.ORDER);
+        for (PlanItem item : open) {
             Optional<Homework> h = cache.computeIfAbsent(item.getHomeworkId(), homework::get);
             if (h.isEmpty() || h.get().getStatus() != Homework.Status.OPEN) {
                 continue;
@@ -212,7 +217,9 @@ public class PlanningService {
     @Transactional(readOnly = true)
     public List<PlanItem> upcoming(int days) {
         LocalDate today = todayDate();
-        return repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(today, today.plusDays(Math.max(0, days)));
+        List<PlanItem> items = new ArrayList<>(repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(today, today.plusDays(Math.max(0, days))));
+        items.sort(PlanItem.ORDER);
+        return items;
     }
 
     @Transactional(readOnly = true)
@@ -337,7 +344,7 @@ public class PlanningService {
         LocalDate today = todayDate();
         int n = 0;
         for (Homework h : homework.openSchoolwork()) {
-            if (h.getDueDate() == null || h.getDueDate().isBefore(today)) {
+            if (h.getDueDate() == null || h.getDueDate().isBefore(today) || h.isManualPlan()) {
                 continue;
             }
             boolean behind = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).stream()
@@ -353,6 +360,42 @@ public class PlanningService {
             }
         }
         return n;
+    }
+
+    /**
+     * Föräldern drar moment till en dag: {@code ids} i den ordning de ska ligga den dagen.
+     * Avbockade moment rörs inte. Inte före idag och inte på/efter provet eller inlämningen.
+     * Läxor vars moment flyttats markeras som handplanerade (natten planerar inte om dem).
+     */
+    @Transactional
+    public List<PlanItem> arrangeDay(LocalDate date, List<Long> ids) {
+        LocalDate today = todayDate();
+        if (date.isBefore(today)) {
+            throw new IllegalArgumentException("Det går inte att flytta till en dag som har varit");
+        }
+        Map<Long, Optional<Homework>> cache = new HashMap<>();
+        java.util.Set<Long> moved = new java.util.HashSet<>();
+        int order = 0;
+        for (Long id : ids) {
+            PlanItem item = repo.findById(id).orElseThrow(() -> new IllegalArgumentException("Hittar inte momentet " + id));
+            if (item.isDone()) {
+                continue;
+            }
+            Optional<Homework> h = cache.computeIfAbsent(item.getHomeworkId(), homework::get);
+            if (h.isPresent() && h.get().getDueDate() != null && !date.isBefore(h.get().getDueDate())) {
+                throw new IllegalArgumentException("\"" + item.getTask() + "\" måste vara klart före "
+                        + (h.get().getKind() == Homework.Kind.TEST ? "provet" : "inlämningen") + " (" + h.get().getDueDate() + ")");
+            }
+            if (!date.equals(item.getPlanDate())) {
+                moved.add(item.getHomeworkId());
+            }
+            item.moveTo(date, order++);
+        }
+        moved.forEach(id -> homework.setManualPlan(id, true));
+        changed();
+        List<PlanItem> day = new ArrayList<>(repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(date, date));
+        day.sort(PlanItem.ORDER);
+        return day;
     }
 
     /** Publiceras när en elevs plan har ändrats (för t.ex. Google Kalender). */

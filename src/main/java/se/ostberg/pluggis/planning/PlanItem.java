@@ -42,6 +42,14 @@ public class PlanItem {
 
     private Instant doneAt;
 
+    /** Ordning inom dagen när föräldern flyttat för hand; null = skapandeordning. */
+    private Integer sortOrder;
+
+    /** Sortering: dag, handordning (osorterade sist), sedan när momentet skapades. */
+    public static final java.util.Comparator<PlanItem> ORDER = java.util.Comparator.comparing(PlanItem::getPlanDate)
+            .thenComparing(PlanItem::getSortOrder, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+            .thenComparing(PlanItem::getId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
+
     protected PlanItem() {
     }
 
@@ -62,6 +70,14 @@ public class PlanItem {
         this.done = false;
         this.doneAt = null;
     }
+
+    /** Flyttad för hand (dra och släpp i föräldravyn). */
+    public void moveTo(LocalDate date, int order) {
+        this.planDate = date;
+        this.sortOrder = order;
+    }
+
+    public Integer getSortOrder() { return sortOrder; }
 
     public Long getId() { return id; }
     public Long getHomeworkId() { return homeworkId; }

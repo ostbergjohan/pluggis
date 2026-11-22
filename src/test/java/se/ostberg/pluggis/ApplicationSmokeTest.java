@@ -152,6 +152,54 @@ class ApplicationSmokeTest {
         mvc.perform(get("/api/devices/" + own + "/rewards").header(TOKEN, code)).andExpect(status().isOk());
     }
 
+    private boolean manualPlan(long homeworkId) throws Exception {
+        for (JsonNode x : json(mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString())) {
+            if (x.path("id").asLong() == homeworkId) {
+                return x.path("manualPlan").asBoolean();
+            }
+        }
+        throw new AssertionError("Hittar inte läxa " + homeworkId);
+    }
+
+    @Test
+    void parentCanRearrangePlanByHandAndItSticks() throws Exception {
+        String due = LocalDate.now().plusDays(6).toString();
+        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Dra-prov\",\"dueDate\":\"" + due + "\",\"steps\":[\"Del 1\",\"Del 2\",\"Del 3\"]}"))
+                .andReturn().getResponse().getContentAsString()).path("id").asLong();
+        JsonNode plan = json(mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("items");
+        assertThat(plan.size()).isGreaterThanOrEqualTo(2);
+        long a = plan.get(0).path("id").asLong();
+        long b = plan.get(1).path("id").asLong();
+        String day = LocalDate.now().plusDays(2).toString();
+
+        // Lägg b före a på samma dag
+        JsonNode arranged = json(mvc.perform(put("/api/plan/days/" + day).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[" + b + "," + a + "]}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        java.util.List<Long> order = new java.util.ArrayList<>();
+        arranged.forEach(n -> { if (n.path("homeworkId").asLong() == id) order.add(n.path("id").asLong()); });
+        assertThat(order).containsSubsequence(b, a);
+        assertThat(manualPlan(id)).isTrue();
+        String upcoming = mvc.perform(get("/api/plan/upcoming?days=10").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString();
+        assertThat(upcoming.indexOf("\"id\":" + b + ",")).isLessThan(upcoming.indexOf("\"id\":" + a + ","));
+
+        // Inte på provdagen, inte bakåt i tiden, inte med elevkoden
+        mvc.perform(put("/api/plan/days/" + due).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[" + a + "]}")).andExpect(status().isBadRequest());
+        mvc.perform(put("/api/plan/days/" + LocalDate.now().minusDays(1)).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[" + a + "]}")).andExpect(status().isBadRequest());
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        mvc.perform(put("/api/plan/days/" + day).header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":[" + a + "]}")).andExpect(status().isForbidden());
+
+        // Ny plan för hand → Pluggis tar över igen
+        mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token")).andExpect(status().isOk());
+        assertThat(manualPlan(id)).isFalse();
+    }
+
     @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
