@@ -213,7 +213,10 @@ views.chatt = () => {
     oninput: () => { input.style.height = 'auto'; input.style.height = Math.min(120, input.scrollHeight) + 'px'; },
     onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendText(); } } });
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const mic = Recognition ? h('button', { class: 'round', title: 'Prata', onclick: listen }, '🎤') : null;
+  // Webbläsarens taligenkänning kräver https. Över vanlig http (hemma på wifi) funkar ändå
+  // tangentbordets egen mikrofon på iPhone – den visar vi en ledtråd om i stället.
+  const mic = Recognition && window.isSecureContext ? h('button', { class: 'round', title: 'Prata', onclick: listen }, '🎤') : null;
+  if (!mic && /iPhone|iPad/.test(navigator.userAgent)) input.placeholder = 'Skriv – eller tryck 🎤 på tangentbordet';
 
   function sendText() {
     const text = input.value.trim();
