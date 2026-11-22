@@ -199,3 +199,8 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .file-add { flex: 0 0 72px; height: 92px; border-radius: 10px; border: 2px dashed var(--line); background: transparent; font-size: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--ink); }
 .file-add small { font-size: 11px; color: var(--muted); }
 .sheet .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+
+.mic-ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
+.round .mic-ico { width: 22px; height: 22px; vertical-align: middle; }
+.mic-hint { font-size: 13px; color: var(--muted); text-align: center; padding: 2px 12px 4px; }
+.mic-hint .mic-ico { color: var(--ink); }

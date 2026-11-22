@@ -470,6 +470,10 @@ function paintStatus() {
     h('div', { class: 'bar-track' }, h('div', { class: 'bar-fill', style: `width:${pct}%` })));
 }
 
+// Linjeritad mikrofon, som den på iPhones tangentbord
+const MIC_SVG = '<svg class="mic-ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+  + '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/></svg>';
+
 // ---- Vyer ----
 const views = {};
 
@@ -480,8 +484,10 @@ views.chatt = () => {
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   // Webbläsarens taligenkänning kräver https. Över vanlig http (hemma på wifi) funkar ändå
   // tangentbordets egen mikrofon på iPhone – den visar vi en ledtråd om i stället.
-  const mic = Recognition && window.isSecureContext ? h('button', { class: 'round', title: 'Prata', onclick: listen }, '🎤') : null;
-  if (!mic && /iPhone|iPad/.test(navigator.userAgent)) input.placeholder = 'Skriv – eller tryck 🎤 på tangentbordet';
+  const mic = Recognition && window.isSecureContext ? h('button', { class: 'round', title: 'Prata', onclick: listen, html: MIC_SVG }) : null;
+  const micHint = !mic && /iPhone|iPad/.test(navigator.userAgent)
+    ? h('div', { class: 'mic-hint', html: `Vill du prata? Tryck på ${MIC_SVG} på tangentbordet.` }) : null;
+  if (micHint) input.placeholder = S.name ? `Skriv eller prata, ${S.name}…` : 'Skriv eller prata…';
 
   function sendText() {
     const text = input.value.trim();
@@ -502,11 +508,8 @@ views.chatt = () => {
     mic.classList.add('rec'); mic.textContent = '●';
     rec.onresult = (e) => { input.value = e.results[0][0].transcript; sendText(); };
     rec.onerror = () => toast('Hörde inte – testa igen', true);
-    rec.onend = () => { mic.classList.remove('rec'); mic.textContent = '🎤'; };
-    rec.// Varje tryck håller ljudet upplåst (iOS stänger av det när appen legat i bakgrunden)
-document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
-document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
-start();
+    rec.onend = () => { mic.classList.remove('rec'); mic.innerHTML = MIC_SVG; };
+    rec.start();
   }
 
   const msgs = h('div', { class: 'msgs', id: 'msgs' });
@@ -518,6 +521,7 @@ start();
       h('button', { onclick: () => { if (send({ type: 'text', text: 'Kan du förhöra mig med flashkort?' })) addMsg('me', 'Kan du förhöra mig med flashkort?'); } }, '🃏 Förhör mig'),
       h('button', { onclick: () => { if (send({ type: 'text', text: 'Vad ska jag göra idag?' })) addMsg('me', 'Vad ska jag göra idag?'); } }, '📋 Vad idag?'),
       S.session ? h('button', { onclick: () => press('main', 'long', 'Avslutar passet') }, '⏹ Klar') : null),
+    micHint,
     h('div', { class: 'composer' },
       h('button', { class: 'round', title: 'Ladda upp foto eller fil', onclick: () => openUpload() }, '📎'),
       input, mic,
