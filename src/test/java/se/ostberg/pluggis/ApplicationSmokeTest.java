@@ -55,6 +55,9 @@ class ApplicationSmokeTest {
     @org.springframework.beans.factory.annotation.Autowired
     se.ostberg.pluggis.settings.StudentProfile studentProfile;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     @Autowired
     ObjectMapper mapper;
 
@@ -363,10 +366,12 @@ class ApplicationSmokeTest {
         BlockingQueue<String> tab5 = new LinkedBlockingQueue<>();
         BlockingQueue<String> phone = new LinkedBlockingQueue<>();
         StandardWebSocketClient client = new StandardWebSocketClient();
+        String kidDevice = json(me).path("deviceId").asText();
         WebSocketSession a = client.execute(collect(tab5),
-                "ws://localhost:" + port + "/ws/device?deviceId=delad&token=test-token").get(5, TimeUnit.SECONDS);
+                "ws://localhost:" + port + "/ws/device?deviceId=" + kidDevice + "&token=test-token").get(5, TimeUnit.SECONDS);
+        // Eleven ber om ett annat enhets-id – får ändå sin egen
         WebSocketSession b = client.execute(collect(phone),
-                "ws://localhost:" + port + "/ws/device?deviceId=delad&token=" + kid).get(5, TimeUnit.SECONDS);
+                "ws://localhost:" + port + "/ws/device?deviceId=nagon-annans&token=" + kid).get(5, TimeUnit.SECONDS);
         b.sendMessage(new TextMessage("{\"type\":\"ping\"}"));
         assertThat(json(phone.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("pong");
         assertThat(json(tab5.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("pong");
@@ -377,6 +382,67 @@ class ApplicationSmokeTest {
         // Ny länk → den gamla slutar fungera
         mvc.perform(post("/api/chat/link").header(TOKEN, "test-token")).andExpect(status().isOk());
         mvc.perform(get("/api/chat/me").header(TOKEN, kid)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void eachStudentOnlySeesTheirOwnHomeworkAndLogsInWithCode() throws Exception {
+        String lisa = mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Lisa\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        long lisaId = json(lisa).path("id").asLong();
+        String code = json(lisa).path("code").asText();
+        String lisaDevice = json(lisa).path("deviceId").asText();
+        assertThat(code).hasSize(5).matches("[A-Z2-9]{5}");
+        assertThat(lisaDevice).isEqualTo("lisa");
+
+        // Föräldern lägger in en läxa åt Lisa
+        mvc.perform(post("/api/homework").header(TOKEN, "test-token").header("X-Pluggis-Student", String.valueOf(lisaId))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Lisas glosor\"}"))
+                .andExpect(status().isCreated());
+        // och en åt första eleven
+        mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Första elevens matte\"}"))
+                .andExpect(status().isCreated());
+
+        String asLisa = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, code.toLowerCase()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(asLisa).contains("Lisas glosor").doesNotContain("Första elevens matte");
+        String asParentLisa = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token")
+                        .header("X-Pluggis-Student", String.valueOf(lisaId)))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(asParentLisa).contains("Lisas glosor").doesNotContain("Första elevens matte");
+        String asParentFirst = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(asParentFirst).contains("Första elevens matte").doesNotContain("Lisas glosor");
+
+        // Eleven kan inte låtsas vara någon annan med headern
+        String sneaky = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, code)
+                        .header("X-Pluggis-Student", String.valueOf(se.ostberg.pluggis.student.StudentContext.defaultId())))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(sneaky).doesNotContain("Första elevens matte");
+
+        String me = mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString();
+        assertThat(json(me).path("name").asText()).isEqualTo("Lisa");
+        assertThat(json(me).path("deviceId").asText()).isEqualTo("lisa");
+        mvc.perform(get("/api/students").header(TOKEN, code)).andExpect(status().isForbidden());
+
+        // Gissningsspärr: efter 20 fel från samma adress blir det 429
+        for (int i = 0; i < 20; i++) {
+            mvc.perform(get("/api/homework").header(TOKEN, "XXXX" + (char) ('A' + i)).with(r -> { r.setRemoteAddr("10.9.9.9"); return r; }))
+                    .andExpect(status().isUnauthorized());
+        }
+        mvc.perform(get("/api/homework").header(TOKEN, "ZZZZZ").with(r -> { r.setRemoteAddr("10.9.9.9"); return r; }))
+                .andExpect(status().is(429));
+
+        // Ny kod → den gamla slutar fungera; ta bort eleven → hennes läxor försvinner
+        String renewed = mvc.perform(post("/api/students/" + lisaId + "/code").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(json(renewed).path("code").asText()).isNotEqualTo(code);
+        mvc.perform(get("/api/chat/me").header(TOKEN, code)).andExpect(status().isUnauthorized());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/students/" + lisaId)
+                .header(TOKEN, "test-token")).andExpect(status().isNoContent());
+        Integer left = jdbc.queryForObject("select count(*) from homework where student_key = ?", Integer.class, String.valueOf(lisaId));
+        assertThat(left).isZero();
     }
 
     private static TextWebSocketHandler collect(BlockingQueue<String> into) {
