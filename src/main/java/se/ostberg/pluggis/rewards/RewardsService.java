@@ -115,7 +115,22 @@ public class RewardsService {
     public void onPlanItemUndone(String deviceId, long planItemId) {
         if (deviceId != null) {
             points.deleteByDeviceIdAndRefKey(deviceId, "plan:" + planItemId);
+            points.deleteByDeviceIdAndRefKey(deviceId, "day:" + today()); // dagen är inte längre klar
         }
+    }
+
+    /** Hela dagens plan klar – en gång per dag. Returnerar true om bonusen delades ut nu. */
+    @Transactional
+    public boolean onDayCompleted(String deviceId) {
+        if (deviceId == null) {
+            return false;
+        }
+        String ref = "day:" + today();
+        if (points.countByDeviceIdAndRefKeyAndAwardedOn(deviceId, ref, today()) > 0) {
+            return false;
+        }
+        award(deviceId, PointEvent.Kind.BONUS, RewardRules.DAY_COMPLETE, "Hela dagens plan klar! 🎉", ref);
+        return true;
     }
 
     /** Föräldern tar bort en enskild poänghändelse (t.ex. felaktig bonus). */

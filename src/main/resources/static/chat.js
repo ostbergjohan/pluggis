@@ -541,12 +541,29 @@ start();
   }
 };
 
+/** Nedräkning och hur långt man kommit, för ett prov/en läxa. */
+function progressCard(p) {
+  const when = p.daysLeft === 0 ? 'idag' : p.daysLeft === 1 ? 'imorgon' : p.daysLeft == null ? '' : `om ${p.daysLeft} dagar`;
+  return h('div', { class: 'prog' },
+    h('div', { class: 'prog-head' },
+      h('span', { class: 'tag' + (p.kind === 'TEST' ? ' test' : '') }, p.kind === 'TEST' ? 'Prov' : 'Läxa'),
+      h('span', { class: 'prog-title' }, p.title),
+      h('span', { class: 'prog-when' }, when)),
+    h('div', { class: 'prog-track' }, h('div', { class: 'prog-fill', style: `width:${p.percent}%` })),
+    h('div', { class: 'meta' }, `${p.percent} % klart · ${p.doneItems} av ${p.totalItems} moment`,
+      p.behind ? ` · ${p.behind} ligger efter` : ''));
+}
+
 views.plan = async () => {
   const page = h('div', { class: 'page' }, h('h2', {}, 'Planen'));
-  const [today, upcoming] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=14')]);
+  const [today, upcoming, progress] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=14'),
+    api('/api/plan/progress').catch(() => [])]);
+  const allDone = today.length > 0 && today.every(t => t.item.done);
+  if (allDone) page.append(h('div', { class: 'day-done' }, '🎉 Allt för idag är klart! Bra jobbat.'));
   page.append(h('h3', {}, 'Idag'), today.length
-    ? h('div', { class: 'box' }, today.map(t => planRow(t.item, t.homeworkTitle, t.overdue)))
+    ? h('div', { class: 'box', id: 'todayBox' }, today.map(t => planRow(t.item, t.homeworkTitle, t.overdue)))
     : h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget planerat idag 🎉')));
+  if (progress.length) page.append(h('h3', {}, 'På väg mot'), h('div', { class: 'progs' }, progress.slice(0, 5).map(progressCard)));
 
   const todayStr = todayIso();
   const later = new Map();
@@ -572,7 +589,13 @@ views.plan = async () => {
       try {
         await api(`/api/plan/items/${item.id}/done?deviceId=${enc(S.deviceId)}`, { method: 'POST' });
         item.done = true; row.classList.add('done'); tick.textContent = '✓'; tick.disabled = true;
-        toast('Bra jobbat! +3 poäng'); refreshPoints();
+        refreshPoints();
+        const box = document.getElementById('todayBox');
+        const rest = box ? [...box.querySelectorAll('.row')].filter(r => !r.classList.contains('done')).length : 1;
+        if (box && box.contains(row) && rest === 0) {
+          toast('🎉 Hela dagen klar! +3 och +5 i bonus');
+          setTimeout(() => show('plan'), 1200);
+        } else toast('Bra jobbat! +3 poäng');
       } catch (e) { toast(e.message, true); }
     });
     return row;
@@ -692,6 +715,10 @@ async function homeworkDetail(id) {
   if (!x) { page.append(h('div', { class: 'empty' }, 'Hittade inte läxan.')); return page; }
   page.append(h('h2', { style: 'margin-top:12px' }, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
     h('div', { class: 'meta', style: 'color:var(--muted)' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · ')));
+  try {
+    const prog = (await api('/api/plan/progress')).find(p => p.homeworkId === x.id);
+    if (prog) page.append(h('div', { style: 'margin-top:10px' }, progressCard(prog)));
+  } catch { /* inget framsteg */ }
   if (x.description) page.append(h('p', { style: 'white-space:pre-wrap' }, x.description));
   if ((x.steps || []).length) page.append(h('h3', {}, 'Det här ingår'), h('div', { class: 'box' }, x.steps.map(st => h('div', { class: 'row' }, st))));
 

@@ -13,7 +13,8 @@ import java.util.Map;
 @RequestMapping("/api/student")
 public class StudentController {
 
-    public record Update(String name, String tone, String extra, Integer maxMinutesPerDay, java.util.List<String> studyDays) {
+    public record Update(String name, String tone, String extra, Integer maxMinutesPerDay, java.util.List<String> studyDays,
+                         String studyTime, String studyCue) {
     }
 
     private final StudentProfile profile;
@@ -36,12 +37,30 @@ public class StudentController {
         m.put("tones", StudentProfile.TONES.values());
         m.put("maxMinutesPerDay", planning.maxMinutesPerDay());
         m.put("studyDays", planning.studyDays().stream().sorted().map(Enum::name).toList());
+        var st = students.current();
+        m.put("studyTime", st.studyTimeOrDefault().toString());
+        m.put("studyCue", st.getStudyCue());
         return m;
     }
 
     @PutMapping
     public Map<String, Object> put(@RequestBody Update body) {
         profile.update(body.name(), body.tone(), body.extra());
+        if (body.studyTime() != null || body.studyCue() != null) {
+            var s = students.current();
+            if (body.studyTime() != null) {
+                try {
+                    s.setStudyTime(java.time.LocalTime.parse(body.studyTime().trim()).withSecond(0).toString());
+                } catch (java.time.format.DateTimeParseException e) {
+                    throw new IllegalArgumentException("Pluggtiden ska vara HH:MM, t.ex. 16:15");
+                }
+            }
+            if (body.studyCue() != null) {
+                String c = body.studyCue().replaceAll("\\s+", " ").trim();
+                s.setStudyCue(c.length() > 80 ? c.substring(0, 80) : c);
+            }
+            students.save(s);
+        }
         if (body.maxMinutesPerDay() != null || body.studyDays() != null) {
             var s = students.current();
             if (body.maxMinutesPerDay() != null) {

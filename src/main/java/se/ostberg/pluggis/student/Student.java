@@ -43,6 +43,18 @@ public class Student {
     /** Planering: högst så många minuter plugg per dag (null = standard från konfigurationen). */
     private Integer maxMinutesPerDay;
 
+    /** Pluggtid ("då"): t.ex. "16:15". Påminnelsen kommer då, och kalenderpasset läggs då. */
+    @Column(length = 5)
+    private String studyTime;
+
+    /** Om-så-plan ("när"): t.ex. "efter mellanmålet". */
+    @Column(length = 80)
+    private String studyCue;
+
+    /** Google Kalender att lägga planen i (kalender-id), eller null. */
+    @Column(length = 200)
+    private String googleCalendarId;
+
     /** Planering: pluggdagar, t.ex. "MONDAY,TUESDAY,SUNDAY" (null = standard). */
     @Column(length = 80)
     private String studyDays;
@@ -80,6 +92,19 @@ public class Student {
     public void setExtra(String extra) { this.extra = extra; }
     public void setCalendarUrl(String calendarUrl) { this.calendarUrl = calendarUrl; }
     public void setCalendarOnlySchoolwork(boolean only) { this.calendarOnlySchoolwork = only; }
+    public java.time.LocalTime studyTimeOrDefault() {
+        try {
+            return studyTime == null || studyTime.isBlank() ? java.time.LocalTime.of(16, 30) : java.time.LocalTime.parse(studyTime);
+        } catch (java.time.format.DateTimeParseException e) {
+            return java.time.LocalTime.of(16, 30);
+        }
+    }
+    public String getStudyTime() { return studyTime; }
+    public void setStudyTime(String t) { this.studyTime = t; }
+    public String getStudyCue() { return studyCue == null ? "" : studyCue; }
+    public void setStudyCue(String c) { this.studyCue = c; }
+    public String getGoogleCalendarId() { return googleCalendarId; }
+    public void setGoogleCalendarId(String id) { this.googleCalendarId = id; }
     public Integer getMaxMinutesPerDay() { return maxMinutesPerDay; }
     public void setMaxMinutesPerDay(Integer m) { this.maxMinutesPerDay = m; }
     public String getStudyDays() { return studyDays; }

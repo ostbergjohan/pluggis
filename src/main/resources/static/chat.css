@@ -180,3 +180,12 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .mat-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 .mat-text { white-space: pre-wrap; font-size: 16px; line-height: 1.5; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sheet .zoomed { max-width: 100%; max-height: 100%; margin: auto; display: block; }
+
+.progs { display: flex; flex-direction: column; gap: 8px; }
+.prog { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.prog-head { display: flex; gap: 8px; align-items: center; }
+.prog-title { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prog-when { color: var(--accent); font-weight: 700; font-size: 14px; flex: none; }
+.prog-track { height: 8px; background: var(--line); border-radius: 4px; margin: 8px 0 6px; overflow: hidden; }
+.prog-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+.day-done { background: var(--accent); color: #fff; font-weight: 700; padding: 14px; border-radius: 14px; text-align: center; margin-bottom: 6px; }

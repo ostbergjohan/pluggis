@@ -13,8 +13,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Påminnelser på Tab5: en på eftermiddagen ("dags att börja") och en mjuk knuff på kvällen
- * om dagens plan inte är påbörjad. Tiderna styrs av pluggis.reminders.*-cron.
+ * Påminnelser på Tab5 och i mobilchatten: vid elevens pluggtid ("dags att börja") och en mjuk knuff
+ * två timmar senare om dagens plan inte är påbörjad. Pluggtid och "efter ..." ställs per elev.
  */
 @Service
 public class ReminderService {
@@ -38,40 +38,58 @@ public class ReminderService {
         this.props = props;
     }
 
-    @Scheduled(cron = "${pluggis.reminders.start-cron:0 30 16 * * MON-FRI}", zone = "${pluggis.timezone:Europe/Stockholm}")
-    public void startReminder() {
+    /** Skickat idag: "deviceId|datum|start/nudge" – så att varje påminnelse bara kommer en gång. */
+    private final java.util.Set<String> sent = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /**
+     * Varje minut: för varje ansluten enhet, vid elevens pluggtid (standard 16:30) en påminnelse att börja,
+     * och två timmar senare en mjuk knuff om inget pass startats. Bara på elevens pluggdagar.
+     */
+    @Scheduled(cron = "0 * * * * *", zone = "${pluggis.timezone:Europe/Stockholm}")
+    public void tick() {
         if (!enabled()) {
             return;
         }
-        // Varje ansluten enhet får påminnelsen för sin egen elev
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(props.zone());
+        java.time.LocalTime minute = now.toLocalTime().withSecond(0).withNano(0);
+        LocalDate day = now.toLocalDate();
         for (String deviceId : registry.connected()) {
             se.ostberg.pluggis.student.StudentContext.run(studentFor(deviceId), () -> {
-                String text = startText(planning.today(), dueTomorrow());
-                if (text != null && !sessions.startedToday(deviceId, props.zone())) {
-                    registry.send(deviceId, new DeviceMessages.Reminder(text));
+                var student = students.current();
+                if (!planning.studyDays().contains(day.getDayOfWeek())) {
+                    return;
+                }
+                java.time.LocalTime start = student.studyTimeOrDefault();
+                if (minute.equals(start) && sent.add(deviceId + "|" + day + "|start")) {
+                    startReminder(deviceId, student.getStudyCue());
+                } else if (minute.equals(start.plusHours(2)) && sent.add(deviceId + "|" + day + "|nudge")) {
+                    nudge(deviceId);
                 }
             });
+        }
+        if (sent.size() > 500) {
+            sent.removeIf(k -> !k.contains("|" + day + "|"));
+        }
+    }
+
+    void startReminder(String deviceId, String cue) {
+        String text = startText(planning.today(), dueTomorrow());
+        if (text != null && !sessions.startedToday(deviceId, props.zone())) {
+            String lead = cue == null || cue.isBlank() ? "" : "Nu är det dags, " + cue.trim() + " som vi sa. ";
+            registry.send(deviceId, new DeviceMessages.Reminder(lead + text));
+        }
+    }
+
+    void nudge(String deviceId) {
+        if (!planning.today().isEmpty() && !sessions.startedToday(deviceId, props.zone())) {
+            registry.send(deviceId, new DeviceMessages.Reminder(
+                    "Hej! Ett litet pass på 10 minuter räcker för idag. Tryck på blå knappen så hjälper jag dig börja."));
         }
     }
 
     private Long studentFor(String deviceId) {
         return students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId)
                 .orElse(se.ostberg.pluggis.student.StudentContext.defaultId());
-    }
-
-    @Scheduled(cron = "${pluggis.reminders.nudge-cron:0 30 18 * * MON-FRI}", zone = "${pluggis.timezone:Europe/Stockholm}")
-    public void nudge() {
-        if (!enabled()) {
-            return;
-        }
-        for (String deviceId : registry.connected()) {
-            se.ostberg.pluggis.student.StudentContext.run(studentFor(deviceId), () -> {
-                if (!planning.today().isEmpty() && !sessions.startedToday(deviceId, props.zone())) {
-                    registry.send(deviceId, new DeviceMessages.Reminder(
-                            "Hej! Ett litet pass på 10 minuter räcker för idag. Tryck på blå knappen så hjälper jag dig börja."));
-                }
-            });
-        }
     }
 
     /** Ren textlogik – testbar utan Spring. */

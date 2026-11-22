@@ -24,7 +24,7 @@ public class ChatAccess {
     /** Metod + sökväg som elevlänken får använda. */
     private static final Pattern[] ALLOWED = {
             Pattern.compile("GET /api/chat/me"),
-            Pattern.compile("GET /api/plan/(today|upcoming)"),
+            Pattern.compile("GET /api/plan/(today|upcoming|progress)"),
             Pattern.compile("POST /api/plan/items/\\d+/done"),
             Pattern.compile("GET /api/homework"),
             Pattern.compile("GET /api/homework/\\d+/material"),

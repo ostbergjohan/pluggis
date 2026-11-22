@@ -68,6 +68,11 @@ public class PlanningController {
         return Map.of("started", true);
     }
 
+    @GetMapping("/progress")
+    public List<PlanningService.Progress> progress() {
+        return planning.progress();
+    }
+
     /** Ångra avbockning (bara föräldern – elevkoden når inte den här). */
     @PostMapping("/items/{itemId}/undo")
     public ResponseEntity<PlanItem> undo(@PathVariable long itemId, @RequestParam(required = false) String deviceId) {

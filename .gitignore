@@ -6,3 +6,5 @@ data/
 *.iml
 .vscode/
 .DS_Store
+secrets/*
+!secrets/README.md

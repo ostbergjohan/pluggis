@@ -37,9 +37,7 @@ pluggis:
     sync-cron: "0 5 * * * *"
   reminders:
     enabled: ${PLUGGIS_REMINDERS_ENABLED:true}
-    # sek min tim dag mån veckodag (Europe/Stockholm)
-    start-cron: "0 30 16 * * MON-FRI"
-    nudge-cron: "0 30 18 * * MON-FRI"
+    # Tiden ställs per elev (Inställningar → Planering → pluggtid, standard 16:30); knuffen kommer 2 h senare.
   rewards:
     # Poäng räknas alltid. Med enabled=true nämner coachen också kronor.
     enabled: ${PLUGGIS_REWARDS_ENABLED:true}
@@ -87,6 +85,11 @@ pluggis:
     # pluggis-speech (se speech/). Tomt = ingen ljudväg.
     base-url: ${PLUGGIS_SPEECH_URL:}
     timeout-seconds: 30
+  # Valfritt: Google Kalender – planen som ett pass per dag. Tjänstekontots JSON-nyckel som fil eller text.
+  google:
+    service-account-file: ${PLUGGIS_GOOGLE_SA_FILE:}
+    service-account-json: ${PLUGGIS_GOOGLE_SA_JSON:}
+    days-ahead: 21
   # Valfritt: Azures neurala svenska röster (Sofie, Hillevi, Mattias). Skapa en Speech-resurs med
   # prisnivå Free (F0) – 0,5 miljoner tecken/månad gratis, kan inte debiteras. Piper tar över vid fel.
   azure-tts:

@@ -62,6 +62,12 @@ public class PlanningService {
     private final ObjectMapper mapper;
 
     private final se.ostberg.pluggis.student.StudentService students;
+    private org.springframework.context.ApplicationEventPublisher events = e -> { };
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setEvents(org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
+    }
 
     public PlanningService(PlanItemRepository repo, HomeworkService homework, RewardsService rewards,
                            ClaudeClient claude, Prompts prompts, PluggisProperties props, ObjectMapper mapper,
@@ -153,11 +159,17 @@ public class PlanningService {
         List<PlanItem> saved = repo.saveAll(drafts.stream()
                 .map(d -> new PlanItem(homeworkId, d.date(), d.task(), d.minutes(), d.type()))
                 .toList());
+        changed();
         return new PlanResult(h, saved, note);
     }
 
     public void deleteForHomework(long homeworkId) {
         repo.deleteAllForHomework(homeworkId);
+        changed();
+    }
+
+    private void changed() {
+        events.publishEvent(new PlanChanged(se.ostberg.pluggis.student.StudentContext.currentOrDefault()));
     }
 
     /** Planera om bara om det redan finns en plan (t.ex. när kalendern flyttat datumet). */
@@ -202,6 +214,7 @@ public class PlanningService {
             if (item.isDone()) {
                 item.markUndone();
                 rewards.onPlanItemUndone(deviceId, item.getId());
+                changed();
             }
             return item;
         });
@@ -214,7 +227,14 @@ public class PlanningService {
                 item.markDone(java.time.Instant.now());
                 if (deviceId != null) {
                     rewards.onPlanItemDone(deviceId, item.getId(), item.getTask());
+                    // Allt som skulle göras till och med idag är klart → dagen klar
+                    LocalDate today = todayDate();
+                    if (!item.getPlanDate().isAfter(today)
+                            && repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today).isEmpty()) {
+                        rewards.onDayCompleted(deviceId);
+                    }
                 }
+                changed();
             }
             return item;
         });
@@ -223,10 +243,21 @@ public class PlanningService {
     @Transactional(readOnly = true)
     public String summaryForPrompt() {
         List<TodayItem> items = today();
-        if (items.isEmpty()) {
-            return "Inget planerat idag.";
-        }
         StringBuilder sb = new StringBuilder();
+        for (Progress p : progress()) {
+            sb.append("- ").append(p.kind() == Homework.Kind.TEST ? "Prov " : "Läxa ").append(p.title()).append(": ")
+              .append(p.daysLeft() == null ? "" : p.daysLeft() == 0 ? "idag, " : p.daysLeft() == 1 ? "imorgon, "
+                      : "om " + p.daysLeft() + " dagar, ")
+              .append(p.percent()).append(" % klart").append(p.behind() > 0 ? ", " + p.behind() + " moment ligger efter" : "")
+              .append('\n');
+        }
+        if (!sb.isEmpty()) {
+            sb.insert(0, "Framsteg (berätta gärna hur långt eleven kommit – det motiverar):\n").append('\n');
+        }
+        if (items.isEmpty()) {
+            return sb.append("Inget planerat idag.").toString();
+        }
+        sb.append("Idag:\n");
         for (TodayItem t : items) {
             sb.append("- [moment ").append(t.item().getId()).append("] ")
               .append(t.item().getTask())
@@ -239,6 +270,80 @@ public class PlanningService {
             sb.append(t.overdue() ? ", ligger efter" : "").append(")\n");
         }
         return sb.toString().trim();
+    }
+
+    /** Hur långt en läxa/ett prov har kommit i planen. */
+    public record Progress(long homeworkId, String title, Homework.Kind kind, LocalDate dueDate, Long daysLeft,
+                           int doneItems, int totalItems, int percent, int minutesLeft, int behind) {
+    }
+
+    /** Framsteg för aktuell elevs kommande läxor och prov som har en plan, närmast först. */
+    @Transactional(readOnly = true)
+    public List<Progress> progress() {
+        LocalDate today = todayDate();
+        List<Progress> out = new java.util.ArrayList<>();
+        for (Homework h : homework.openSchoolwork()) {
+            if (h.getDueDate() != null && h.getDueDate().isBefore(today)) {
+                continue;
+            }
+            List<PlanItem> items = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId());
+            if (items.isEmpty()) {
+                continue;
+            }
+            int total = items.stream().mapToInt(PlanItem::getMinutes).sum();
+            int done = items.stream().filter(PlanItem::isDone).mapToInt(PlanItem::getMinutes).sum();
+            int doneItems = (int) items.stream().filter(PlanItem::isDone).count();
+            int behind = (int) items.stream().filter(i -> !i.isDone() && i.getPlanDate().isBefore(today)).count();
+            out.add(new Progress(h.getId(), h.getTitle(), h.getKind(), h.getDueDate(),
+                    h.getDueDate() == null ? null : java.time.temporal.ChronoUnit.DAYS.between(today, h.getDueDate()),
+                    doneItems, items.size(), total == 0 ? 0 : Math.round(100f * done / total), total - done, behind));
+        }
+        out.sort(java.util.Comparator.comparing(Progress::dueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+        return out;
+    }
+
+    /**
+     * Varje natt: läxor och prov med moment som ligger efter (och datum kvar) planeras om, så att det
+     * som missats sprids ut inom dagens max i stället för att staplas på dagen efter.
+     */
+    @org.springframework.scheduling.annotation.Scheduled(cron = "${pluggis.planning.replan-cron:0 30 3 * * *}",
+            zone = "${pluggis.timezone:Europe/Stockholm}")
+    public void nightlyReplan() {
+        for (var student : students.all()) {
+            se.ostberg.pluggis.student.StudentContext.run(student.getId(), () -> {
+                int n = replanBehind();
+                if (n > 0) {
+                    log.info("Natt-omplanering elev {}: {} planer gjorda om", student.getId(), n);
+                }
+            });
+        }
+    }
+
+    /** Planerar om aktuell elevs planer som har moment som ligger efter. Returnerar antal. */
+    public int replanBehind() {
+        LocalDate today = todayDate();
+        int n = 0;
+        for (Homework h : homework.openSchoolwork()) {
+            if (h.getDueDate() == null || h.getDueDate().isBefore(today)) {
+                continue;
+            }
+            boolean behind = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).stream()
+                    .anyMatch(i -> !i.isDone() && i.getPlanDate().isBefore(today));
+            if (!behind) {
+                continue;
+            }
+            try {
+                plan(h.getId());
+                n++;
+            } catch (RuntimeException e) {
+                log.warn("Kunde inte planera om läxa {}: {}", h.getId(), e.toString());
+            }
+        }
+        return n;
+    }
+
+    /** Publiceras när en elevs plan har ändrats (för t.ex. Google Kalender). */
+    public record PlanChanged(Long studentId) {
     }
 
     // ---- intern ----
@@ -258,6 +363,9 @@ public class PlanningService {
         }
         ask.append("Kortlek finns: ").append(h.getDeckId() != null ? "ja" : "nej").append('\n');
         ask.append("Max minuter per dag (allt plugg den dagen, även andra läxor): ").append(maxMinutesPerDay()).append('\n');
+        var st = students.current();
+        ask.append("Elevens pluggtid: ").append(st.getStudyCue().isBlank() ? "" : st.getStudyCue() + ", ")
+                .append("ca ").append(st.studyTimeOrDefault()).append('\n');
         ask.append("Dagar att använda: ");
         days.forEach(d -> ask.append(d).append(" (").append(DAY_LABEL.format(d)).append("), "));
         ask.append('\n');

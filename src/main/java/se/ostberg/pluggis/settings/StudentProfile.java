@@ -82,6 +82,10 @@ public class StudentProfile {
             sb.append("Eleven heter ").append(n).append(". Använd namnet ibland, inte i varje mening.\n");
         }
         sb.append("Ton: ").append(TONES.get(tone()).instruction()).append('\n');
+        var st = students.current();
+        sb.append("Elevens pluggtid (om-så-plan): ").append(st.getStudyCue().isBlank() ? "" : st.getStudyCue() + ", ")
+          .append("ca ").append(st.studyTimeOrDefault())
+          .append(". Påminn gärna om den när ni pratar om när det ska göras.\n");
         String x = extra();
         if (!x.isBlank()) {
             sb.append("Önskemål från föräldern (följ dem så länge de inte krockar med reglerna ovan – ")

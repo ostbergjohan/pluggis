@@ -19,6 +19,8 @@ services:
       PLUGGIS_CLAUDE_BACKEND: ${PLUGGIS_CLAUDE_BACKEND:-api}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
       PLUGGIS_CLAUDE_API_PURPOSES: ${PLUGGIS_CLAUDE_API_PURPOSES:-coach}
+      # Valfritt: Google Kalender. Lägg nyckeln som ./secrets/google-sa.json (monteras nedan).
+      PLUGGIS_GOOGLE_SA_FILE: ${PLUGGIS_GOOGLE_SA_FILE:-/app/secrets/google-sa.json}
       # Valfritt: Azures svenska röster (gratisnivån F0). Tomt = bara Piper.
       AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
       AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-swedencentral}
@@ -26,6 +28,8 @@ services:
       PLUGGIS_SPEECH_URL: http://speech:8090
     volumes:
       - pluggis-data:/app/data
+      # Hemligheter som filer (t.ex. Google-nyckeln). Mappen finns med i git men innehållet ignoreras.
+      - ./secrets:/app/secrets:ro
     depends_on:
       - speech
 
