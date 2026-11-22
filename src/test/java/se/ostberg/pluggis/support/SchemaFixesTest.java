@@ -37,7 +37,7 @@ class SchemaFixesTest {
         new SchemaFixes(jdbc).run(new DefaultApplicationArguments());
         new SchemaFixes(jdbc).run(new DefaultApplicationArguments()); // tål att köras igen
 
-        jdbc.update("insert into homework values (2, 'OTHER')");
+        jdbc.update("insert into homework (id, kind) values (2, 'OTHER')");
         assertThat(jdbc.queryForObject("select kind from homework where id = 1", String.class)).isEqualTo("TEST");
         assertThat(jdbc.queryForObject("select kind from homework where id = 2", String.class)).isEqualTo("OTHER");
     }
