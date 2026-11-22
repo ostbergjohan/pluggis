@@ -82,7 +82,7 @@ function rel(iso) {
 }
 const dayName = (iso) => {
   const n = daysUntil(iso);
-  if (n === 0) return 'Idag'; if (n === 1) return 'Imorgon';
+  if (n === 0) return 'Idag'; if (n === 1) return 'Imorgon'; if (n === -1) return 'Igår';
   return new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' }).format(parseDay(iso));
 };
 
@@ -560,6 +560,76 @@ views.laxor = async () => {
   return page;
 };
 
+views.poang = async () => {
+  const [w, events] = await Promise.all([
+    api(`/api/devices/${enc(S.deviceId)}/rewards`),
+    api(`/api/devices/${enc(S.deviceId)}/rewards/events`).catch(() => []),
+  ]);
+  setPoints(w.weekPoints);
+  const kr = (n) => { const v = Number(n || 0); return `${v.toLocaleString('sv-SE', { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 })} kr`; };
+  const page = h('div', { class: 'page' });
+
+  const card = h('div', { class: 'score' },
+    h('div', { class: 'big-num' }, w.weekPoints),
+    h('div', { class: 'unit' }, 'poäng den här veckan'));
+  if (w.moneyEnabled && Number(w.sekPerPoint) > 0) {
+    const capPoints = Number(w.weeklyCapSek) / Number(w.sekPerPoint);
+    const pct = capPoints > 0 ? Math.min(100, Math.round(100 * w.weekPoints / capPoints)) : 0;
+    card.append(h('div', { class: 'money' }, `= ${kr(w.earnedSek)}`),
+      h('div', { class: 'track' }, h('div', { class: 'fill', style: `width:${pct}%` })),
+      h('div', { class: 'small' }, pct >= 100 ? `Max ${kr(w.weeklyCapSek)} nått den här veckan! 🎉`
+        : `${Math.max(0, Math.ceil(capPoints - w.weekPoints))} poäng kvar till max ${kr(w.weeklyCapSek)}`));
+  }
+  page.append(card);
+
+  page.append(h('div', { class: 'stats' },
+    h('div', { class: 'stat' }, h('b', {}, `${w.streakDays > 0 ? '🔥 ' : ''}${w.streakDays}`), h('span', {}, w.streakDays === 1 ? 'dag i rad' : 'dagar i rad')),
+    h('div', { class: 'stat' }, h('b', {}, w.allTimePoints), h('span', {}, 'poäng totalt')),
+    w.moneyEnabled
+      ? h('div', { class: 'stat' }, h('b', {}, kr(w.unpaidSek)), h('span', {}, 'kvar att få'))
+      : h('div', { class: 'stat' }, h('b', {}, events.filter(e => e.awardedOn === todayIso()).reduce((s, e) => s + e.points, 0)), h('span', {}, 'poäng idag'))));
+
+  // Senaste – grupperat per dag
+  page.append(h('h3', {}, 'Senaste'));
+  if (!events.length) {
+    page.append(h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inga poäng än – tryck ▶ Börja plugga i chatten så kör vi!')));
+  } else {
+    const byDay = new Map();
+    for (const e of events.slice(0, 40)) {
+      const d = e.awardedOn || (e.createdAt || '').slice(0, 10);
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(e);
+    }
+    for (const [day, list] of byDay) {
+      const sum = list.reduce((s, e) => s + e.points, 0);
+      page.append(h('div', { style: 'display:flex;justify-content:space-between;margin:14px 2px 6px;color:var(--muted);font-size:14px;font-weight:600' },
+        h('span', { style: 'text-transform:capitalize' }, dayName(day)), h('span', {}, `+${sum}`)),
+        h('div', { class: 'box' }, list.map(e => h('div', { class: 'row' },
+          h('div', { class: 'grow' }, e.reason || kindLabel(e.kind)),
+          h('div', { class: 'plus' }, `+${e.points}`)))));
+    }
+  }
+
+  // Så får man poäng
+  page.append(h('h3', {}, 'Så får du poäng'), h('div', { class: 'box rules' },
+    rule('⏱ Varje minut du pluggar', '+1'),
+    rule('✅ Höll hela passet', '+5'),
+    rule('🗓 Bockat av i planen', '+3'),
+    rule('📚 Läxa klar', '+10'),
+    rule('🃏 Försök på ett flashkort', '+1'),
+    rule('🎯 Rätt svar på kortet', '+2'),
+    rule('🔥 Dagar i rad', '+3 per dag'),
+    h('div', { class: 'row', style: 'color:var(--muted);font-size:13px' }, 'Poäng dras aldrig av. Det är att sätta sig och försöka som räknas mest.')));
+  return page;
+
+  function rule(text, pts) { return h('div', { class: 'row' }, h('div', { class: 'grow' }, text), h('div', { class: 'plus' }, pts)); }
+};
+
+function kindLabel(kind) {
+  return ({ CARD_ATTEMPT: 'Flashkort', CARD_CORRECT: 'Rätt på flashkort', SESSION_MINUTES: 'Pluggminuter', SESSION_COMPLETED: 'Höll hela passet',
+    HOMEWORK_DONE: 'Läxa klar', PLAN_ITEM_DONE: 'Bockat av i planen', STREAK: 'Dagar i rad', BONUS: 'Bonus' })[kind] || 'Poäng';
+}
+
 // ---- Uppladdning ----
 async function openUpload(homeworkId) {
   const picker = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none' });
@@ -638,6 +708,7 @@ async function show(tab) {
   }
 }
 document.querySelectorAll('#tabbar button').forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
+$('#points').addEventListener('click', () => show('poang'));
 
 // ---- Start ----
 function askForLink() {

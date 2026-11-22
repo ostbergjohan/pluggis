@@ -33,7 +33,7 @@ public class RewardsService {
     public record WeekSummary(
             String deviceId, LocalDate weekStart, long weekPoints, long allTimePoints, int streakDays,
             BigDecimal earnedSek, BigDecimal paidSek, BigDecimal unpaidSek,
-            BigDecimal sekPerPoint, BigDecimal weeklyCapSek) {
+            BigDecimal sekPerPoint, BigDecimal weeklyCapSek, boolean moneyEnabled) {
     }
 
     private final PointEventRepository points;
@@ -148,7 +148,7 @@ public class RewardsService {
         int streak = RewardRules.streak(today(),
                 points.daysWithKind(deviceId, PointEvent.Kind.SESSION_MINUTES, today().minusDays(60)));
         return new WeekSummary(deviceId, start, weekPoints, points.sumAllPoints(deviceId), streak,
-                earned, paid, unpaid, rate(), cap());
+                earned, paid, unpaid, rate(), cap(), props.rewards() != null && props.rewards().enabled());
     }
 
     @Transactional(readOnly = true)
