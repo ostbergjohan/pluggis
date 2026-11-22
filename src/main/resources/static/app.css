@@ -256,3 +256,8 @@ code.sa { font-size: 13px; background: var(--bg); border: 1px solid var(--line);
 .cost-bar-sub { background: var(--accent); opacity: .45; }
 .cost-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
 .cost-dot.api { background: var(--blue); } .cost-dot.sub { background: var(--accent); opacity: .45; }
+
+.mode-list { display: grid; gap: 8px; }
+.mode-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.mode-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.mode-opt input { margin-top: 4px; }

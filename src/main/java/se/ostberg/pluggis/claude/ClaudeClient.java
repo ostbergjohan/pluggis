@@ -49,8 +49,8 @@ public class ClaudeClient {
     @org.springframework.beans.factory.annotation.Autowired
     public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props,
                         ClaudeCodeRunner claudeCode) {
-        this.claudeCode = claudeCode != null && claudeCode.enabled() ? claudeCode : null;
-        org.slf4j.LoggerFactory.getLogger(ClaudeClient.class).info(this.claudeCode == null
+        this.claudeCode = claudeCode;
+        org.slf4j.LoggerFactory.getLogger(ClaudeClient.class).info(this.claudeCode == null || !this.claudeCode.enabled()
                 ? "Claude körs via API-nyckel"
                 : this.claudeCode.mode().equals("hybrid")
                 ? "Claude körs hybrid: rösten via API-nyckel, foto/planer/flashkort/material via Claude Code på ditt abonnemang"
@@ -206,6 +206,16 @@ public class ClaudeClient {
         return claudeCode != null ? claudeCode.mode() : "api";
     }
 
+    public boolean hasApiKey() {
+        return notBlank(cfg.apiKey());
+    }
+
+    public long fallbacks() {
+        return fallbacks.get();
+    }
+
+    private final java.util.concurrent.atomic.AtomicLong fallbacks = new java.util.concurrent.atomic.AtomicLong();
+
     private boolean viaClaudeCode(String purpose) {
         return claudeCode != null && claudeCode.useFor(purpose);
     }
@@ -228,6 +238,7 @@ public class ClaudeClient {
                 org.slf4j.LoggerFactory.getLogger(ClaudeClient.class)
                         .warn("Claude Code misslyckades för {} ({}) – tar det med API-nyckeln", purpose, e.getMessage());
                 meters.counter("pluggis.claude.fallback", "purpose", purpose).increment();
+                fallbacks.incrementAndGet();
                 return api(request);
             }
             throw e;

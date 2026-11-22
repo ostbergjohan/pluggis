@@ -98,6 +98,21 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void claudeModeCanBeCheckedAndRefusesModesThatCannotWork() throws Exception {
+        JsonNode st = json(mvc.perform(get("/api/claude").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(st.path("mode").asText()).isEqualTo("api");
+        assertThat(st.has("apiKey")).isTrue();
+        // Ingen Claude Code-token i testmiljön → abonnemangsläget nekas med förklaring
+        String err = mvc.perform(put("/api/claude").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mode\":\"claude-code\"}"))
+                .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
+        assertThat(err).contains("CLAUDE_CODE_OAUTH_TOKEN");
+        mvc.perform(put("/api/claude").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"mode\":\"nonsens\"}")).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

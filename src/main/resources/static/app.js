@@ -729,7 +729,7 @@ views.plan = async (main) => {
 // ----- Kostnad -----
 
 views.kostnad = async (main) => {
-  const c = await api('/api/costs?days=30');
+  const [c, cb] = await Promise.all([api('/api/costs?days=30'), api('/api/claude')]);
   const kr = (v) => `${(v || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
   const n = (v) => (v || 0).toLocaleString('sv-SE');
   const sub = c.backend !== 'api';
@@ -738,7 +738,8 @@ views.kostnad = async (main) => {
 
   const card = (title, big, small) => h('div', { class: 'cost-card' }, h('div', { class: 'item-meta' }, title),
     h('div', { class: 'cost-big' }, big), small ? h('div', { class: 'item-meta' }, small) : null);
-  main.append(h('div', { class: 'cost-cards' },
+  main.append(claudeBackendPanel(cb));
+  main.append(h('div', { class: 'cost-cards', style: 'margin-top:16px' },
     card(`Betalt i ${c.monthName}`, kr(c.month.sek), `${n(c.month.calls)} anrop`),
     card('Idag', kr(c.today.sek), `${n(c.today.calls)} anrop`),
     sub ? card('Sparat via abonnemanget', kr(c.month.subscriptionSek), 'hade kostat med API-nyckel') : null,
@@ -772,6 +773,42 @@ views.kostnad = async (main) => {
         ...[p.input, p.output, p.cacheRead, p.cacheWrite].map(v => h('td', {}, `$${v}`)))))),
     h('p', { class: 'item-meta' }, 'USD per miljon token. Ändras under pluggis.costs i application.yml, växelkursen med PLUGGIS_USD_SEK. Kostnadsloggningen startade när den här fliken kom till – äldre anrop finns inte med.')));
 };
+
+function claudeBackendPanel(st) {
+  const MODES = [
+    ['api', 'Bara API-nyckel', 'Allt betalas per token. Snabbast, strömmad röst, inga gränser från abonnemanget.'],
+    ['hybrid', 'Hybrid', `Rösten (${(st.apiPurposes || []).join(', ')}) via API-nyckeln, foto, planer, flashkort och material via abonnemanget. Faller tillbaka till API-nyckeln om abonnemanget inte går.`],
+    ['claude-code', 'Bara abonnemanget', 'Allt via Claude Code på ditt Pro-abonnemang. Kostar inget extra, men rösten blir någon sekund långsammare och delar gränser med din egen användning.'],
+  ];
+  const ok = (b) => b ? '✅' : '❌';
+  const when = (iso) => iso ? new Date(iso).toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–';
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Claude: API eller abonnemang'));
+  const list = h('div', { class: 'mode-list' });
+  for (const [id, title, desc] of MODES) {
+    const radio = h('input', { type: 'radio', name: 'claudeMode', value: id, checked: st.mode === id });
+    radio.addEventListener('change', async () => {
+      const r = await run(() => api('/api/claude', { method: 'PUT', body: { mode: id } }), null, `Claude körs nu: ${title.toLowerCase()}`);
+      if (r === undefined) { list.querySelector(`input[value="${st.mode}"]`).checked = true; return; }
+      route();
+    });
+    list.append(h('label', { class: 'mode-opt' + (st.mode === id ? ' on' : '') }, radio,
+      h('div', {}, h('strong', {}, title, st.configuredMode === id ? h('span', { class: 'item-meta' }, '  (som i .env)') : null),
+        h('div', { class: 'item-meta' }, desc))));
+  }
+  const cc = st.claudeCode || {};
+  panel.append(list,
+    st.problems && st.problems.length ? h('p', { style: 'color:var(--red)' }, '⚠️ ', st.problems.join(' ')) : null,
+    h('table', { style: 'margin-top:10px' }, h('tbody', {},
+      h('tr', {}, h('td', {}, 'API-nyckel (ANTHROPIC_API_KEY)'), h('td', {}, ok(st.apiKey))),
+      h('tr', {}, h('td', {}, 'Claude Code-token (CLAUDE_CODE_OAUTH_TOKEN)'), h('td', {}, ok(st.token))),
+      h('tr', {}, h('td', {}, 'Claude Code-programmet'), h('td', {}, st.cliVersion ? `✅ ${st.cliVersion}` : '❌ hittas inte')),
+      h('tr', {}, h('td', {}, 'Anrop via abonnemanget sedan start'), h('td', {}, `${cc.ok || 0} lyckade, ${cc.failed || 0} misslyckade`)),
+      h('tr', {}, h('td', {}, 'Senast lyckat via abonnemanget'), h('td', {}, when(cc.lastOk))),
+      cc.lastError ? h('tr', {}, h('td', {}, 'Senaste fel'), h('td', {}, `${when(cc.lastFailure)}: ${cc.lastError}`)) : null,
+      h('tr', {}, h('td', {}, 'Föll tillbaka till API-nyckeln'), h('td', {}, `${st.fallbacks || 0} gånger sedan start`)))),
+    h('p', { class: 'item-meta' }, 'Valet sparas och gäller direkt, även efter omstart. Hur mycket av Pro-abonnemangets gräns som gått åt syns inte här – det ser du i Claude-appen under Inställningar → Användning.'));
+  return panel;
+}
 
 // ----- Flashkort -----
 

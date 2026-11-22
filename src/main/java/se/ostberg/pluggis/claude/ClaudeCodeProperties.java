@@ -37,15 +37,24 @@ public record ClaudeCodeProperties(String backend, String command, int timeoutSe
 
     /** Ska det här jobbet köras via Claude Code? "flashcards-vision" räknas som "flashcards". */
     public boolean useFor(String purpose) {
-        if (!enabled()) {
+        return useFor(mode(), purpose);
+    }
+
+    /** Samma regel för ett valfritt läge (t.ex. valt i admin). */
+    public boolean useFor(String mode, String purpose) {
+        if (!"claude-code".equals(mode) && !"hybrid".equals(mode)) {
             return false;
         }
-        if (mode().equals("claude-code")) {
+        if (mode.equals("claude-code")) {
             return true;
         }
         java.util.List<String> api = apiPurposes == null || apiPurposes.isEmpty() ? java.util.List.of("coach") : apiPurposes;
         String p = purpose == null ? "" : purpose;
         return api.stream().map(String::trim).noneMatch(a -> p.equals(a) || p.startsWith(a + "-"));
+    }
+
+    public java.util.List<String> apiPurposesOrDefault() {
+        return apiPurposes == null || apiPurposes.isEmpty() ? java.util.List.of("coach") : apiPurposes;
     }
 
     public String commandOrDefault() {

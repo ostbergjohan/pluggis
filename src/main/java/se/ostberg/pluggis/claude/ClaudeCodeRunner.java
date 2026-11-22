@@ -55,6 +55,20 @@ public class ClaudeCodeRunner {
     private final ClaudeCodeProperties props;
     private final ObjectMapper mapper;
     private final Semaphore slots;
+    /** Läge valt i admin (sparas i inställningarna); null = det som står i .env. */
+    private volatile String override;
+    private se.ostberg.pluggis.settings.SettingsService settings;
+
+    // Status för admin
+    private final java.util.concurrent.atomic.AtomicLong ok = new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicLong failed = new java.util.concurrent.atomic.AtomicLong();
+    private volatile java.time.Instant lastOk;
+    private volatile java.time.Instant lastFailure;
+    private volatile String lastError;
+    private volatile String cliVersion;
+
+    public static final String MODE_SETTING = "claude.backend";
+    public static final List<String> MODES = List.of("api", "hybrid", "claude-code");
 
     public ClaudeCodeRunner(ClaudeCodeProperties props, ObjectMapper mapper) {
         this.props = props;
@@ -62,19 +76,96 @@ public class ClaudeCodeRunner {
         this.slots = new Semaphore(props.concurrency());
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setSettings(se.ostberg.pluggis.settings.SettingsService settings) {
+        this.settings = settings;
+        try {
+            settings.get(MODE_SETTING).filter(MODES::contains).ifPresent(m -> override = m);
+        } catch (RuntimeException e) {
+            log.debug("Kunde inte läsa valt Claude-läge: {}", e.toString());
+        }
+    }
+
+    /** Byt läge i drift (från admin). null = tillbaka till .env. */
+    public void setMode(String mode) {
+        if (mode != null && !MODES.contains(mode)) {
+            throw new IllegalArgumentException("Okänt läge: " + mode);
+        }
+        override = mode;
+        if (settings != null) {
+            settings.put(MODE_SETTING, mode == null ? "" : mode);
+        }
+        log.info("Claude-läge ändrat till {}", mode());
+    }
+
     public boolean enabled() {
-        return props.enabled();
+        String m = mode();
+        return m.equals("claude-code") || m.equals("hybrid");
     }
 
     public boolean useFor(String purpose) {
-        return props.useFor(purpose);
+        return props.useFor(mode(), purpose);
     }
 
     public String mode() {
+        return override != null ? override : props.mode();
+    }
+
+    public String configuredMode() {
         return props.mode();
     }
 
+    public List<String> apiPurposes() {
+        return props.apiPurposesOrDefault();
+    }
+
+    public boolean hasToken() {
+        String t = System.getenv("CLAUDE_CODE_OAUTH_TOKEN");
+        return t != null && !t.isBlank();
+    }
+
+    /** Version av claude-programmet, eller null om det inte finns. Cachas. */
+    public String cliVersion() {
+        if (cliVersion == null) {
+            try {
+                Process p = new ProcessBuilder(props.commandOrDefault(), "--version").redirectErrorStream(true).start();
+                String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+                cliVersion = p.waitFor(10, TimeUnit.SECONDS) && p.exitValue() == 0 && !out.isBlank() ? out : "";
+            } catch (IOException e) {
+                cliVersion = "";
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return cliVersion.isEmpty() ? null : cliVersion;
+    }
+
+    public Map<String, Object> stats() {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("ok", ok.get());
+        m.put("failed", failed.get());
+        m.put("lastOk", lastOk == null ? null : lastOk.toString());
+        m.put("lastFailure", lastFailure == null ? null : lastFailure.toString());
+        m.put("lastError", lastError);
+        return m;
+    }
+
     public ClaudeResponse run(ObjectNode request) {
+        try {
+            ClaudeResponse r = runOnce(request);
+            ok.incrementAndGet();
+            lastOk = java.time.Instant.now();
+            return r;
+        } catch (RuntimeException e) {
+            failed.incrementAndGet();
+            lastFailure = java.time.Instant.now();
+            lastError = e.getMessage();
+            throw e;
+        }
+    }
+
+    private ClaudeResponse runOnce(ObjectNode request) {
         Path dir = null;
         try {
             slots.acquire();

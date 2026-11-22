@@ -1,0 +1,75 @@
+package se.ostberg.pluggis.claude;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/** Välj om Claude ska gå via API-nyckeln, abonnemanget (Claude Code) eller hybrid – bara föräldern. */
+@RestController
+@RequestMapping("/api/claude")
+public class ClaudeBackendController {
+
+    private final ClaudeClient claude;
+    private final ClaudeCodeRunner runner;
+
+    public ClaudeBackendController(ClaudeClient claude, ClaudeCodeRunner runner) {
+        this.claude = claude;
+        this.runner = runner;
+    }
+
+    @GetMapping
+    public Map<String, Object> status() {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("mode", runner.mode());
+        m.put("configuredMode", runner.configuredMode());
+        m.put("apiKey", claude.hasApiKey());
+        m.put("token", runner.hasToken());
+        m.put("cliVersion", runner.cliVersion());
+        m.put("apiPurposes", runner.apiPurposes());
+        m.put("claudeCode", runner.stats());
+        m.put("fallbacks", claude.fallbacks());
+        m.put("problems", problems(runner.mode()));
+        return m;
+    }
+
+    public record ModeRequest(String mode) {
+    }
+
+    @PutMapping
+    public ResponseEntity<Map<String, Object>> setMode(@RequestBody ModeRequest req) {
+        String mode = req.mode() == null || req.mode().isBlank() ? null : req.mode().trim();
+        if (mode != null && !ClaudeCodeRunner.MODES.contains(mode)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Okänt läge: " + mode));
+        }
+        List<String> problems = problems(mode == null ? runner.configuredMode() : mode);
+        if (!problems.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", String.join(" ", problems)));
+        }
+        runner.setMode(mode);
+        return ResponseEntity.ok(status());
+    }
+
+    /** Vad som saknas för att ett läge ska fungera. */
+    private List<String> problems(String mode) {
+        List<String> p = new java.util.ArrayList<>();
+        boolean needsApi = !"claude-code".equals(mode);
+        boolean needsCc = !"api".equals(mode);
+        if (needsApi && !claude.hasApiKey()) {
+            p.add("ANTHROPIC_API_KEY saknas i .env.");
+        }
+        if (needsCc && !runner.hasToken()) {
+            p.add("CLAUDE_CODE_OAUTH_TOKEN saknas i .env (skapa med \"claude setup-token\").");
+        }
+        if (needsCc && runner.cliVersion() == null) {
+            p.add("Programmet claude finns inte i containern.");
+        }
+        return p;
+    }
+}
