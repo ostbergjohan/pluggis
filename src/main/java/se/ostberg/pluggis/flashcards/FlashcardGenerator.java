@@ -21,6 +21,8 @@ import java.util.Set;
 @Service
 public class FlashcardGenerator {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FlashcardGenerator.class);
+
     static final int MIN_CARDS = 3;
     static final int MAX_CARDS = 40;
     static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
@@ -110,7 +112,7 @@ public class FlashcardGenerator {
     }
 
     private Result save(ClaudeResponse response, String subjectFallback, Long homeworkId, Deck.Source source) {
-        GeneratedDeck generated = JsonExtract.parse(response.text(), mapper, GeneratedDeck.class);
+        GeneratedDeck generated = withoutLeaks(JsonExtract.parse(response.text(), mapper, GeneratedDeck.class));
         var newCards = generated.toNewCards();
         if (newCards.isEmpty()) {
             throw new IllegalArgumentException(generated.note() == null
@@ -120,6 +122,57 @@ public class FlashcardGenerator {
         String subject = generated.subject() == null ? subjectFallback : generated.subject();
         Deck deck = flashcards.createDeck(name, subject, homeworkId, source, newCards);
         return new Result(deck, flashcards.cards(deck.getId()).size(), generated.note());
+    }
+
+    /** Svar till omskrivningen: samma ordning som korten vi skickade. */
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    record Rewritten(java.util.List<GeneratedDeck.GeneratedCard> cards) {
+    }
+
+    /**
+     * Kort där frågan avslöjar svaret skrivs om av Claude (en gång). Avslöjar de det fortfarande tas de bort.
+     * Ledtrådar som innehåller svaret tas bort.
+     */
+    GeneratedDeck withoutLeaks(GeneratedDeck deck) {
+        if (deck.cards() == null || deck.cards().isEmpty()) {
+            return deck;
+        }
+        java.util.List<GeneratedDeck.GeneratedCard> ok = new java.util.ArrayList<>();
+        java.util.List<GeneratedDeck.GeneratedCard> bad = new java.util.ArrayList<>();
+        for (GeneratedDeck.GeneratedCard c : deck.cards()) {
+            GeneratedDeck.GeneratedCard clean = CardCheck.leaks(c.hint(), c.back())
+                    ? new GeneratedDeck.GeneratedCard(c.front(), c.back(), null) : c;
+            (CardCheck.leaks(clean.front(), clean.back()) ? bad : ok).add(clean);
+        }
+        if (!bad.isEmpty()) {
+            log.info("Flashkort: {} av {} frågor avslöjade svaret – skriver om", bad.size(), deck.cards().size());
+            for (GeneratedDeck.GeneratedCard fixed : rewrite(bad)) {
+                if (fixed != null && fixed.front() != null && !CardCheck.leaks(fixed.front(), fixed.back())) {
+                    ok.add(CardCheck.leaks(fixed.hint(), fixed.back())
+                            ? new GeneratedDeck.GeneratedCard(fixed.front(), fixed.back(), null) : fixed);
+                }
+            }
+        }
+        return new GeneratedDeck(deck.deckName(), deck.subject(), ok, deck.note());
+    }
+
+    private java.util.List<GeneratedDeck.GeneratedCard> rewrite(java.util.List<GeneratedDeck.GeneratedCard> bad) {
+        try {
+            ObjectNode req = claude.newRequest(props.anthropic().flashcards(),
+                    "Du skriver om flashkort där frågan avslöjar svaret. Behåll svaret (back) exakt. Skriv en ny fråga "
+                            + "(front) som INTE innehåller svaret, samma ordstam eller en annan böjning av det, och som "
+                            + "fortfarande har just det svaret. Ledtråden får inte heller avslöja svaret. "
+                            + "Svara ENDAST med JSON: {\"cards\":[{\"front\":\"…\",\"back\":\"…\",\"hint\":\"… eller null\"}]} "
+                            + "i samma ordning.");
+            ObjectNode msg = req.putArray("messages").addObject();
+            msg.put("role", "user");
+            msg.put("content", mapper.writeValueAsString(java.util.Map.of("cards", bad)));
+            Rewritten r = JsonExtract.parse(claude.create(req, "flashcards-fix").text(), mapper, Rewritten.class);
+            return r.cards() == null ? java.util.List.of() : r.cards();
+        } catch (Exception e) {
+            log.warn("Kunde inte skriva om flashkort: {}", e.toString());
+            return java.util.List.of();
+        }
     }
 
     static int clamp(int count) {

@@ -19,6 +19,13 @@ Regler för bra kort:
 - Begrepp (NO/SO): fråga efter begreppet utifrån en förklaring, eller tvärtom – variera.
 - Matte: korta regler, formler eller små räkneexempel som går att svara på i huvudet.
 - Hitta inte på fakta. När ett källmaterial finns: håll dig till det.
+- Frågan får ALDRIG innehålla svaret – inte ordet, inte samma ordstam, inte i en annan böjning.
+  Fel: "Vad kallas det gröna färgämnet klorofyll?" → "Klorofyll".
+  Fel: "Vad kallas processen fotosyntes där växter gör socker?" → "Fotosyntes".
+  Rätt: "Vad heter det gröna färgämnet i växternas blad?" → "Klorofyll".
+  Rätt: "Vad kallas processen när växter gör socker av ljus, vatten och koldioxid?" → "Fotosyntes".
+- Undvik ja/nej-frågor och frågor där svaret går att gissa direkt ur frågan.
 - Ledtråden får aldrig avslöja svaret.
+- Kontrollera varje kort innan du svarar: står svaret, eller början av svarsordet, i frågan? Skriv då om frågan.
 - Skriv på svenska om inte materialet är på ett annat språk.
 - Går materialet inte att läsa: returnera {"cards": [], "note": "beskriv problemet kort"}.
