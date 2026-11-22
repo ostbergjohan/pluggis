@@ -111,5 +111,16 @@ class StudentIsolationTest {
         int st = mvc.perform(as(get("/api/homework/" + fredHw + "/material"), lisa)).andReturn().getResponse().getStatus();
         String body = mvc.perform(as(get("/api/homework/" + fredHw + "/material"), lisa)).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(body).as("status " + st).doesNotContain("FREDORD");
+
+        // Direkt med id: Freds kortlek, Freds planmoment
+        long fredDeck = json(call(as(get("/api/flashcards/decks"), fred))).get(0).path("deck").path("id").asLong();
+        var next = mvc.perform(as(get("/api/flashcards/decks/" + fredDeck + "/next?practiceAnyway=true"), lisa)).andReturn().getResponse();
+        assertThat(next.getContentAsString(StandardCharsets.UTF_8)).as("kortlek via id, status " + next.getStatus()).doesNotContain("FREDORD");
+        var cards = mvc.perform(as(get("/api/flashcards/decks/" + fredDeck + "/cards"), lisa)).andReturn().getResponse();
+        assertThat(cards.getContentAsString(StandardCharsets.UTF_8)).as("kort via id, status " + cards.getStatus()).doesNotContain("FREDORD");
+        long fredItem = json(call(as(get("/api/plan/upcoming?days=14"), fred))).get(0).path("id").asLong();
+        var done = mvc.perform(as(post("/api/plan/items/" + fredItem + "/done"), lisa)).andReturn().getResponse();
+        assertThat(done.getStatus()).as("bocka av Freds moment som Lisa").isEqualTo(404);
+        assertThat(call(as(get("/api/plan/upcoming?days=14"), fred))).contains("\"done\":false");
     }
 }
