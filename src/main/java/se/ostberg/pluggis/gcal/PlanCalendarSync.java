@@ -257,7 +257,7 @@ public class PlanCalendarSync {
                 String head = h == null ? "Övrigt" : se.ostberg.pluggis.planning.SubjectIcon.of(h.getSubject(), h.getTitle()) + " "
                         + (h.getSubject() == null || h.getSubject().isBlank() || h.getTitle().toLowerCase().contains(h.getSubject().toLowerCase())
                         ? "" : h.getSubject() + " · ")
-                        + (h.getKind() == Homework.Kind.TEST ? "Prov: " : "") + h.getTitle();
+                        + (h.getKind() == Homework.Kind.TEST && !h.getTitle().toLowerCase().contains("prov") ? "Prov: " : "") + h.getTitle();
                 desc.append(desc.isEmpty() ? "" : "\n").append(head).append(" – ").append(blockMin).append(" min\n");
             }
             desc.append(i.isDone() ? "  ✅ " : "  ☐ ").append(i.getTask()).append(" (").append(i.getMinutes()).append(" min)\n");
