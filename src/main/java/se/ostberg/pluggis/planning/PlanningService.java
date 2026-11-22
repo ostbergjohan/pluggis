@@ -201,7 +201,8 @@ public class PlanningService {
         LocalDate today = todayDate();
         Map<Long, Optional<Homework>> cache = new HashMap<>();
         List<TodayItem> out = new ArrayList<>();
-        List<PlanItem> open = grouped(repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today));
+        // Det som ligger efter räknas till idag, så att samma läxa blir ett block (inte ett "efter"-block + ett idag-block)
+        List<PlanItem> open = grouped(repo.findByDoneFalseAndPlanDateLessThanEqualOrderByPlanDateAscIdAsc(today), i -> today);
         for (PlanItem item : open) {
             Optional<Homework> h = cache.computeIfAbsent(item.getHomeworkId(), homework::get);
             if (h.isEmpty() || h.get().getStatus() != Homework.Status.OPEN) {
@@ -401,10 +402,15 @@ public class PlanningService {
      * Har föräldern ordnat dagen för hand gäller den ordningen.
      */
     public List<PlanItem> grouped(List<PlanItem> items) {
+        return grouped(items, PlanItem::getPlanDate);
+    }
+
+    /** Med {@code dayOf} kan t.ex. sådant som ligger efter räknas till idag, så att läxan blir ett block. */
+    List<PlanItem> grouped(List<PlanItem> items, java.util.function.Function<PlanItem, LocalDate> dayOf) {
         Map<Long, Optional<Homework>> cache = new HashMap<>();
         java.util.function.Function<PlanItem, Optional<Homework>> hw = i -> cache.computeIfAbsent(i.getHomeworkId(), homework::get);
         Set<LocalDate> manualDays = new HashSet<>();
-        items.stream().filter(i -> i.getSortOrder() != null).forEach(i -> manualDays.add(i.getPlanDate()));
+        items.stream().filter(i -> i.getSortOrder() != null).forEach(i -> manualDays.add(dayOf.apply(i)));
         java.util.Comparator<PlanItem> block = java.util.Comparator
                 .comparing((PlanItem i) -> hw.apply(i).map(Homework::getDueDate).orElse(null),
                         java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
@@ -413,11 +419,11 @@ public class PlanningService {
                 .thenComparing(PlanItem::getId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
         List<PlanItem> out = new ArrayList<>(items);
         out.sort((a, b) -> {
-            int d = a.getPlanDate().compareTo(b.getPlanDate());
+            int d = dayOf.apply(a).compareTo(dayOf.apply(b));
             if (d != 0) {
                 return d;
             }
-            return manualDays.contains(a.getPlanDate()) ? PlanItem.ORDER.compare(a, b) : block.compare(a, b);
+            return manualDays.contains(dayOf.apply(a)) ? PlanItem.ORDER.compare(a, b) : block.compare(a, b);
         });
         return out;
     }
