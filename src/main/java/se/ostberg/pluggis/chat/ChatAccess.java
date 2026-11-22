@@ -30,6 +30,7 @@ public class ChatAccess {
             Pattern.compile("GET /api/homework/\\d+/material"),
             Pattern.compile("POST /api/homework/upload"),
             Pattern.compile("GET /api/devices/[^/]+/rewards"),
+            Pattern.compile("POST /api/speech/preview"),
     };
 
     private final SettingsService settings;

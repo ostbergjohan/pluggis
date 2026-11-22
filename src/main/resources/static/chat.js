@@ -39,6 +39,7 @@ const S = {
   ws: null, retry: 0, tab: 'chatt',
   voice: store.get('pluggis.chat.voice', store.get('pluggis.chat.speak', '0') === '1' ? 'telefon' : 'av'),
   serverVoice: false,
+  phoneUnlocked: false,
   history: JSON.parse(store.get('pluggis.chat.history', '[]') || '[]'),
   session: null, thinking: false,
 };
@@ -93,15 +94,33 @@ let audioCtx = null;
 let playChain = Promise.resolve();
 
 function unlockAudio() {
+  // iOS 17+: spela även när telefonen står på ljudlöst (sidoknappen)
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* äldre iOS */ }
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state !== 'running') audioCtx.resume();
     // En kort tystnad låser upp uppspelningen på iOS
     const buf = audioCtx.createBuffer(1, 1, 22050);
     const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
   } catch { /* ingen Web Audio */ }
-  if (S.voice === 'telefon' && window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+  if (S.voice === 'telefon' && window.speechSynthesis && !S.phoneUnlocked) {
+    // iOS släpper bara fram uppläsning som först startats av ett tryck
+    const u = new SpeechSynthesisUtterance('.'); u.volume = 0.01; u.lang = 'sv-SE';
+    speechSynthesis.speak(u);
+    S.phoneUnlocked = true;
+  }
+}
+
+/** Testljud när man väljer Pluggis röst – hörs det inte är det ljudet i telefonen som strular. */
+async function testServerVoice() {
+  try {
+    const res = await fetch('/api/speech/preview', { method: 'POST',
+      headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: S.name ? `Hej ${S.name}! Nu läser jag upp svaren.` : 'Hej! Nu läser jag upp svaren.' }) });
+    if (!res.ok) throw new Error(String(res.status));
+    playServerAudio(await res.arrayBuffer(), true);
+  } catch {
+    toast('Kunde inte hämta Pluggis röst – är ljudtjänsten igång?', true);
   }
 }
 
@@ -115,10 +134,15 @@ if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', 
 function speakPhone(text) {
   if (!window.speechSynthesis || !text) return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'sv-SE'; u.rate = 1.0;
+  u.lang = 'sv-SE'; u.rate = 1.0; u.volume = 1;
   const v = svVoice(); if (v) u.voice = v;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(u);
+  // iOS-bugg: cancel() direkt följt av speak() tappar ibland repliken – vänta en stund
+  if (speechSynthesis.speaking || speechSynthesis.pending) {
+    speechSynthesis.cancel();
+    setTimeout(() => speechSynthesis.speak(u), 150);
+  } else {
+    speechSynthesis.speak(u);
+  }
 }
 
 /** Text från coachen: läs upp med telefonens röst (Pluggis röst kommer som ljud från servern). */
@@ -127,16 +151,40 @@ function speak(text) {
 }
 
 /** Ljud (wav) från servern – spelas i ordning. */
-function playServerAudio(arrayBuffer) {
-  if (S.voice !== 'pluggis' || !audioCtx) return;
+function playServerAudio(arrayBuffer, force) {
+  if ((S.voice !== 'pluggis' && !force) || !arrayBuffer) return;
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return playWithElement(arrayBuffer); } }
   const copy = arrayBuffer.slice(0);
-  playChain = playChain.then(() => new Promise((resolve) => {
-    audioCtx.decodeAudioData(copy, (buf) => {
-      const src = audioCtx.createBufferSource();
-      src.buffer = buf; src.connect(audioCtx.destination);
-      src.onended = resolve; src.start(0);
-    }, () => resolve());
-  })).catch(() => {});
+  playChain = playChain.then(async () => {
+    if (audioCtx.state !== 'running') {
+      try { await audioCtx.resume(); } catch { /* kräver tryck */ }
+      if (audioCtx.state !== 'running') { toast('Tryck någonstans på skärmen så hörs Pluggis'); }
+    }
+    await new Promise((resolve) => {
+      const play = (buf) => {
+        const src = audioCtx.createBufferSource();
+        src.buffer = buf; src.connect(audioCtx.destination);
+        src.onended = resolve; src.start(0);
+      };
+      const fail = () => { playWithElement(copy).then(resolve); };
+      try {
+        const p = audioCtx.decodeAudioData(copy, play, fail);
+        if (p && p.catch) p.catch(fail);
+      } catch { fail(); }
+    });
+  }).catch(() => {});
+}
+
+/** Reserv: vanligt <audio>-element (om Web Audio inte kan avkoda). */
+function playWithElement(arrayBuffer) {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(new Blob([arrayBuffer], { type: 'audio/wav' }));
+      const a = new Audio(url);
+      a.onended = a.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      a.play().catch(() => resolve());
+    } catch { resolve(); }
+  });
 }
 
 function setVoice(mode) {
@@ -151,7 +199,7 @@ $('#speak').addEventListener('click', () => {
   const modes = S.serverVoice ? VOICE_MODES : ['av', 'telefon'];
   const next = modes[(modes.indexOf(S.voice) + 1) % modes.length] || 'av';
   setVoice(next);
-  if (next === 'pluggis') toast('🔊 Pluggis läser upp svaren');
+  if (next === 'pluggis') { toast('🔊 Pluggis läser upp svaren'); testServerVoice(); }
   else if (next === 'telefon') { toast('📱 Telefonens röst läser upp svaren'); speakPhone('Hej! Nu läser jag upp svaren.'); }
   else toast('🔇 Uppläsning av');
 });
@@ -298,8 +346,9 @@ views.chatt = () => {
     rec.onresult = (e) => { input.value = e.results[0][0].transcript; sendText(); };
     rec.onerror = () => toast('Hörde inte – testa igen', true);
     rec.onend = () => { mic.classList.remove('rec'); mic.textContent = '🎤'; };
-    rec.document.addEventListener('touchend', unlockAudio, { once: true });
-document.addEventListener('click', unlockAudio, { once: true });
+    rec.// Varje tryck håller ljudet upplåst (iOS stänger av det när appen legat i bakgrunden)
+document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
+document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
 start();
   }
 
@@ -494,8 +543,9 @@ function askForLink() {
       const v = input.value.trim(); const m = v.match(/[#&]t=([^&\s]+)/);
       S.token = m ? decodeURIComponent(m[1]) : v;
       store.set('pluggis.chat.token', S.token);
-      document.addEventListener('touchend', unlockAudio, { once: true });
-document.addEventListener('click', unlockAudio, { once: true });
+      // Varje tryck håller ljudet upplåst (iOS stänger av det när appen legat i bakgrunden)
+document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
+document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
 start();
     } }, 'Fortsätt')));
 }
@@ -516,6 +566,7 @@ async function start() {
   refreshPoints();
   show('chatt');
 }
-document.addEventListener('touchend', unlockAudio, { once: true });
-document.addEventListener('click', unlockAudio, { once: true });
+// Varje tryck håller ljudet upplåst (iOS stänger av det när appen legat i bakgrunden)
+document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
+document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
 start();

@@ -345,6 +345,9 @@ class ApplicationSmokeTest {
         mvc.perform(get("/api/plan/today").header(TOKEN, kid)).andExpect(status().isOk());
         mvc.perform(get("/api/homework").header(TOKEN, kid)).andExpect(status().isOk());
         mvc.perform(get("/api/devices/tab5-1/rewards").header(TOKEN, kid)).andExpect(status().isOk());
+        // Testljud för uppläsningen: tillåtet (503 här eftersom ljudtjänsten inte körs i testet)
+        mvc.perform(post("/api/speech/preview").header(TOKEN, kid).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"hej\"}")).andExpect(status().is(503));
         // Inte föräldradelarna
         mvc.perform(get("/api/student").header(TOKEN, kid)).andExpect(status().isForbidden());
         mvc.perform(get("/api/chat/link").header(TOKEN, kid)).andExpect(status().isForbidden());
