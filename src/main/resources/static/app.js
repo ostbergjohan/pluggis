@@ -726,6 +726,53 @@ views.plan = async (main) => {
   main.append(panel);
 };
 
+// ----- Kostnad -----
+
+views.kostnad = async (main) => {
+  const c = await api('/api/costs?days=30');
+  const kr = (v) => `${(v || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
+  const n = (v) => (v || 0).toLocaleString('sv-SE');
+  const sub = c.backend !== 'api';
+  main.append(h('h1', {}, 'Kostnad'),
+    h('p', { class: 'sub' }, `Uppskattat från tokens som Claude rapporterar, med API-prislistan och 1 USD = ${c.usdSek} kr. Den exakta fakturan finns i Claude Console.`));
+
+  const card = (title, big, small) => h('div', { class: 'cost-card' }, h('div', { class: 'item-meta' }, title),
+    h('div', { class: 'cost-big' }, big), small ? h('div', { class: 'item-meta' }, small) : null);
+  main.append(h('div', { class: 'cost-cards' },
+    card(`Betalt i ${c.monthName}`, kr(c.month.sek), `${n(c.month.calls)} anrop`),
+    card('Idag', kr(c.today.sek), `${n(c.today.calls)} anrop`),
+    sub ? card('Sparat via abonnemanget', kr(c.month.subscriptionSek), 'hade kostat med API-nyckel') : null,
+    card('Azure-röst', `${Math.round(100 * c.azure.characters / c.azure.free)} %`,
+      `${n(c.azure.characters)} av ${n(c.azure.free)} gratis tecken`)));
+
+  // Stapeldiagram senaste 30 dagarna
+  const max = Math.max(0.01, ...c.days.map(d => d.sek + d.subscriptionSek));
+  const bars = h('div', { class: 'cost-bars' }, c.days.map(d => h('div', {
+      class: 'cost-bar', title: `${fmtDay(d.day)}: ${kr(d.sek)}${d.subscriptionSek ? ` (+ ${kr(d.subscriptionSek)} via abonnemang)` : ''}` },
+    h('div', { class: 'cost-bar-sub', style: `height:${100 * d.subscriptionSek / max}%` }),
+    h('div', { class: 'cost-bar-api', style: `height:${100 * d.sek / max}%` }))));
+  main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Senaste 30 dagarna'), bars,
+    h('p', { class: 'item-meta' }, h('span', { class: 'cost-dot api' }), ' betalt via API',
+      sub ? [' ', h('span', { class: 'cost-dot sub' }), ' via abonnemanget (kostar inget extra)'] : null,
+      ` · högsta dagen ${kr(max)}`)));
+
+  const table = (rows, first) => h('table', {},
+    h('thead', {}, h('tr', {}, [first, 'Anrop', 'Token in', 'Token ut', 'Betalt', sub ? 'Abonnemang' : null].filter(Boolean).map(t => h('th', {}, t)))),
+    h('tbody', {}, rows.map(r => h('tr', {}, h('td', {}, r.label || r.name, r.models ? h('div', { class: 'item-meta' }, r.models.join(', ')) : null),
+      h('td', {}, n(r.calls)), h('td', {}, n(r.inputTokens)), h('td', {}, n(r.outputTokens)), h('td', {}, kr(r.sek)),
+      sub ? h('td', {}, kr(r.subscriptionSek)) : null))));
+  main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, `Per funktion i ${c.monthName}`),
+    c.purposes.length ? table(c.purposes, 'Funktion') : h('div', { class: 'empty' }, 'Inga anrop ännu den här månaden.')));
+  if (c.students.length > 1) {
+    main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, `Per elev i ${c.monthName}`), table(c.students, 'Elev')));
+  }
+  main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Priser som används'),
+    h('table', {}, h('thead', {}, h('tr', {}, ['Modell', 'In', 'Ut', 'Cache läs', 'Cache skriv'].map(t => h('th', {}, t)))),
+      h('tbody', {}, c.prices.map(p => h('tr', {}, h('td', {}, p.model),
+        ...[p.input, p.output, p.cacheRead, p.cacheWrite].map(v => h('td', {}, `$${v}`)))))),
+    h('p', { class: 'item-meta' }, 'USD per miljon token. Ändras under pluggis.costs i application.yml, växelkursen med PLUGGIS_USD_SEK. Kostnadsloggningen startade när den här fliken kom till – äldre anrop finns inte med.')));
+};
+
 // ----- Flashkort -----
 
 views.kort = async (main) => {

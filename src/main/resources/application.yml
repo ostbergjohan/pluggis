@@ -86,6 +86,11 @@ pluggis:
     base-url: ${PLUGGIS_SPEECH_URL:}
     timeout-seconds: 30
   # Valfritt: Google Kalender – planen som ett pass per dag. Tjänstekontots JSON-nyckel som fil eller text.
+  # Kostnadsfliken: USD per miljon token (Claudes prislista nov 2026) och växelkurs.
+  # Ändra här om priserna ändras, eller lägg till fler modeller under prices.
+  costs:
+    usd-sek: ${PLUGGIS_USD_SEK:10.0}
+    azure-free-chars: 500000
   google:
     service-account-file: ${PLUGGIS_GOOGLE_SA_FILE:}
     service-account-json: ${PLUGGIS_GOOGLE_SA_JSON:}

@@ -74,6 +74,29 @@ class ApplicationSmokeTest {
         return mapper.readTree(body);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    se.ostberg.pluggis.usage.UsageService usageService;
+
+    @Test
+    void costsAreRecordedAndOnlyParentSeesThem() throws Exception {
+        usageService.recordClaude("coach", "claude-haiku-5-5", false, 2_000_000, 1_000_000, 0, 0);
+        usageService.recordClaude("planning", "claude-sonnet-5-5", true, 100_000, 10_000, 0, 0);
+        usageService.recordTts("azure", 1234);
+        JsonNode c = json(mvc.perform(get("/api/costs").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        // Haiku: 2 M in × 0,10 + 1 M ut × 0,50 = 0,70 USD = 7 kr
+        assertThat(c.path("today").path("sek").asDouble()).isGreaterThanOrEqualTo(7.0);
+        // Sonnet via abonnemanget: 0,1 M × 2 + 0,01 M × 10 = 0,30 USD = 3 kr som inte betalats
+        assertThat(c.path("today").path("subscriptionSek").asDouble()).isGreaterThanOrEqualTo(3.0);
+        assertThat(c.path("azure").path("characters").asLong()).isGreaterThanOrEqualTo(1234);
+        assertThat(c.path("days")).hasSizeGreaterThanOrEqualTo(30);
+        assertThat(c.path("purposes").toString()).contains("Coachen").contains("Planering");
+
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        mvc.perform(get("/api/costs").header(TOKEN, code)).andExpect(status().isForbidden());
+    }
+
     @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());

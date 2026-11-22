@@ -35,6 +35,12 @@ public class ClaudeClient {
     private final MeterRegistry meters;
     private final PluggisProperties.Anthropic cfg;
     private final ClaudeCodeRunner claudeCode;
+    private se.ostberg.pluggis.usage.UsageService usage;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setUsage(se.ostberg.pluggis.usage.UsageService usage) {
+        this.usage = usage;
+    }
 
     public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props) {
         this(builder, mapper, meters, props, null);
@@ -103,9 +109,11 @@ public class ClaudeClient {
         Timer.Sample sample = Timer.start(meters);
         String outcome = "error";
         try {
-            ClaudeResponse response = viaClaudeCode(purpose) ? runClaudeCode(request, purpose) : api(request);
+            boolean[] subscription = {false};
+            ClaudeResponse response = viaClaudeCode(purpose) ? runClaudeCode(request, purpose, subscription) : api(request);
             outcome = "ok";
             recordUsage(response, purpose);
+            saveUsage(request, response, purpose, subscription[0]);
             return response;
         } finally {
             sample.stop(meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome));
@@ -165,6 +173,7 @@ public class ClaudeClient {
                     });
             outcome = "ok";
             recordUsage(response, purpose);
+            saveUsage(request, response, purpose, false);
             return response;
         } finally {
             meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome)
@@ -181,6 +190,15 @@ public class ClaudeClient {
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "output").increment(u.outputTokens());
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_read").increment(u.cacheReadInputTokens());
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_write").increment(u.cacheCreationInputTokens());
+    }
+
+    private void saveUsage(ObjectNode request, ClaudeResponse response, String purpose, boolean subscription) {
+        if (usage == null || response == null || response.usage() == null) {
+            return;
+        }
+        var u = response.usage();
+        usage.recordClaude(purpose, request.path("model").asText(null), subscription,
+                u.inputTokens(), u.outputTokens(), u.cacheReadInputTokens(), u.cacheCreationInputTokens());
     }
 
     /** "api", "claude-code" eller "hybrid". */
@@ -200,9 +218,11 @@ public class ClaudeClient {
      * Via abonnemanget. I hybridläget, om Claude Code inte går (gräns nådd, utloggat) och det finns
      * en API-nyckel, tas jobbet med API-nyckeln i stället så att eleven inte blir utan svar.
      */
-    private ClaudeResponse runClaudeCode(ObjectNode request, String purpose) {
+    private ClaudeResponse runClaudeCode(ObjectNode request, String purpose, boolean[] subscription) {
         try {
-            return claudeCode.run(request);
+            ClaudeResponse r = claudeCode.run(request);
+            subscription[0] = true;
+            return r;
         } catch (IllegalStateException e) {
             if (claudeCode.mode().equals("hybrid") && notBlank(cfg.apiKey())) {
                 org.slf4j.LoggerFactory.getLogger(ClaudeClient.class)

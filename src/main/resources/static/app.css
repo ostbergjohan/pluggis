@@ -246,3 +246,13 @@ code.sa { font-size: 13px; background: var(--bg); border: 1px solid var(--line);
 
 .gcal-list { margin: 4px 0 0; padding-left: 18px; font-size: 14px; }
 .gcal-list li { margin: 3px 0; }
+
+.cost-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.cost-card { background: var(--panel, #fff); border: 1px solid var(--line, #e5e7eb); border-radius: 12px; padding: 14px; }
+.cost-big { font-size: 26px; font-weight: 700; margin: 4px 0; }
+.cost-bars { display: flex; align-items: flex-end; gap: 3px; height: 140px; margin: 8px 0; }
+.cost-bar { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; min-width: 4px; background: rgba(127,127,127,.08); border-radius: 3px; overflow: hidden; }
+.cost-bar-api { background: var(--blue); }
+.cost-bar-sub { background: var(--accent); opacity: .45; }
+.cost-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+.cost-dot.api { background: var(--blue); } .cost-dot.sub { background: var(--accent); opacity: .45; }

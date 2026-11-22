@@ -36,6 +36,12 @@ public class AzureTts {
     private final RestClient rest;
     private final MeterRegistry meters;
     private volatile Instant pausedUntil = Instant.EPOCH;
+    private se.ostberg.pluggis.usage.UsageService usage;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setUsage(se.ostberg.pluggis.usage.UsageService usage) {
+        this.usage = usage;
+    }
 
     public AzureTts(AzureTtsProperties props, RestClient.Builder builder, MeterRegistry meters) {
         this.props = props;
@@ -90,6 +96,9 @@ public class AzureTts {
                     .body(byte[].class);
             outcome = "ok";
             meters.counter("pluggis.speech.azure.characters").increment(text.length());
+            if (usage != null) {
+                usage.recordTts("azure", text.length());
+            }
             return wav;
         } catch (RuntimeException e) {
             // 429 = för många anrop eller månadens gratisgräns nådd. Pausa och låt Piper ta över.
