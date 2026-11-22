@@ -21,8 +21,12 @@ public class StudentController {
     private final se.ostberg.pluggis.planning.PlanningService planning;
     private final se.ostberg.pluggis.student.StudentService students;
 
+    private final org.springframework.context.ApplicationEventPublisher events;
+
     public StudentController(StudentProfile profile, se.ostberg.pluggis.planning.PlanningService planning,
-                             se.ostberg.pluggis.student.StudentService students) {
+                             se.ostberg.pluggis.student.StudentService students,
+                             org.springframework.context.ApplicationEventPublisher events) {
+        this.events = events;
         this.profile = profile;
         this.planning = planning;
         this.students = students;
@@ -60,6 +64,8 @@ public class StudentController {
                 s.setStudyCue(c.length() > 80 ? c.substring(0, 80) : c);
             }
             students.save(s);
+            // Ny pluggtid → passen i Google Kalender flyttas
+            events.publishEvent(new se.ostberg.pluggis.planning.PlanningService.PlanChanged(s.getId()));
         }
         if (body.maxMinutesPerDay() != null || body.studyDays() != null) {
             var s = students.current();
