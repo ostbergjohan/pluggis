@@ -238,6 +238,8 @@ dagarna är repetition och flashkort. Avbockade moment ger poäng och ligger kva
 **Max minuter per dag och pluggdagar** ställs per elev under **Inställningar → Planering** (max gäller allt
 plugg den dagen, alla läxor och prov tillsammans). Kryssa i *Gör om befintliga planer* så planeras allt om.
 Standard för nya elever: `PLUGGIS_MAX_MINUTES_PER_DAY` (40) och `PLUGGIS_STUDY_DAYS`.
+**Vikt** (10–100 %, standard 50 %) sätts per läxa/prov i admin. Högre vikt ger mer tid, fler repetitioner och
+tidigare start i planen, lägre vikt håller det kort. Max per dag gäller alltid; ändrad vikt gör om planen.
 
 **Anpassat för ADHD:**
 - Varje dag börjar med ett **startsteg** på 2–5 minuter ("läs bara rubrikerna"), så det är lätt att komma igång.
