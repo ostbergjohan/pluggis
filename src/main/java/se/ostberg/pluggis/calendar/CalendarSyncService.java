@@ -56,12 +56,17 @@ public class CalendarSyncService {
     private final se.ostberg.pluggis.homework.MaterialService materials;
     private final RestClient http = RestClient.create();
 
-    private volatile Instant lastSync;
-    private volatile SyncResult lastResult;
-    private volatile String lastError;
+    /** Senaste synk per elev. */
+    private record LastSync(Instant at, SyncResult result, String error) {
+    }
+
+    private final java.util.Map<Long, LastSync> last = new java.util.concurrent.ConcurrentHashMap<>();
+    private final se.ostberg.pluggis.student.StudentService students;
 
     public CalendarSyncService(HomeworkService homework, PlanningService planning, SettingsService settings,
-                               PluggisProperties props, se.ostberg.pluggis.homework.MaterialService materials) {
+                               PluggisProperties props, se.ostberg.pluggis.homework.MaterialService materials,
+                               se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
         this.materials = materials;
         this.homework = homework;
         this.planning = planning;
@@ -71,18 +76,24 @@ public class CalendarSyncService {
 
     // ---- Prenumeration ----
 
-    /** Sparad länk i webben, annars PLUGGIS_ICAL_URL. */
+    /** Aktuell elevs kalenderlänk; för första eleven även PLUGGIS_ICAL_URL. */
     public String subscriptionUrl() {
-        return settings.get(SettingsService.CALENDAR_URL)
-                .orElse(props.calendar() == null ? null : blankToNull(props.calendar().icalUrl()));
+        var s = students.current();
+        String url = blankToNull(s.getCalendarUrl());
+        if (url == null && s.getId().equals(se.ostberg.pluggis.student.StudentContext.defaultId())) {
+            url = props.calendar() == null ? null : blankToNull(props.calendar().icalUrl());
+        }
+        return url;
     }
 
     public boolean onlySchoolwork() {
-        return settings.get(SettingsService.CALENDAR_ONLY_SCHOOLWORK).map(Boolean::parseBoolean).orElse(true);
+        return students.current().isCalendarOnlySchoolwork();
     }
 
     public Status status() {
-        return new Status(subscriptionUrl(), onlySchoolwork(), lastSync, lastResult, lastError);
+        LastSync l = last.get(students.current().getId());
+        return new Status(subscriptionUrl(), onlySchoolwork(), l == null ? null : l.at(),
+                l == null ? null : l.result(), l == null ? null : l.error());
     }
 
     public SyncResult subscribe(String url, boolean onlySchoolwork) {
@@ -90,27 +101,35 @@ public class CalendarSyncService {
             throw new IllegalArgumentException("Ange en kalenderlänk");
         }
         String ics = fetch(url); // kontrollera att länken fungerar innan den sparas
-        settings.put(SettingsService.CALENDAR_URL, url.trim());
-        settings.put(SettingsService.CALENDAR_ONLY_SCHOOLWORK, String.valueOf(onlySchoolwork));
+        var s = students.current();
+        s.setCalendarUrl(url.trim());
+        s.setCalendarOnlySchoolwork(onlySchoolwork);
+        students.save(s);
         return remember(importIcs(ics, null, onlySchoolwork));
     }
 
     public void unsubscribe() {
-        settings.put(SettingsService.CALENDAR_URL, "");
+        var s = students.current();
+        s.setCalendarUrl("");
+        students.save(s);
     }
 
+    /** Varje timme: synka varje elevs kalender, en elev i taget. */
     @Scheduled(cron = "${pluggis.calendar.sync-cron:0 5 * * * *}", zone = "${pluggis.timezone:Europe/Stockholm}")
     public void scheduledSync() {
-        String url = subscriptionUrl();
-        if (url == null) {
-            return;
-        }
-        try {
-            SyncResult r = syncNow();
-            log.info("Kalendersynk: {} lästa, {} importerade, {} omplanerade, {} överhoppade",
-                    r.read(), r.imported(), r.replanned(), r.skipped());
-        } catch (RuntimeException e) {
-            log.warn("Kalendersynk misslyckades: {}", e.toString());
+        for (var student : students.all()) {
+            se.ostberg.pluggis.student.StudentContext.run(student.getId(), () -> {
+                if (subscriptionUrl() == null) {
+                    return;
+                }
+                try {
+                    SyncResult r = syncNow();
+                    log.info("Kalendersynk elev {}: {} lästa, {} importerade, {} omplanerade, {} överhoppade",
+                            student.getId(), r.read(), r.imported(), r.replanned(), r.skipped());
+                } catch (RuntimeException e) {
+                    log.warn("Kalendersynk misslyckades för elev {}: {}", student.getId(), e.toString());
+                }
+            });
         }
     }
 
@@ -122,8 +141,8 @@ public class CalendarSyncService {
         try {
             return remember(importIcs(fetch(url), null, onlySchoolwork()));
         } catch (RuntimeException e) {
-            lastSync = Instant.now();
-            lastError = e.getMessage();
+            LastSync prev = last.get(students.current().getId());
+            last.put(students.current().getId(), new LastSync(Instant.now(), prev == null ? null : prev.result(), e.getMessage()));
             throw e;
         }
     }
@@ -279,9 +298,7 @@ public class CalendarSyncService {
     }
 
     private SyncResult remember(SyncResult r) {
-        lastSync = Instant.now();
-        lastResult = r;
-        lastError = null;
+        last.put(students.current().getId(), new LastSync(Instant.now(), r, null));
         return r;
     }
 

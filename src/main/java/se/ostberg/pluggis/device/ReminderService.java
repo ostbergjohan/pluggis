@@ -25,8 +25,12 @@ public class ReminderService {
     private final StudySessionService sessions;
     private final PluggisProperties props;
 
+    private final se.ostberg.pluggis.student.StudentService students;
+
     public ReminderService(DeviceRegistry registry, PlanningService planning, HomeworkService homework,
-                           StudySessionService sessions, PluggisProperties props) {
+                           StudySessionService sessions, PluggisProperties props,
+                           se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
         this.registry = registry;
         this.planning = planning;
         this.homework = homework;
@@ -39,27 +43,34 @@ public class ReminderService {
         if (!enabled()) {
             return;
         }
-        String text = startText(planning.today(), dueTomorrow());
-        if (text == null) {
-            return;
-        }
+        // Varje ansluten enhet får påminnelsen för sin egen elev
         for (String deviceId : registry.connected()) {
-            if (!sessions.startedToday(deviceId, props.zone())) {
-                registry.send(deviceId, new DeviceMessages.Reminder(text));
-            }
+            se.ostberg.pluggis.student.StudentContext.run(studentFor(deviceId), () -> {
+                String text = startText(planning.today(), dueTomorrow());
+                if (text != null && !sessions.startedToday(deviceId, props.zone())) {
+                    registry.send(deviceId, new DeviceMessages.Reminder(text));
+                }
+            });
         }
+    }
+
+    private Long studentFor(String deviceId) {
+        return students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId)
+                .orElse(se.ostberg.pluggis.student.StudentContext.defaultId());
     }
 
     @Scheduled(cron = "${pluggis.reminders.nudge-cron:0 30 18 * * MON-FRI}", zone = "${pluggis.timezone:Europe/Stockholm}")
     public void nudge() {
-        if (!enabled() || planning.today().isEmpty()) {
+        if (!enabled()) {
             return;
         }
         for (String deviceId : registry.connected()) {
-            if (!sessions.startedToday(deviceId, props.zone())) {
-                registry.send(deviceId, new DeviceMessages.Reminder(
-                        "Hej! Ett litet pass på 10 minuter räcker för idag. Tryck på blå knappen så hjälper jag dig börja."));
-            }
+            se.ostberg.pluggis.student.StudentContext.run(studentFor(deviceId), () -> {
+                if (!planning.today().isEmpty() && !sessions.startedToday(deviceId, props.zone())) {
+                    registry.send(deviceId, new DeviceMessages.Reminder(
+                            "Hej! Ett litet pass på 10 minuter räcker för idag. Tryck på blå knappen så hjälper jag dig börja."));
+                }
+            });
         }
     }
 

@@ -40,34 +40,38 @@ public class StudentProfile {
         TONES.put(id, new Tone(id, label, instruction));
     }
 
-    private final SettingsService settings;
+    private final se.ostberg.pluggis.student.StudentService students;
 
-    public StudentProfile(SettingsService settings) {
-        this.settings = settings;
+    public StudentProfile(se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
     }
 
+    /** Gäller aktuell elev (se StudentContext). */
     public String name() {
-        return settings.get(NAME).orElse("");
+        return students.current().getName();
     }
 
     public String tone() {
-        return settings.get(TONE).filter(TONES::containsKey).orElse("lugn");
+        String t = students.current().getTone();
+        return t != null && TONES.containsKey(t) ? t : "lugn";
     }
 
     public String extra() {
-        return settings.get(EXTRA).orElse("");
+        return students.current().getExtra();
     }
 
     public void update(String name, String tone, String extra) {
+        var s = students.current();
         if (name != null) {
-            settings.put(NAME, clean(name, 40));
+            s.setName(clean(name, 40));
         }
         if (tone != null) {
-            settings.put(TONE, TONES.containsKey(tone) ? tone : "lugn");
+            s.setTone(TONES.containsKey(tone) ? tone : "lugn");
         }
         if (extra != null) {
-            settings.put(EXTRA, clean(extra, MAX_EXTRA));
+            s.setExtra(clean(extra, MAX_EXTRA));
         }
+        students.save(s);
     }
 
     /** Texten som läggs efter coachens regler. */

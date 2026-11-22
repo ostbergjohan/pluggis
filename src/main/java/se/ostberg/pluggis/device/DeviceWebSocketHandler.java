@@ -39,11 +39,15 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
     private final ObjectMapper mapper;
 
     private final se.ostberg.pluggis.chat.ChatAccess chat;
+    private final se.ostberg.pluggis.student.StudentService students;
+    static final String STUDENT_ID = "studentId";
 
     public DeviceWebSocketHandler(DeviceRegistry registry, VoiceService voice, StudySessionService sessions,
                                   PluggisProperties props, ObjectMapper mapper,
-                                  se.ostberg.pluggis.chat.ChatAccess chat) {
+                                  se.ostberg.pluggis.chat.ChatAccess chat,
+                                  se.ostberg.pluggis.student.StudentService students) {
         this.chat = chat;
+        this.students = students;
         this.registry = registry;
         this.voice = voice;
         this.sessions = sessions;
@@ -57,11 +61,28 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         String deviceId = query.getFirst(DEVICE_ID);
         String token = query.getFirst("token");
 
-        if (deviceId == null || deviceId.isBlank() || !(props.tokenMatches(token) || chat.matches(token))) {
+        Long studentId = null;
+        if (props.tokenRequired() && props.tokenMatches(token)) {
+            studentId = students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
+        } else {
+            var kid = chat.studentFor(token);
+            if (kid.isPresent()) {
+                // Eleven pratar alltid som sin egen enhet, aldrig som ett syskons
+                studentId = kid.get();
+                deviceId = students.byId(studentId).map(se.ostberg.pluggis.student.Student::getDeviceId).orElse(deviceId);
+            } else if (!props.tokenRequired()) {
+                studentId = students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
+            } else {
+                deviceId = null;
+            }
+        }
+        if (deviceId == null || deviceId.isBlank()) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("deviceId eller token saknas/fel"));
             return;
         }
         session.getAttributes().put(DEVICE_ID, deviceId);
+        session.getAttributes().put(STUDENT_ID,
+                studentId != null ? studentId : se.ostberg.pluggis.student.StudentContext.defaultId());
         registry.register(deviceId, session);
         log.info("Enhet ansluten: {}", deviceId);
 
@@ -71,6 +92,11 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        se.ostberg.pluggis.student.StudentContext.run((Long) session.getAttributes().get(STUDENT_ID),
+                () -> onText(session, message));
+    }
+
+    private void onText(WebSocketSession session, TextMessage message) {
         String deviceId = (String) session.getAttributes().get(DEVICE_ID);
         if (deviceId == null) {
             return;
@@ -115,6 +141,11 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
 
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) {
+        se.ostberg.pluggis.student.StudentContext.run((Long) session.getAttributes().get(STUDENT_ID),
+                () -> onBinary(session, message));
+    }
+
+    private void onBinary(WebSocketSession session, BinaryMessage message) {
         String deviceId = (String) session.getAttributes().get(DEVICE_ID);
         if (deviceId == null) {
             return;

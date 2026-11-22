@@ -23,10 +23,14 @@ public class ApiTokenFilter extends OncePerRequestFilter {
 
     private final PluggisProperties props;
     private final se.ostberg.pluggis.chat.ChatAccess chat;
+    private final se.ostberg.pluggis.student.StudentService students;
+    private final LoginGuard guard = new LoginGuard(20, java.time.Duration.ofMinutes(10));
 
-    public ApiTokenFilter(PluggisProperties props, se.ostberg.pluggis.chat.ChatAccess chat) {
+    public ApiTokenFilter(PluggisProperties props, se.ostberg.pluggis.chat.ChatAccess chat,
+                          se.ostberg.pluggis.student.StudentService students) {
         this.props = props;
         this.chat = chat;
+        this.students = students;
         if (!props.tokenRequired()) {
             log.warn("pluggis.device-token är inte satt – API:t är öppet. Sätt PLUGGIS_DEVICE_TOKEN utanför lokal utveckling.");
         }
@@ -41,16 +45,63 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         String token = request.getHeader(HEADER);
-        if (props.tokenRequired() && chat.matches(token)) {
-            // Elevlänken: bara det eleven behöver
-            if (!se.ostberg.pluggis.chat.ChatAccess.allowed(request.getMethod(), request.getRequestURI())) {
-                response.sendError(HttpServletResponse.SC_FORBIDDEN, "Inte med elevlänken");
+        Long student;
+        if (props.tokenRequired() && props.tokenMatches(token)) {
+            student = parentStudent(request);                       // föräldern: vald elev
+        } else {
+            var kid = chat.studentFor(token);
+            if (kid.isPresent()) {
+                // Eleven (kod eller elevlänk): bara det eleven behöver, och bara sin egen data
+                if (!se.ostberg.pluggis.chat.ChatAccess.allowed(request.getMethod(), request.getRequestURI())) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Inte med elevkoden");
+                    return;
+                }
+                student = kid.get();
+                request.setAttribute(STUDENT_ATTR, student);
+            } else if (!props.tokenRequired()) {
+                student = parentStudent(request);                   // öppet läge (lokal utveckling)
+            } else {
+                if (!guard.allow(request.getRemoteAddr())) {
+                    response.sendError(429, "För många felaktiga försök – vänta en stund");
+                    return;
+                }
+                guard.failure(request.getRemoteAddr());
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Fel eller saknad kod");
                 return;
             }
-        } else if (!props.tokenMatches(token)) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Fel eller saknad token");
-            return;
         }
-        chain.doFilter(request, response);
+        se.ostberg.pluggis.student.StudentContext.set(student);
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            se.ostberg.pluggis.student.StudentContext.clear();
+        }
+    }
+
+    /** Elevens id när eleven själv anropar (kod). Annars null. */
+    public static final String STUDENT_ATTR = "pluggis.chatStudent";
+    public static final String STUDENT_HEADER = "X-Pluggis-Student";
+
+    /** Föräldern väljer elev med X-Pluggis-Student; iOS-genvägen m.fl. med ?deviceId=. Annars första eleven. */
+    private Long parentStudent(HttpServletRequest request) {
+        String header = request.getHeader(STUDENT_HEADER);
+        if (header != null && !header.isBlank()) {
+            try {
+                Long id = Long.valueOf(header.trim());
+                if (students.byId(id).isPresent()) {
+                    return id;
+                }
+            } catch (NumberFormatException ignored) {
+                // ogiltigt – ta förvald
+            }
+        }
+        String deviceId = request.getParameter("deviceId");
+        if (deviceId != null) {
+            var byDevice = students.byDeviceId(deviceId);
+            if (byDevice.isPresent()) {
+                return byDevice.get().getId();
+            }
+        }
+        return se.ostberg.pluggis.student.StudentContext.defaultId();
     }
 }

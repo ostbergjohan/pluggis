@@ -18,6 +18,11 @@ public class Deck {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** Vilken elev raden hör till – sätts och filtreras automatiskt av Hibernate. */
+    @org.hibernate.annotations.TenantId
+    @jakarta.persistence.Column(name = "student_key", length = 20)
+    private String studentKey;
+
     private String name;
 
     private String subject;

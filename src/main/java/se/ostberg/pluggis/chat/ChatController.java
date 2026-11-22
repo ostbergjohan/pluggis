@@ -21,9 +21,11 @@ public class ChatController {
     private final ChatAccess access;
     private final se.ostberg.pluggis.settings.StudentProfile student;
     private final se.ostberg.pluggis.speech.SpeechClient speech;
+    private final se.ostberg.pluggis.student.StudentService students;
 
     public ChatController(ChatAccess access, se.ostberg.pluggis.settings.StudentProfile student,
-                          se.ostberg.pluggis.speech.SpeechClient speech) {
+                          se.ostberg.pluggis.speech.SpeechClient speech, se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
         this.access = access;
         this.student = student;
         this.speech = speech;
@@ -32,7 +34,8 @@ public class ChatController {
     /** Vad elevchatten behöver veta vid start. */
     @GetMapping("/me")
     public Map<String, Object> me() {
-        return Map.of("deviceId", access.deviceId(DEFAULT_DEVICE), "name", student.name(),
+        var me = students.current();
+        return Map.of("deviceId", me.getDeviceId(), "name", me.getName(), "studentId", me.getId(),
                 "serverVoice", speech.ttsEnabled());
     }
 

@@ -57,7 +57,7 @@ public class VoiceService {
             registry.send(deviceId, new DeviceMessages.Error("Ljudtjänsten är inte påslagen på servern"));
             return;
         }
-        workers.submit(() -> {
+        workers.submit(se.ostberg.pluggis.student.StudentContext.wrap(() -> {
             registry.send(deviceId, new DeviceMessages.Thinking());
             String text;
             try {
@@ -73,13 +73,13 @@ public class VoiceService {
             }
             registry.send(deviceId, new DeviceMessages.Heard(text));
             reply(deviceId, text);
-        });
+        }));
     }
 
     /** Text från enheten eller ett knapptryck. */
     public void onText(String deviceId, String text) {
         registry.send(deviceId, new DeviceMessages.Thinking());
-        workers.submit(() -> reply(deviceId, text));
+        workers.submit(se.ostberg.pluggis.student.StudentContext.wrap(() -> reply(deviceId, text)));
     }
 
     private void reply(String deviceId, String userText) {
@@ -90,7 +90,7 @@ public class VoiceService {
         }
         long start = System.nanoTime();
         BlockingQueue<String> sentences = new LinkedBlockingQueue<>();
-        var speaker = workers.submit(() -> speakInOrder(deviceId, sentences, start));
+        var speaker = workers.submit(se.ostberg.pluggis.student.StudentContext.wrap(() -> speakInOrder(deviceId, sentences, start)));
         String full = coach.chat(deviceId, userText, sentences::add);
         sentences.add(END);
         registry.send(deviceId, new DeviceMessages.Say(full));

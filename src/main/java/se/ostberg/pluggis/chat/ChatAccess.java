@@ -35,10 +35,26 @@ public class ChatAccess {
     };
 
     private final SettingsService settings;
+    private final se.ostberg.pluggis.student.StudentService students;
     private final SecureRandom random = new SecureRandom();
 
-    public ChatAccess(SettingsService settings) {
+    public ChatAccess(SettingsService settings, se.ostberg.pluggis.student.StudentService students) {
         this.settings = settings;
+        this.students = students;
+    }
+
+    /**
+     * Elevens kod (5 tecken) → eleven. Den äldre långa elevlänken (#t=…) gäller fortfarande för första eleven.
+     */
+    public Optional<Long> studentFor(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        Optional<Long> byCode = students.byCode(token).map(se.ostberg.pluggis.student.Student::getId);
+        if (byCode.isPresent()) {
+            return byCode;
+        }
+        return matches(token) ? Optional.of(se.ostberg.pluggis.student.StudentContext.defaultId()) : Optional.empty();
     }
 
     public Optional<String> token() {
