@@ -169,18 +169,31 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
 | Inställningar | Token, enhets-id, elevens namn och coachens ton, elevlänk till mobilen, röst och tempo, iOS-genvägen |
 
+### Flera elever
+
+Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och poäng.
+
+- **Inställningar → Elever:** lägg till elev (namn, och Tab5:ans enhets-id om eleven har en), byt kod eller ta bort.
+- Välj vilken elev du tittar på i **elevväljaren** uppe till vänster i föräldravyn.
+- Varje elev får en **fast kod på 5 tecken** (t.ex. `K7M2Q`, inga lättförväxlade tecken som 0/O och 1/I).
+  Koden är elevens inloggning i mobilchatten. *Ny kod* gör den gamla ogiltig.
+- Spärr mot gissning: högst 20 felaktiga försök per 10 minuter och adress.
+- Befintliga data från före flera-elever-stödet hör till den första eleven.
+- Tekniskt: Hibernate `@TenantId` (kolumnen `student_key`) filtrerar läxor, plan, material och flashkort
+  per elev; pass, poäng och samtal hör till elevens enhets-id.
+
 ### Elevchatt i mobilen
 
 `/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
 🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
-material (foto, skärmdump, Word, PDF) till en läxa eller som ny läxa.
+material (foto, skärmdump, Word, PDF), och se poängen.
 
-- **Inställningar → Elevchatt i mobilen → Skapa elevlänk.** Skicka länken till elevens telefon, öppna i
-  Safari → Dela → *Lägg till på hemskärmen*.
-- Elevlänken har en egen nyckel som bara når det eleven behöver – inte inställningar, poängbonus,
-  utbetalningar, kalender eller loggar. *Ny länk* gör den gamla ogiltig.
-- Chatten pratar som samma enhet som Tab5, så pass, poäng och samtal hänger ihop. Tab5 och mobilen kan vara
-  anslutna samtidigt.
+- Eleven öppnar `/chat.html` och skriver in sin kod – eller får länken med koden (`/chat.html#k=KOD`) via
+  *Kopiera länk* / *Dela* under Inställningar → Elever. Öppna i Safari → Dela → *Lägg till på hemskärmen*.
+- Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning och poäng – inte inställningar,
+  poängbonus, utbetalningar, kalender, loggar eller syskonens data.
+- Tryck på Pluggis-namnet i chatten för att logga ut (t.ex. på en delad telefon).
+- Tab5 och mobilen för samma elev kan vara anslutna samtidigt och ser samma samtal.
 
 ### Eleven och coachens ton
 
