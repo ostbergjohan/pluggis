@@ -204,3 +204,20 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .round .mic-ico { width: 22px; height: 22px; vertical-align: middle; }
 .mic-hint { font-size: 13px; color: var(--muted); text-align: center; padding: 2px 12px 4px; }
 .mic-hint .mic-ico { color: var(--ink); }
+
+.deck-bar { height: 5px; background: rgba(0,0,0,.08); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.deck-bar div { height: 100%; background: var(--accent); }
+.hint-small { color: var(--muted); font-size: 13px; text-align: center; margin-top: 12px; }
+.fc-card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 28px 18px; margin-top: 14px;
+  min-height: 170px; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+.fc-front { font-size: 24px; font-weight: 700; line-height: 1.25; }
+.fc-hint { color: var(--muted); font-size: 15px; margin-top: 10px; }
+.fc-back { font-size: 20px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); color: var(--accent); }
+.fc-back[hidden], .fc-hint[hidden] { display: none; }
+.fc-controls { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; align-items: center; }
+.fc-controls .big { margin-bottom: 0; }
+.fc-controls:has(.fc-right) { flex-direction: row; }
+.fc-wrong, .fc-right { flex: 1; padding: 16px; border-radius: 14px; border: 0; font-weight: 700; font-size: 17px; color: #fff; }
+.fc-wrong { background: var(--red); }
+.fc-right { background: var(--accent); }
+.fc-status { text-align: center; margin-top: 12px; }

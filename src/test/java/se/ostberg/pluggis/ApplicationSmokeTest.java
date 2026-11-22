@@ -129,6 +129,30 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void studentCanPracticeFlashcardsInChatButOnlyAsThemselves() throws Exception {
+        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0);
+        String code = first.path("code").asText();
+        String own = first.path("deviceId").asText();
+        long deck = json(mvc.perform(post("/api/flashcards/decks").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Glosor mobil\",\"cards\":[{\"front\":\"dog\",\"back\":\"hund\"}]}"))
+                .andReturn().getResponse().getContentAsString()).path("id").asLong();
+
+        assertThat(mvc.perform(get("/api/flashcards/decks").header(TOKEN, code)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).contains("Glosor mobil");
+        long card = json(mvc.perform(get("/api/flashcards/decks/" + deck + "/next?practiceAnyway=true").header(TOKEN, code))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        mvc.perform(post("/api/flashcards/cards/" + card + "/grade?deviceId=nagon-annan&quiet=true").header(TOKEN, code)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"correct\":true}")).andExpect(status().isOk());
+
+        // Fortfarande inte redigera kortlekar, och inte läsa någon annans poäng
+        mvc.perform(post("/api/flashcards/decks").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"x\"}")).andExpect(status().isForbidden());
+        mvc.perform(get("/api/devices/nagon-annan/rewards").header(TOKEN, code)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/devices/" + own + "/rewards").header(TOKEN, code)).andExpect(status().isOk());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

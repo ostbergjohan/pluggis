@@ -58,6 +58,16 @@ public class ApiTokenFilter extends OncePerRequestFilter {
                 }
                 student = kid.get();
                 request.setAttribute(STUDENT_ATTR, student);
+                // Eleven kan bara vara sin egen enhet (poäng, kort, pass) – inte ett syskons
+                String own = students.byId(student).map(se.ostberg.pluggis.student.Student::getDeviceId).orElse(null);
+                var m = DEVICE_PATH.matcher(request.getRequestURI());
+                if (own != null && m.find() && !m.group(1).equals(own)) {
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN, "Inte med elevkoden");
+                    return;
+                }
+                if (own != null) {
+                    request = ownDevice(request, own);
+                }
             } else if (!props.tokenRequired()) {
                 student = parentStudent(request);                   // öppet läge (lokal utveckling)
             } else {
@@ -76,6 +86,30 @@ public class ApiTokenFilter extends OncePerRequestFilter {
         } finally {
             se.ostberg.pluggis.student.StudentContext.clear();
         }
+    }
+
+    private static final java.util.regex.Pattern DEVICE_PATH = java.util.regex.Pattern.compile("^/api/devices/([^/]+)/");
+
+    /** ?deviceId= blir alltid elevens egen. */
+    private static HttpServletRequest ownDevice(HttpServletRequest request, String own) {
+        return new jakarta.servlet.http.HttpServletRequestWrapper(request) {
+            @Override
+            public String getParameter(String name) {
+                return "deviceId".equals(name) && super.getParameter(name) != null ? own : super.getParameter(name);
+            }
+
+            @Override
+            public String[] getParameterValues(String name) {
+                return "deviceId".equals(name) && super.getParameter(name) != null ? new String[]{own} : super.getParameterValues(name);
+            }
+
+            @Override
+            public java.util.Map<String, String[]> getParameterMap() {
+                java.util.Map<String, String[]> map = new java.util.LinkedHashMap<>(super.getParameterMap());
+                map.computeIfPresent("deviceId", (k, v) -> new String[]{own});
+                return java.util.Collections.unmodifiableMap(map);
+            }
+        };
     }
 
     /** Elevens id när eleven själv anropar (kod). Annars null. */

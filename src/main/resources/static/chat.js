@@ -81,6 +81,7 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { method: opts.method || 'GET', headers, body });
   if (res.status === 429) throw new Error('För många felaktiga försök – vänta en stund');
   if (res.status === 401) throw Object.assign(new Error('Koden fungerar inte – be om en ny'), { auth: true });
+  if (opts.raw) return res;
   if (res.status === 403) throw new Error('Det här går inte att göra från elevchatten');
   if (!res.ok) {
     let msg = `Något gick fel (${res.status})`;
@@ -646,6 +647,92 @@ views.laxor = async () => {
   page.append(h('p', { class: 'meta', style: 'color:var(--muted);font-size:14px;margin-top:12px' },
     'Lägg till material (bild på sidan, Word, PDF) så vet Pluggis vad som ingår och gör en plan.'));
   return page;
+};
+
+// ---- Flashkort ----
+views.kort = async () => {
+  const page = h('div', { class: 'page' }, h('h2', {}, 'Flashkort'));
+  const [decks, hw] = await Promise.all([api('/api/flashcards/decks'), api('/api/homework?openOnly=false').catch(() => [])]);
+  if (!decks.length) {
+    page.append(h('div', { class: 'box' }, h('div', { class: 'empty' },
+      'Inga kortlekar än. Be Pluggis i chatten: "Gör flashkort om …", eller skicka material med 📎 och kryssa i flashkort.')));
+    return page;
+  }
+  const hwById = new Map(hw.map(x => [x.id, x]));
+  const due = decks.reduce((n, d) => n + d.dueNow, 0);
+  page.append(h('p', { class: 'meta', style: 'color:var(--muted);margin:0 0 10px' },
+    due ? `${due} kort att repetera nu – bra läge att köra!` : 'Inga kort är dags att repetera just nu. Du kan öva ändå.'));
+  // Lekar med kort att repetera först, sen kopplade till ett kommande prov
+  const sorted = [...decks].sort((a, b) => (b.dueNow > 0) - (a.dueNow > 0) || b.dueNow - a.dueNow);
+  page.append(h('div', { class: 'box' }, sorted.map(d => {
+    const x = d.deck.homeworkId ? hwById.get(d.deck.homeworkId) : null;
+    const pct = d.cards ? Math.round(100 * d.learned / d.cards) : 0;
+    return h('div', { class: 'row tap', onclick: () => practice(d, x) },
+      h('div', { class: 'grow' },
+        h('div', {}, d.deck.name, x && x.weight >= 80 ? ' ⭐' : ''),
+        h('div', { class: 'meta' }, [d.deck.subject, `${d.cards} kort`, `${pct} % sitter`, x && x.dueDate ? rel(x.dueDate) : null].filter(Boolean).join(' · ')),
+        h('div', { class: 'deck-bar' }, h('div', { style: `width:${pct}%` }))),
+      d.dueNow ? h('span', { class: 'tag late' }, `${d.dueNow} nu`) : h('span', { class: 'tag' }, 'öva'));
+  })));
+  page.append(h('p', { class: 'hint-small' }, 'Tips: tryck 🃏 Förhör mig i chatten så förhör Pluggis dig med rösten i stället.'));
+  return page;
+
+  function practice(d, x) {
+    let onlyDue = d.dueNow > 0;
+    const score = { done: 0, right: 0 };
+    const front = h('div', { class: 'fc-front' });
+    const back = h('div', { class: 'fc-back', hidden: true });
+    const hintEl = h('div', { class: 'fc-hint', hidden: true });
+    const controls = h('div', { class: 'fc-controls' });
+    const status = h('div', { class: 'meta fc-status' });
+    const say = h('button', { class: 'small-btn', onclick: () => readAloud(front.textContent, say) }, '🔊 Läs upp');
+    const view = h('div', { class: 'page' },
+      h('div', { style: 'display:flex;align-items:center;gap:8px' },
+        h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Lekar'),
+        h('h2', { style: 'margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, d.deck.name)),
+      h('div', { class: 'fc-card' }, front, hintEl, back), h('div', { style: 'text-align:center;margin-top:8px' }, say),
+      controls, status);
+    $('#view').replaceChildren(view);
+    next();
+
+    async function next() {
+      back.hidden = true; hintEl.hidden = true;
+      let res = await api(`/api/flashcards/decks/${d.deck.id}/next?practiceAnyway=${!onlyDue}`, { raw: true }).catch(() => null);
+      if (res && res.status === 404 && onlyDue) {
+        // Alla som var dags är gjorda
+        front.textContent = score.done ? `Klart! ${score.right} rätt av ${score.done} 🎉` : 'Inget att repetera just nu.';
+        controls.replaceChildren(h('button', { class: 'big', onclick: () => { onlyDue = false; next(); } }, 'Öva lite till ändå'),
+          h('button', { class: 'small-btn', onclick: () => show('kort') }, 'Tillbaka till lekarna'));
+        say.hidden = true;
+        return;
+      }
+      if (!res || !res.ok) { front.textContent = 'Inga kort i leken.'; controls.replaceChildren(); say.hidden = true; return; }
+      const card = await res.json();
+      say.hidden = false;
+      front.textContent = card.front;
+      back.textContent = card.back;
+      hintEl.textContent = card.hint ? `Ledtråd: ${card.hint}` : '';
+      controls.replaceChildren(
+        card.hint ? h('button', { class: 'small-btn', onclick: (e) => { hintEl.hidden = false; e.target.remove(); } }, '💡 Ledtråd') : null,
+        h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar'));
+    }
+    function reveal(card) {
+      if (readingBtn) stopReading();
+      back.hidden = false;
+      controls.replaceChildren(
+        h('button', { class: 'fc-wrong', onclick: () => grade(card, false) }, '✗ Fel'),
+        h('button', { class: 'fc-right', onclick: () => grade(card, true) }, '✓ Rätt'));
+    }
+    async function grade(card, correct) {
+      try {
+        await api(`/api/flashcards/cards/${card.id}/grade?deviceId=${enc(S.deviceId)}&quiet=true`, { method: 'POST', body: { correct } });
+      } catch (e) { toast(e.message, true); return; }
+      score.done++; if (correct) score.right++;
+      status.textContent = `${score.right} rätt av ${score.done}`;
+      refreshPoints();
+      next();
+    }
+  }
 };
 
 views.poang = async () => {

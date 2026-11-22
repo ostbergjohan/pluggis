@@ -33,6 +33,9 @@ public class ChatAccess {
             Pattern.compile("GET /api/devices/[^/]+/rewards"),
             Pattern.compile("GET /api/devices/[^/]+/rewards/events"),
             Pattern.compile("POST /api/speech/preview"),
+            Pattern.compile("GET /api/flashcards/decks"),
+            Pattern.compile("GET /api/flashcards/decks/\\d+/next"),
+            Pattern.compile("POST /api/flashcards/cards/\\d+/grade"),
     };
 
     private final SettingsService settings;

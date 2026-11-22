@@ -68,6 +68,9 @@ public class DeviceEventRelay {
 
     @EventListener
     public void onCardGraded(FlashcardService.CardGraded e) {
+        if (e.quiet()) {
+            return;
+        }
         registry.send(e.deviceId(), new DeviceMessages.CardAnswer(
                 e.card().getId(), e.card().getBack(), e.correct(), e.card().getBox()));
     }

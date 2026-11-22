@@ -147,8 +147,9 @@ public class FlashcardController {
 
     @PostMapping("/cards/{cardId}/grade")
     public ResponseEntity<Card> grade(@PathVariable long cardId, @RequestBody GradeRequest body,
-                                      @RequestParam(required = false) String deviceId) {
-        return ResponseEntity.of(flashcards.grade(cardId, body.correct(), deviceId));
+                                      @RequestParam(required = false) String deviceId,
+                                      @RequestParam(defaultValue = "false") boolean quiet) {
+        return ResponseEntity.of(flashcards.grade(cardId, body.correct(), deviceId, quiet));
     }
 
     /** Export till Anki (Arkiv → Importera, fältavgränsare tab). */

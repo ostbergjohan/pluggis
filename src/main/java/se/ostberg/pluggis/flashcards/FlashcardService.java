@@ -24,7 +24,11 @@ public class FlashcardService {
     }
 
     /** Ett kort har rättats – enheten visar baksidan och om det var rätt. */
-    public record CardGraded(String deviceId, Card card, boolean correct) {
+    /** {@code quiet}: eleven övar själv i mobilen – ge poäng, men visa inget på Tab5/i chatten. */
+    public record CardGraded(String deviceId, Card card, boolean correct, boolean quiet) {
+        public CardGraded(String deviceId, Card card, boolean correct) {
+            this(deviceId, card, correct, false);
+        }
     }
 
     private final DeckRepository decks;
@@ -99,10 +103,15 @@ public class FlashcardService {
 
     @Transactional
     public Optional<Card> grade(long cardId, boolean correct, String deviceId) {
+        return grade(cardId, correct, deviceId, false);
+    }
+
+    @Transactional
+    public Optional<Card> grade(long cardId, boolean correct, String deviceId, boolean quiet) {
         return cards.findById(cardId).map(c -> {
             c.grade(correct, clock.instant());
             if (deviceId != null) {
-                events.publishEvent(new CardGraded(deviceId, c, correct));
+                events.publishEvent(new CardGraded(deviceId, c, correct, quiet));
             }
             return c;
         });
