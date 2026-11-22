@@ -41,4 +41,4 @@ jobs:
           # Utan token ska det bli ett begripligt fel, inte en krasch
           echo '{"type":"user","message":{"role":"user","content":"hej"}}' | \
             docker run --rm -i --entrypoint claude "$img" -p --input-format stream-json --output-format stream-json \
-              --verbose --tools "" --no-session-persistence --max-turns 1 | grep '"type":"result"' | head -c 600 || true
+              --verbose --tools "" --no-session-persistence --max-turns 1 2>&1 | tail -c 1500 || true
