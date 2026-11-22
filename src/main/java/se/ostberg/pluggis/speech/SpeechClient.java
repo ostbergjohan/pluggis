@@ -137,9 +137,11 @@ public class SpeechClient {
     public JsonNode voices() {
         com.fasterxml.jackson.databind.node.ArrayNode all = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
         if (azure != null) {
+            boolean first = true;
             for (AzureTts.Voice v : AzureTts.VOICES) {
                 all.addObject().put("id", AzureTts.PREFIX + v.id()).put("name", v.name())
-                        .put("quality", "Azure, " + v.gender()).put("default", all.isEmpty());
+                        .put("quality", "Azure, " + v.gender()).put("default", first);
+                first = false;
             }
         }
         if (enabled) {
