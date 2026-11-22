@@ -242,6 +242,7 @@ Standard för nya elever: `PLUGGIS_MAX_MINUTES_PER_DAY` (40) och `PLUGGIS_STUDY_
 tidigare start i planen, lägre vikt håller det kort. Max per dag gäller alltid; ändrad vikt gör om planen.
 
 **Anpassat för ADHD:**
+- **Ett block per ämne varje dag:** momenten grupperas per läxa/prov (närmast deadline först, sedan vikt) så att eleven inte hoppar mellan ämnen. Varje ämne har fast färg och symbol (🧪 NO, ➗ matte, 📖 svenska, 🇬🇧 engelska, 🗣️ språk, 🌍 SO …) i chatten, admin och kalendern. Dagar du ordnat för hand behåller din ordning.
 - Varje dag börjar med ett **startsteg** på 2–5 minuter ("läs bara rubrikerna"), så det är lätt att komma igång.
 - Aldrig två läsmoment i rad; repetition först med boken framme, sedan utan (som på provet).
 - **Buffert:** planen fyller bara ~80 % av max per dag och lämnar en lätt reservdag före provet.
