@@ -594,11 +594,34 @@ function homeworkItem(x, rerender) {
     const f = homeworkFields(x);
     const planBox = h('div', {}, h('span', { class: 'spinner' }));
     const matBox = h('div', {}, h('span', { class: 'spinner' }));
-    const matInput = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none', onchange: async () => {
-      const files = [...matInput.files].slice(0, MAX_FILES);
+    const staged = [];
+    const stageBox = h('div');
+    const drawStage = () => {
+      if (!staged.length) { stageBox.replaceChildren(); return; }
+      const cardsCb = h('input', { type: 'checkbox' });
+      stageBox.replaceChildren(h('div', { class: 'stage' },
+        h('div', { class: 'stage-list' }, staged.map((f, i) => h('div', { class: 'stage-item' },
+          f.type && f.type.startsWith('image/') ? h('img', { src: URL.createObjectURL(f), alt: '' }) : h('span', { class: 'stage-doc' }, (f.name.split('.').pop() || 'fil').toUpperCase()),
+          h('span', { class: 'item-meta' }, `${i + 1}. ${f.name}`),
+          h('button', { class: 'ghost', title: 'Ta bort', onclick: () => { staged.splice(i, 1); drawStage(); } }, '✕')))),
+        h('label', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, cardsCb, 'Gör flashkort av materialet också'),
+        h('div', { class: 'toolbar', style: 'margin-top:8px' },
+          staged.length < MAX_FILES ? h('button', { onclick: () => matInput.click() }, '➕ Lägg till fler sidor') : null,
+          h('button', { class: 'primary', onclick: () => sendMaterial(staged.splice(0), cardsCb.checked) },
+            `Skicka ${staged.length} ${staged.length === 1 ? 'fil' : 'sidor'}`),
+          h('button', { class: 'ghost', onclick: () => { staged.length = 0; drawStage(); } }, 'Avbryt'))));
+    };
+    const matInput = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none', onchange: () => {
+      const picked = [...matInput.files];
       matInput.value = '';
+      const room = MAX_FILES - staged.length;
+      if (picked.length > room) toast(`Högst ${MAX_FILES} sidor åt gången`, true);
+      staged.push(...picked.slice(0, room));
+      drawStage();
+    } });
+    const sendMaterial = async (files, cards) => {
+      drawStage();
       if (!files.length) return;
-      const cards = confirm('Ska Pluggis också göra flashkort av materialet?');
       matBox.replaceChildren(h('span', { class: 'spinner' }), files.length > 1 ? ` Claude läser ${files.length} filer…` : ' Claude läser materialet…');
       const fd = await filesForm(files);
       const r = await run(() => api(`/api/homework/upload?homeworkId=${x.id}&flashcards=${cards}&deviceId=${enc(state.deviceId)}`,
@@ -609,7 +632,7 @@ function homeworkItem(x, rerender) {
         state.openHomeworkId = x.id;
         rerender();
       } else showMaterial();
-    } });
+    };
     body.replaceChildren(f.el,
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
@@ -641,7 +664,7 @@ function homeworkItem(x, rerender) {
           await run(() => api(`/api/homework/${x.id}`, { method: 'DELETE' }), null, 'Borttagen');
           rerender();
         } }, 'Ta bort')),
-      h('h3', { style: 'margin-top:16px' }, 'Material'), matBox, matInput,
+      h('h3', { style: 'margin-top:16px' }, 'Material'), matBox, stageBox, matInput,
       h('h3', { style: 'margin-top:16px' }, 'Plan'), planBox);
     item.append(body);
     showMaterial();

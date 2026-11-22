@@ -799,10 +799,38 @@ async function openUpload(homeworkId) {
   picker.click();
 }
 
+/** Små förhandsbilder med ✕, och en knapp för att lägga till fler (t.ex. ett foto i taget med kameran). */
+function fileStrip(files, onChange) {
+  const strip = h('div', { class: 'file-strip' });
+  const draw = () => {
+    strip.replaceChildren(...files.map((f, i) => {
+      const thumb = f.type && f.type.startsWith('image/')
+        ? h('img', { src: URL.createObjectURL(f), alt: '' })
+        : h('span', { class: 'file-doc' }, (f.name.split('.').pop() || 'fil').toUpperCase());
+      return h('div', { class: 'file-thumb' }, thumb, h('span', { class: 'file-n' }, String(i + 1)),
+        h('button', { class: 'file-x', 'aria-label': 'Ta bort', onclick: (e) => { e.preventDefault(); files.splice(i, 1); draw(); onChange(); } }, '✕'));
+    }),
+    files.length < MAX_FILES ? h('button', { class: 'file-add', onclick: (e) => {
+      e.preventDefault();
+      const more = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none' });
+      document.body.append(more);
+      more.addEventListener('change', () => {
+        const add = [...more.files].slice(0, MAX_FILES - files.length);
+        more.remove();
+        if ([...more.files].length > add.length) toast(`Högst ${MAX_FILES} sidor åt gången`, true);
+        files.push(...add); draw(); onChange();
+      });
+      more.click();
+    } }, '➕', h('small', {}, 'Fler sidor')) : null);
+  };
+  draw();
+  return strip;
+}
+
 function showSheet(files, homeworkId) {
-  const file = files[0];
-  const label = files.length === 1 ? file.name : `${files.length} filer`;
   const sheet = $('#sheet');
+  const title = h('h2', {});
+  const setTitle = () => { title.textContent = `📎 ${files.length === 1 ? files[0].name : `${files.length} sidor`}`; go.disabled = !files.length; };
   const target = h('select', {}, h('option', { value: '' }, 'En ny läxa eller ett nytt prov'),
     (S.homework || []).filter(x => x.status === 'OPEN' && !(x.dueDate && daysUntil(x.dueDate) < 0)).map(x =>
       h('option', { value: x.id, selected: String(x.id) === String(homeworkId) || null },
@@ -812,7 +840,10 @@ function showSheet(files, homeworkId) {
   target.addEventListener('change', () => { cardsRow.style.display = target.value ? '' : 'none'; });
   const go = h('button', { class: 'go' }, 'Skicka');
   const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
+  const strip = fileStrip(files, setTitle);
+  setTitle();
   go.addEventListener('click', async () => {
+    const label = files.length === 1 ? files[0].name : `${files.length} sidor`;
     go.disabled = true; go.textContent = files.length > 1 ? `Pluggis läser ${files.length} sidor…` : 'Pluggis läser…';
     const fd = new FormData();
     for (const f of files) { const small = await shrinkImage(f); fd.append('file', small, small.name || f.name); }
@@ -840,7 +871,8 @@ function showSheet(files, homeworkId) {
     }
   });
   sheet.replaceChildren(h('div', { class: 'panel', onclick: (e) => e.stopPropagation() },
-    h('h2', {}, `📎 ${label}`),
+    title, strip,
+    h('p', { class: 'hint' }, 'Fota en sida i taget och tryck ➕ för nästa – eller välj flera i Bilder på en gång. Alla sidor läses tillsammans.'),
     h('label', {}, 'Vad är det?'), target, cardsRow,
     h('div', { class: 'actions' }, h('button', { onclick: close }, 'Avbryt'), go)));
   sheet.onclick = close;
