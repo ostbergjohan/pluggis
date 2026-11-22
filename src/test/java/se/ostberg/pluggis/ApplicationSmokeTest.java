@@ -201,6 +201,27 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void pointsCanBeTurnedOffPerStudent() throws Exception {
+        long lisa = json(mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Utan poäng\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        JsonNode created = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString());
+        String code = null;
+        for (JsonNode x : created) {
+            if (x.path("id").asLong() == lisa) {
+                code = x.path("code").asText();
+            }
+        }
+        assertThat(json(mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
+                .path("pointsEnabled").asBoolean()).isTrue();
+        JsonNode st = json(mvc.perform(put("/api/student").header(TOKEN, "test-token").header("X-Pluggis-Student", String.valueOf(lisa))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"pointsEnabled\":false}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(st.path("pointsEnabled").asBoolean()).isFalse();
+        assertThat(json(mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
+                .path("pointsEnabled").asBoolean()).isFalse();
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

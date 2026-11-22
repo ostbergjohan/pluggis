@@ -409,7 +409,7 @@ function onServer(m) {
     case 'heard': addMsg('me', m.text); break;
     case 'reminder': addMsg('bot reminder', '🔔 ' + m.text); speak(m.text); break;
     case 'error': setThinking(false); addMsg('err', m.message || m.text || 'Något gick fel'); break;
-    case 'points': toast(`+${m.delta} poäng${m.reason ? ' – ' + m.reason : ''}`); setPoints(m.weekTotal); break;
+    case 'points': if (S.points !== false) { toast(`+${m.delta} poäng${m.reason ? ' – ' + m.reason : ''}`); setPoints(m.weekTotal); } break;
     case 'card': addCard({ front: m.front, hint: m.hint }); break;
     case 'card_answer': addCard({ front: m.back, result: m.correct, box: m.box }); break;
     case 'session':
@@ -606,9 +606,9 @@ views.plan = async () => {
         const box = document.getElementById('todayBox');
         const rest = box ? [...box.querySelectorAll('.row')].filter(r => !r.classList.contains('done')).length : 1;
         if (box && box.contains(row) && rest === 0) {
-          toast('🎉 Hela dagen klar! +3 och +5 i bonus');
+          toast('🎉 Hela dagen klar!' + pts(' +3 och +5 i bonus'));
           setTimeout(() => show('plan'), 1200);
-        } else toast('Bra jobbat! +3 poäng');
+        } else toast('Bra jobbat!' + pts(' +3 poäng'));
       } catch (e) { toast(e.message, true); }
     });
     return row;
@@ -979,8 +979,17 @@ function showSheet(files, homeworkId) {
 }
 
 // ---- Poäng ----
+/** Poäng kan vara avstängt för eleven (föräldern väljer i admin) – då syns de inte alls här. */
+function paintPoints() {
+  $('#points').hidden = !S.points;
+  const tab = document.querySelector('#tabbar [data-tab=poang]');
+  if (tab) tab.hidden = !S.points;
+  if (!S.points && S.tab === 'poang') show('chatt');
+}
+const pts = (text) => S.points === false ? '' : text;
 function setPoints(n) { if (n !== undefined && n !== null) $('#points').textContent = `${n} p`; }
 async function refreshPoints() {
+  if (S.points === false) return;
   try { setPoints((await api(`/api/devices/${enc(S.deviceId)}/rewards`)).weekPoints); } catch { /* inte viktigt */ }
 }
 
@@ -1037,6 +1046,8 @@ async function start() {
     S.deviceId = me.deviceId || S.deviceId;
     S.name = me.name || '';
     S.serverVoice = !!me.serverVoice;
+    S.points = me.pointsEnabled !== false;
+    paintPoints();
     if (S.voice === 'pluggis' && !S.serverVoice) S.voice = 'telefon';
     store.set('pluggis.chat.device', S.deviceId);
   } catch (e) {

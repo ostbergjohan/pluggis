@@ -14,7 +14,7 @@ import java.util.Map;
 public class StudentController {
 
     public record Update(String name, String tone, String extra, Integer maxMinutesPerDay, java.util.List<String> studyDays,
-                         String studyTime, String studyCue) {
+                         String studyTime, String studyCue, Boolean pointsEnabled) {
     }
 
     private final StudentProfile profile;
@@ -44,12 +44,18 @@ public class StudentController {
         var st = students.current();
         m.put("studyTime", st.studyTimeOrDefault().toString());
         m.put("studyCue", st.getStudyCue());
+        m.put("pointsEnabled", st.isPointsEnabled());
         return m;
     }
 
     @PutMapping
     public Map<String, Object> put(@RequestBody Update body) {
         profile.update(body.name(), body.tone(), body.extra());
+        if (body.pointsEnabled() != null) {
+            var s = students.current();
+            s.setPointsEnabled(body.pointsEnabled());
+            students.save(s);
+        }
         if (body.studyTime() != null || body.studyCue() != null) {
             var s = students.current();
             if (body.studyTime() != null) {

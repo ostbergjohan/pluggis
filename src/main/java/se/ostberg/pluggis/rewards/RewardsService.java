@@ -48,6 +48,21 @@ public class RewardsService {
         this(points, payouts, props, events, Clock.systemUTC());
     }
 
+    private se.ostberg.pluggis.student.StudentService students;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setStudents(se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
+    }
+
+    /** Är poäng påslaget för eleven med den här enheten? (Okänd enhet = ja.) */
+    public boolean pointsEnabled(String deviceId) {
+        if (students == null || deviceId == null) {
+            return true;
+        }
+        return students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::isPointsEnabled).orElse(true);
+    }
+
     RewardsService(PointEventRepository points, PayoutRepository payouts, PluggisProperties props,
                    ApplicationEventPublisher events, Clock clock) {
         this.points = points;
@@ -217,6 +232,9 @@ public class RewardsService {
 
     @Transactional(readOnly = true)
     public String summaryForPrompt(String deviceId) {
+        if (!pointsEnabled(deviceId)) {
+            return "AVSTÄNGT för den här eleven – nämn aldrig poäng, streak eller pengar";
+        }
         WeekSummary w = week(deviceId);
         String money = props.rewards() != null && props.rewards().enabled()
                 ? ", motsvarar " + w.earnedSek().stripTrailingZeros().toPlainString() + " kr" : "";

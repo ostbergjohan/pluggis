@@ -21,6 +21,13 @@ public class DeviceEventRelay {
         this.registry = registry;
     }
 
+    private se.ostberg.pluggis.rewards.RewardsService rewards;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRewards(se.ostberg.pluggis.rewards.RewardsService rewards) {
+        this.rewards = rewards;
+    }
+
     @EventListener
     public void onTick(StudySessionService.SessionTick e) {
         registry.send(e.deviceId(), new DeviceMessages.Timer(e.remainingSeconds(), e.totalSeconds(), e.task()));
@@ -77,6 +84,9 @@ public class DeviceEventRelay {
 
     @EventListener
     public void onPoints(RewardsService.PointsAwarded e) {
+        if (rewards != null && !rewards.pointsEnabled(e.deviceId())) {
+            return; // poäng avstängt för eleven – visa inget på Tab5 eller i chatten
+        }
         registry.send(e.deviceId(), new DeviceMessages.Points(e.points(), e.weekTotal(), e.reason()));
     }
 }

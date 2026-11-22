@@ -1093,6 +1093,11 @@ views.kort = async (main) => {
 
 views.poang = async (main) => {
   main.append(h('h1', {}, 'Poäng och veckopeng'));
+  try {
+    const st = await api('/api/student');
+    if (st.pointsEnabled === false) main.append(h('p', { class: 'item-meta', style: 'color:var(--gold)' },
+      '⏸ Poäng är avstängt för den här eleven – visas inte i chatten eller på Tab5. Slå på under Inställningar → Eleven och coachen.'));
+  } catch { /* visa ändå */ }
   const base = `/api/devices/${enc(state.deviceId)}/rewards`;
   const [week, events, payouts] = await Promise.all([api(base), api(`${base}/events`), api(`${base}/payouts`)]);
   const perPoint = Number(week.sekPerPoint || 0);
@@ -1641,6 +1646,7 @@ function studentPanel() {
     const extra = h('textarea', { rows: 3, maxlength: '600',
       placeholder: 'Valfritt. T.ex. "Han gillar fotboll – använd gärna fotbollsexempel. Påminn om att dricka vatten."' }, s.extra || '');
     const who = (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name;
+    const usePoints = h('input', { type: 'checkbox', checked: s.pointsEnabled !== false });
     panel.replaceChildren(h('h2', {}, `Coachen för ${who || s.name || 'eleven'}`),
       h('div', { class: 'row' },
         h('div', {}, h('label', {}, 'Elevens namn'), name),
@@ -1648,9 +1654,11 @@ function studentPanel() {
       toneHelp,
       h('label', {}, 'Egna önskemål till coachen'), extra,
       h('p', { class: 'item-meta' }, 'Läggs till efter coachens fasta regler. Coachen ger fortfarande inga färdiga svar, oavsett vad som står här.'),
+      h('label', { style: 'display:flex;gap:8px;align-items:center;margin-top:12px' }, usePoints, 'Använd poäng'),
+      h('p', { class: 'item-meta' }, 'Av: poängen syns inte i elevchatten eller på Tab5, och coachen pratar inte om poäng eller veckopeng. De räknas ändå i bakgrunden, så inget försvinner om du slår på igen.'),
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
-          const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value } }), e.target, 'Sparat – gäller från nästa svar');
+          const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value, pointsEnabled: usePoints.checked } }), e.target, 'Sparat – gäller från nästa svar');
           if (r) s = r;
         } }, 'Spara')));
   })();

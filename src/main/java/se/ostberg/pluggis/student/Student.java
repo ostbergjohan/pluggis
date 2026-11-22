@@ -50,6 +50,8 @@ public class Student {
     /** Om-så-plan ("när"): t.ex. "efter mellanmålet". */
     @Column(length = 80)
     private String studyCue;
+    /** Poäng påslaget för eleven (null = ja). Av: poängen räknas fortfarande men visas inte och nämns inte. */
+    private Boolean pointsEnabled;
 
     /** Google Kalender att lägga planen i (kalender-id), eller null. */
     @Column(length = 200)
@@ -103,6 +105,8 @@ public class Student {
     public void setStudyTime(String t) { this.studyTime = t; }
     public String getStudyCue() { return studyCue == null ? "" : studyCue; }
     public void setStudyCue(String c) { this.studyCue = c; }
+    public boolean isPointsEnabled() { return !Boolean.FALSE.equals(pointsEnabled); }
+    public void setPointsEnabled(boolean on) { this.pointsEnabled = on; }
     public String getGoogleCalendarId() { return googleCalendarId; }
     public void setGoogleCalendarId(String id) { this.googleCalendarId = id; }
     public Integer getMaxMinutesPerDay() { return maxMinutesPerDay; }

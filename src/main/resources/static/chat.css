@@ -221,3 +221,4 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .fc-wrong { background: var(--red); }
 .fc-right { background: var(--accent); }
 .fc-status { text-align: center; margin-top: 12px; }
+#points[hidden], #tabbar button[hidden] { display: none !important; }
