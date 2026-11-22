@@ -89,6 +89,12 @@ public class HomeworkController {
         return homework.delete(id) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
     }
 
+    /** "Städa": markera allt öppet med passerat datum som klart. */
+    @PostMapping("/archive-past")
+    public Map<String, Integer> archivePast() {
+        return Map.of("archived", homework.archivePast());
+    }
+
     @PostMapping("/{id}/done")
     public ResponseEntity<Homework> done(@PathVariable long id) {
         return ResponseEntity.of(homework.complete(id));

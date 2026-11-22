@@ -295,7 +295,36 @@ views.laxor = async (main) => {
     const all = await loadHomework(true);
     const items = all.filter(x => showDone.checked || x.status === 'OPEN')
       .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
-    list.replaceChildren(...(items.length ? items.map(x => homeworkItem(x, render)) : [h('div', { class: 'empty' }, 'Inga läxor här än.')]));
+    if (!items.length) { list.replaceChildren(h('div', { class: 'empty' }, 'Inga läxor här än.')); return; }
+    const past = items.filter(x => x.dueDate && daysUntil(x.dueDate) < 0);
+    const upcoming = items.filter(x => x.dueDate && daysUntil(x.dueDate) >= 0);
+    const undated = items.filter(x => !x.dueDate);
+    // Passerat: senaste först
+    past.reverse();
+    const openPast = past.filter(x => x.status === 'OPEN');
+    const pastOpen = store.get('lc.pastOpen', '0') === '1';
+    const pastBody = h('div', { style: pastOpen ? '' : 'display:none' }, past.map(x => homeworkItem(x, render)));
+    const parts = [];
+    parts.push(h('h3', { class: 'group-head' }, `Kommande (${upcoming.length})`),
+      upcoming.length ? upcoming.map(x => homeworkItem(x, render)) : h('div', { class: 'empty' }, 'Inget kommande.'));
+    if (undated.length) parts.push(h('h3', { class: 'group-head' }, `Utan datum (${undated.length})`), undated.map(x => homeworkItem(x, render)));
+    if (past.length) {
+      const toggle = h('button', { class: 'small', onclick: () => {
+        const show = pastBody.style.display === 'none';
+        pastBody.style.display = show ? '' : 'none';
+        toggle.textContent = show ? 'Dölj' : 'Visa';
+        store.set('lc.pastOpen', show ? '1' : '0');
+      } }, pastOpen ? 'Dölj' : 'Visa');
+      parts.push(h('div', { class: 'group-head', style: 'display:flex;gap:8px;align-items:center;margin-top:18px' },
+        h('h3', { style: 'margin:0;flex:1' }, `Passerat (${past.length})`), toggle,
+        openPast.length ? h('button', { class: 'small', onclick: async (e) => {
+          if (!confirm(`Markera ${openPast.length} passerade som klara?`)) return;
+          const r = await run(() => api('/api/homework/archive-past', { method: 'POST' }), e.target);
+          if (r) { toast(`${r.archived} markerade som klara`); render(); }
+        } }, `✓ Markera ${openPast.length} som klara`) : null),
+        pastBody);
+    }
+    list.replaceChildren(...parts.flat());
   }
 
   function newHomeworkForm() {
@@ -321,7 +350,7 @@ views.laxor = async (main) => {
 
   function uploadForm(file) {
     const target = h('select', {}, h('option', { value: '' }, 'Ny läxa eller prov – läs av allt i filen'),
-      state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER')
+      state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER' && !(x.dueDate && daysUntil(x.dueDate) < 0))
         .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
         .map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ` (${fmtDay(x.dueDate)})` : ''}`)));
     const cards = h('input', { type: 'checkbox' });

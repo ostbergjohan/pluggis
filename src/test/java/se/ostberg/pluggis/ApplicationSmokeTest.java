@@ -301,6 +301,31 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void pastHomeworkIsFlaggedAndCanBeArchived() throws Exception {
+        String past = LocalDate.now().minusDays(3).toString();
+        for (String body : new String[]{
+                "{\"title\":\"Gammalt prov i SO\",\"dueDate\":\"" + past + "\"}",
+                "{\"title\":\"Sen engelskaläxa\",\"dueDate\":\"" + past + "\"}"}) {
+            String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+            if (body.contains("prov")) {
+                mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .put("/api/homework/" + json(created).path("id").asLong()).header(TOKEN, "test-token")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"TEST\"}"));
+            }
+        }
+        String summary = homeworkService.summaryForPrompt();
+        assertThat(summary).doesNotContain("Gammalt prov i SO");
+        assertThat(summary).contains("Sen engelskaläxa").contains("har passerat");
+
+        String r = mvc.perform(post("/api/homework/archive-past").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(r).path("archived").asInt()).isGreaterThanOrEqualTo(2);
+        assertThat(homeworkService.summaryForPrompt()).doesNotContain("Sen engelskaläxa");
+    }
+
+    @Test
     void studentLinkOnlyReachesWhatTheStudentNeeds() throws Exception {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
                         .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)

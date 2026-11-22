@@ -381,17 +381,26 @@ views.laxor = async () => {
     .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
   S.homework = all;
   if (!all.length) { page.append(h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inga läxor inlagda. Fota veckoplanen så läser Pluggis av den.'))); return page; }
-  page.append(h('div', { class: 'box' }, all.map(x => {
-    const late = x.dueDate && daysUntil(x.dueDate) < 0;
-    const missing = !x.description && !(x.steps || []).length;
+  const upcoming = all.filter(x => !x.dueDate || daysUntil(x.dueDate) >= 0);
+  const past = all.filter(x => x.dueDate && daysUntil(x.dueDate) < 0).reverse();
+  page.append(upcoming.length ? h('div', { class: 'box' }, upcoming.map(row))
+    : h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget kommande just nu 🎉')));
+  if (past.length) {
+    const box = h('div', { class: 'box', hidden: true }, past.map(row));
+    const btn = h('button', { class: 'small-btn', onclick: () => { box.hidden = !box.hidden; btn.textContent = box.hidden ? 'Visa' : 'Dölj'; } }, 'Visa');
+    page.append(h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:18px' },
+      h('h3', { style: 'margin:0;flex:1' }, `Passerat (${past.length})`), btn), box);
+  }
+  function row(x) {
+    const isPast = x.dueDate && daysUntil(x.dueDate) < 0;
+    const missing = !isPast && !x.description && !(x.steps || []).length;
     return h('div', { class: 'row' },
       h('div', { class: 'grow' },
         h('div', {}, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
         h('div', { class: 'meta' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · '),
-          missing ? ' · ' : '', missing ? h('span', { class: 'tag late' }, 'vad ingår?') : '',
-          late ? ' · ' : '', late ? h('span', { class: 'tag late' }, 'sen') : '')),
-      h('button', { class: 'small-btn', onclick: () => openUpload(x.id) }, '📎 Material'));
-  })));
+          missing ? ' · ' : '', missing ? h('span', { class: 'tag late' }, 'vad ingår?') : '')),
+      isPast ? null : h('button', { class: 'small-btn', onclick: () => openUpload(x.id) }, '📎 Material'));
+  }
   page.append(h('p', { class: 'meta', style: 'color:var(--muted);font-size:14px;margin-top:12px' },
     'Lägg till material (bild på sidan, Word, PDF) så vet Pluggis vad som ingår och gör en plan.'));
   return page;
@@ -414,7 +423,7 @@ async function openUpload(homeworkId) {
 function showSheet(file, homeworkId) {
   const sheet = $('#sheet');
   const target = h('select', {}, h('option', { value: '' }, 'En ny läxa eller ett nytt prov'),
-    (S.homework || []).filter(x => x.status === 'OPEN').map(x =>
+    (S.homework || []).filter(x => x.status === 'OPEN' && !(x.dueDate && daysUntil(x.dueDate) < 0)).map(x =>
       h('option', { value: x.id, selected: String(x.id) === String(homeworkId) || null },
         `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ` (${rel(x.dueDate)})` : ''}`)));
   const cards = h('input', { type: 'checkbox' });

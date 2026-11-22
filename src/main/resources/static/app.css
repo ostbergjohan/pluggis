@@ -227,3 +227,5 @@ td input { padding: 5px 8px; }
   .kpi .value { font-size: 22px; }
   .toasts { left: 12px; right: 12px; transform: none; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
 }
+
+.group-head { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 6px; }

@@ -12,6 +12,39 @@ import java.util.Optional;
 public class HomeworkService {
 
     private final HomeworkRepository repo;
+    private java.time.ZoneId zone = java.time.ZoneId.of("Europe/Stockholm");
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setProps(se.ostberg.pluggis.config.PluggisProperties props) {
+        if (props != null) {
+            zone = props.zone();
+        }
+    }
+
+    private LocalDate today() {
+        return LocalDate.now(zone);
+    }
+
+    /** Datumet har passerat (igår eller tidigare). */
+    public boolean isPast(Homework h) {
+        return h.getDueDate() != null && h.getDueDate().isBefore(today());
+    }
+
+    /**
+     * Markerar öppna läxor och prov vars datum har passerat som klara (ger inga poäng).
+     * Returnerar antal.
+     */
+    @Transactional
+    public int archivePast() {
+        int n = 0;
+        for (Homework h : repo.findByStatusOrderByDueDateAscCreatedAtAsc(Homework.Status.OPEN)) {
+            if (isPast(h)) {
+                h.markDone();
+                n++;
+            }
+        }
+        return n;
+    }
 
     public HomeworkService(HomeworkRepository repo) {
         this.repo = repo;
@@ -162,7 +195,10 @@ public class HomeworkService {
     /** Kort text till coachens systemprompt. */
     @Transactional(readOnly = true)
     public String summaryForPrompt() {
-        List<Homework> open = openSchoolwork();
+        // Prov som redan varit är inget att plugga på; sena läxor tas med men märks.
+        List<Homework> open = openSchoolwork().stream()
+                .filter(h -> !(h.getKind() == Homework.Kind.TEST && isPast(h)))
+                .toList();
         if (open.isEmpty()) {
             return "Inga öppna läxor registrerade.";
         }
@@ -173,7 +209,8 @@ public class HomeworkService {
               .append(h.getSubject() == null ? "" : h.getSubject() + ": ")
               .append(h.getTitle());
             if (h.getDueDate() != null) {
-                sb.append(" (till ").append(h.getDueDate()).append(')');
+                sb.append(isPast(h) ? " (datumet " + h.getDueDate() + " har passerat – fråga om den är gjord)"
+                        : " (till " + h.getDueDate() + ")");
             }
             if (h.getDeckId() != null) {
                 sb.append(" [kortlek ").append(h.getDeckId()).append(']');
