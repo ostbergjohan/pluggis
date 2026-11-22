@@ -65,6 +65,14 @@ public class ClaudeCodeRunner {
         return props.enabled();
     }
 
+    public boolean useFor(String purpose) {
+        return props.useFor(purpose);
+    }
+
+    public String mode() {
+        return props.mode();
+    }
+
     public ClaudeResponse run(ObjectNode request) {
         Path dir = null;
         try {

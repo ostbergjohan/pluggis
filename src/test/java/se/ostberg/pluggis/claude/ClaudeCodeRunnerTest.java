@@ -82,6 +82,19 @@ class ClaudeCodeRunnerTest {
     }
 
     @Test
+    void hybridSendsVoiceToApiAndTheRestToSubscription() {
+        var hybrid = new ClaudeCodeProperties("hybrid", null, 0, 0, java.util.List.of("coach"));
+        assertThat(hybrid.useFor("coach")).isFalse();
+        assertThat(hybrid.useFor("vision")).isTrue();
+        assertThat(hybrid.useFor("planning")).isTrue();
+        assertThat(hybrid.useFor("flashcards-vision")).isTrue();
+        var noFlash = new ClaudeCodeProperties("hybrid", null, 0, 0, java.util.List.of("coach", "flashcards"));
+        assertThat(noFlash.useFor("flashcards-document")).isFalse();
+        assertThat(new ClaudeCodeProperties("claude-code", null, 0, 0).useFor("coach")).isTrue();
+        assertThat(new ClaudeCodeProperties("api", null, 0, 0).useFor("vision")).isFalse();
+    }
+
+    @Test
     void runsTheProgramWithoutApiKey(@TempDir Path dir) throws Exception {
         // Låtsas-claude: skriver ut argument-antal, indata och om API-nyckeln läckte igenom
         Path fake = dir.resolve("fake-claude.sh");

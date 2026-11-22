@@ -44,9 +44,11 @@ public class ClaudeClient {
     public ClaudeClient(RestClient.Builder builder, ObjectMapper mapper, MeterRegistry meters, PluggisProperties props,
                         ClaudeCodeRunner claudeCode) {
         this.claudeCode = claudeCode != null && claudeCode.enabled() ? claudeCode : null;
-        org.slf4j.LoggerFactory.getLogger(ClaudeClient.class).info(this.claudeCode != null
-                ? "Claude körs via Claude Code (claude -p) på ditt abonnemang"
-                : "Claude körs via API-nyckel");
+        org.slf4j.LoggerFactory.getLogger(ClaudeClient.class).info(this.claudeCode == null
+                ? "Claude körs via API-nyckel"
+                : this.claudeCode.mode().equals("hybrid")
+                ? "Claude körs hybrid: rösten via API-nyckel, foto/planer/flashkort/material via Claude Code på ditt abonnemang"
+                : "Claude körs via Claude Code (claude -p) på ditt abonnemang");
         this.cfg = props.anthropic();
         this.mapper = mapper;
         this.meters = meters;
@@ -101,11 +103,7 @@ public class ClaudeClient {
         Timer.Sample sample = Timer.start(meters);
         String outcome = "error";
         try {
-            ClaudeResponse response = claudeCode != null ? claudeCode.run(request) : rest.post()
-                    .uri("/v1/messages")
-                    .body(request)
-                    .retrieve()
-                    .body(ClaudeResponse.class);
+            ClaudeResponse response = viaClaudeCode(purpose) ? runClaudeCode(request, purpose) : api(request);
             outcome = "ok";
             recordUsage(response, purpose);
             return response;
@@ -116,7 +114,7 @@ public class ClaudeClient {
 
     /** Strömmande anrop. {@code onText} får textbitar i den ordning de kommer. */
     public ClaudeResponse stream(ObjectNode request, String purpose, Consumer<String> onText) {
-        if (claudeCode != null) {
+        if (viaClaudeCode(purpose)) {
             // Claude Code-läget strömmar inte: hela svaret kommer på en gång och läses upp mening för mening.
             ClaudeResponse response = create(request, purpose);
             String text = response.text();
@@ -185,9 +183,35 @@ public class ClaudeClient {
         meters.counter("pluggis.claude.tokens", "purpose", purpose, "kind", "cache_write").increment(u.cacheCreationInputTokens());
     }
 
-    /** "claude-code" när Claude körs via abonnemanget, annars "api". */
+    /** "api", "claude-code" eller "hybrid". */
     public String backend() {
-        return claudeCode != null ? "claude-code" : "api";
+        return claudeCode != null ? claudeCode.mode() : "api";
+    }
+
+    private boolean viaClaudeCode(String purpose) {
+        return claudeCode != null && claudeCode.useFor(purpose);
+    }
+
+    private ClaudeResponse api(ObjectNode request) {
+        return rest.post().uri("/v1/messages").body(request).retrieve().body(ClaudeResponse.class);
+    }
+
+    /**
+     * Via abonnemanget. I hybridläget, om Claude Code inte går (gräns nådd, utloggat) och det finns
+     * en API-nyckel, tas jobbet med API-nyckeln i stället så att eleven inte blir utan svar.
+     */
+    private ClaudeResponse runClaudeCode(ObjectNode request, String purpose) {
+        try {
+            return claudeCode.run(request);
+        } catch (IllegalStateException e) {
+            if (claudeCode.mode().equals("hybrid") && notBlank(cfg.apiKey())) {
+                org.slf4j.LoggerFactory.getLogger(ClaudeClient.class)
+                        .warn("Claude Code misslyckades för {} ({}) – tar det med API-nyckeln", purpose, e.getMessage());
+                meters.counter("pluggis.claude.fallback", "purpose", purpose).increment();
+                return api(request);
+            }
+            throw e;
+        }
     }
 
     public PluggisProperties.Anthropic config() {

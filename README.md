@@ -113,8 +113,14 @@ I stället för en API-nyckel kan Pluggis köra Claude via det officiella progra
    ```
 3. `docker compose up --build`. Loggen visar "Claude körs via Claude Code".
 
+**Hybrid (rekommenderas om du kör på abonnemanget):** `PLUGGIS_CLAUDE_BACKEND=hybrid` och fyll i
+både `ANTHROPIC_API_KEY` och `CLAUDE_CODE_OAUTH_TOKEN`. Rösten (coachen) går då via API-nyckeln – snabb
+och strömmad – medan foto, planer, flashkort och material går på abonnemanget. Går abonnemanget inte
+(gräns nådd, utloggat) tas jobbet med API-nyckeln i stället. Vilka jobb som går via API styrs med
+`PLUGGIS_CLAUDE_API_PURPOSES` (standard `coach`).
+
 Att tänka på:
-- Svaren strömmas inte, och varje anrop startar programmet – räkna med någon sekund längre väntan i röst.
+- I läget `claude-code` strömmas svaren inte, och varje anrop startar programmet – räkna med någon sekund längre väntan i röst.
 - Pluggis delar abonnemangets gränser med din egen användning av Claude och Claude Code.
 - Anthropics villkor: abonnemangets gränser gäller "vanlig, individuell användning", och tjänster för andra
   användare ska använda API-nyckel. Det här är tänkt för eget bruk hemma. Läs
