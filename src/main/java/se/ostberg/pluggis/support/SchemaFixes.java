@@ -34,6 +34,7 @@ public class SchemaFixes implements ApplicationRunner {
         if (product == null) {
             return;
         }
+        addStudentKeyColumns();
         if (product.toLowerCase().contains("h2")) {
             String type = jdbc.query("select data_type from information_schema.columns "
                             + "where upper(table_name) = 'HOMEWORK' and upper(column_name) = 'KIND'",
@@ -44,6 +45,20 @@ public class SchemaFixes implements ApplicationRunner {
             }
         } else if (product.toLowerCase().contains("postgres")) {
             jdbc.execute("alter table homework drop constraint if exists homework_kind_check");
+        }
+    }
+
+    /**
+     * Flera elever: kolumnen student_key på läxor, plan, material och flashkort. Hibernates
+     * automatiska schemauppdatering lägger inte till @TenantId-kolumner i befintliga tabeller.
+     */
+    void addStudentKeyColumns() {
+        for (String table : se.ostberg.pluggis.student.StudentMigration.TABLES) {
+            try {
+                jdbc.execute("alter table " + table + " add column if not exists student_key varchar(20)");
+            } catch (RuntimeException e) {
+                log.debug("Kunde inte lägga till student_key i {}: {}", table, e.getMessage());
+            }
         }
     }
 }

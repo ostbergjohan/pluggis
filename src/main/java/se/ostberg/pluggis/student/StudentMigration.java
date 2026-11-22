@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 public class StudentMigration implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(StudentMigration.class);
-    static final String[] TABLES = {"homework", "material", "plan_item", "deck", "card"};
+    public static final String[] TABLES = {"homework", "material", "plan_item", "deck", "card"};
 
     private final StudentService students;
     private final JdbcTemplate jdbc;
