@@ -14,7 +14,11 @@ public interface PayoutRepository extends JpaRepository<Payout, Long> {
 
     List<Payout> findTop20ByDeviceIdOrderByPaidAtDesc(String deviceId);
 
-    long deleteByDeviceId(String deviceId);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from Payout p where p.deviceId = ?1")
+    int deleteByDeviceId(String deviceId);
 
-    long deleteByDeviceIdAndWeekStart(String deviceId, LocalDate weekStart);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from Payout p where p.deviceId = ?1 and p.weekStart = ?2")
+    int deleteByDeviceIdAndWeekStart(String deviceId, LocalDate weekStart);
 }

@@ -23,13 +23,21 @@ public interface PointEventRepository extends JpaRepository<PointEvent, Long> {
 
     List<PointEvent> findTop50ByDeviceIdOrderByCreatedAtDesc(String deviceId);
 
-    long deleteByDeviceId(String deviceId);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from PointEvent p where p.deviceId = ?1")
+    int deleteByDeviceId(String deviceId);
 
-    long deleteByDeviceIdAndAwardedOnBetween(String deviceId, LocalDate from, LocalDate to);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from PointEvent p where p.deviceId = ?1 and p.awardedOn between ?2 and ?3")
+    int deleteByDeviceIdAndAwardedOnBetween(String deviceId, LocalDate from, LocalDate to);
 
-    long deleteByDeviceIdAndRefKey(String deviceId, String refKey);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from PointEvent p where p.deviceId = ?1 and p.refKey = ?2")
+    int deleteByDeviceIdAndRefKey(String deviceId, String refKey);
 
-    long deleteByIdAndDeviceId(Long id, String deviceId);
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from PointEvent p where p.id = ?1 and p.deviceId = ?2")
+    int deleteByIdAndDeviceId(Long id, String deviceId);
 
     List<PointEvent> findByDeviceIdAndAwardedOnGreaterThanEqual(String deviceId, LocalDate from);
 }
