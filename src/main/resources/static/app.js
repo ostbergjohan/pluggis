@@ -498,7 +498,7 @@ views.laxor = async (main) => {
           } }, 'Spara och synka'),
           st.url ? h('button', { onclick: async (e) => {
             const r = await run(() => api('/api/calendar/sync', { method: 'POST' }), e.target);
-            if (r) { toast(`Synkad – ${r.imported} importerade${r.merged ? `, ${r.merged} dubbletter borttagna` : ''}`); status.textContent = syncText(await api('/api/calendar')); render(); }
+            if (r) { toast(`Synkad – ${r.created || 0} nya, ${r.updated || 0} ändrade${r.merged ? `, ${r.merged} dubbletter borttagna` : ''}`); status.textContent = syncText(await api('/api/calendar')); render(); }
           } }, '↻ Synka nu') : null,
           h('button', { onclick: async (e) => {
             const r = await run(() => api('/api/calendar/dedupe', { method: 'POST' }), e.target);
@@ -522,7 +522,7 @@ views.laxor = async (main) => {
     if (st.lastError) return `Senaste synk misslyckades: ${st.lastError}`;
     if (!st.lastSync) return 'Prenumeration sparad – synkas varje timme.';
     const r = st.lastResult || {};
-    return `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}: ${r.imported ?? 0} importerade, ${r.skipped ?? 0} överhoppade.`;
+    return `Senast synkad ${new Date(st.lastSync).toLocaleString('sv-SE')}: ${r.imported ?? 0} läxor och prov (${r.created ?? 0} nya, ${r.updated ?? 0} ändrade), ${r.skipped ?? 0} annat överhoppat.`;
   }
 
   function pasteForm() {

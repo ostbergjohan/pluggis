@@ -37,7 +37,14 @@ import java.util.Set;
 @Service
 public class CalendarSyncService {
 
-    public record SyncResult(int read, int imported, int replanned, int skipped, int merged) {
+    /**
+     * {@code imported}: läxor/prov i kalendern som Pluggis har (nya + ändrade + oförändrade).
+     * {@code created}/{@code updated}: hur många av dem som faktiskt var nya eller ändrades nu.
+     */
+    public record SyncResult(int read, int imported, int replanned, int skipped, int merged, int created, int updated) {
+        public SyncResult(int read, int imported, int replanned, int skipped, int merged) {
+            this(read, imported, replanned, skipped, merged, 0, 0);
+        }
     }
 
     public record PreviewEntry(String uid, String summary, String description, LocalDate date,
@@ -124,8 +131,9 @@ public class CalendarSyncService {
                 }
                 try {
                     SyncResult r = syncNow();
-                    log.info("Kalendersynk elev {}: {} lästa, {} importerade, {} omplanerade, {} överhoppade",
-                            student.getId(), r.read(), r.imported(), r.replanned(), r.skipped());
+                    log.info("Kalendersynk elev {}: {} händelser i kalendern, {} läxor/prov ({} nya, {} ändrade), {} omplanerade, "
+                                    + "{} överhoppade (annat än läxor/prov eller utanför datumen)",
+                            student.getId(), r.read(), r.imported(), r.created(), r.updated(), r.replanned(), r.skipped());
                 } catch (RuntimeException e) {
                     log.warn("Kalendersynk misslyckades för elev {}: {}", student.getId(), e.toString());
                 }
@@ -191,6 +199,10 @@ public class CalendarSyncService {
         int imported = 0;
         int replanned = 0;
         int skipped = 0;
+        int updated = 0;
+        // InfoMentor kan byta UID mellan hämtningar; "nya" räknas därför som läxor som inte fanns före synken
+        Set<Long> existedBefore = new HashSet<>();
+        homework.all().forEach(x -> existedBefore.add(x.getId()));
         Set<String> seen = new HashSet<>();
         for (IcalParser.Entry e : entries) {
             if (!seen.add(TextFix.key(e.summary()) + "|" + e.date())) {
@@ -204,10 +216,15 @@ public class CalendarSyncService {
                 skipped++;
                 continue;
             }
-            LocalDate before = homework.findByExternalId(e.uid()).map(Homework::getDueDate).orElse(null);
+            var existing = homework.findByExternalId(e.uid());
+            LocalDate before = existing.map(Homework::getDueDate).orElse(null);
+            String fingerprint = existing.map(CalendarSyncService::fingerprint).orElse(null);
             Homework h = homework.upsertFromCalendar(e.uid(), IcalParser.subjectFrom(e.summary()), e.summary(),
                     e.description(), e.date(), kind(e));
             imported++;
+            if (fingerprint != null && !fingerprint.equals(fingerprint(h))) {
+                updated++;
+            }
             if (before != null && !Objects.equals(before, e.date())) {
                 try {
                     planning.replanIfPlanned(h.getId());
@@ -218,7 +235,12 @@ public class CalendarSyncService {
             }
         }
         int merged = mergeDuplicates();
-        return new SyncResult(entries.size(), imported, replanned, skipped, merged);
+        int created = (int) homework.all().stream().filter(x -> !existedBefore.contains(x.getId())).count();
+        return new SyncResult(entries.size(), imported, replanned, skipped, merged, created, updated);
+    }
+
+    private static String fingerprint(Homework h) {
+        return h.getTitle() + "|" + h.getDescription() + "|" + h.getCalendarDate() + "|" + h.getKind() + "|" + h.getSubject();
     }
 
     /**

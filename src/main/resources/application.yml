@@ -117,3 +117,6 @@ management:
 logging:
   level:
     se.ostberg.pluggis: INFO
+    # "Invalid character found in method name [0x16 0x03 …]" = någon försökte https mot http-porten
+    # (t.ex. Safari som provar https först). Ofarligt – visa inte i loggen.
+    org.apache.coyote.http11.Http11Processor: WARN

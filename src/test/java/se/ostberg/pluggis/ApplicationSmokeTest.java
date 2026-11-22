@@ -427,9 +427,12 @@ class ApplicationSmokeTest {
         mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
                         .content(feed.apply("2")))
                 .andExpect(status().isOk());
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        String third = mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
                         .content(feed.apply("3")))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        // Samma innehåll med nya UID:n: inget nytt, inget ändrat
+        assertThat(json(third).path("created").asInt()).isZero();
+        assertThat(json(third).path("updated").asInt()).isZero();
 
         String list = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();

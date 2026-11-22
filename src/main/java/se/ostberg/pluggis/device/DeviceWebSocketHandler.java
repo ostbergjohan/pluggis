@@ -163,7 +163,8 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         String deviceId = (String) session.getAttributes().get(DEVICE_ID);
         if (deviceId != null) {
             registry.unregister(deviceId, session);
-            log.info("Enhet frånkopplad: {} ({})", deviceId, status.getCode());
+            log.info("Enhet frånkopplad: {} ({})", deviceId, status.getCode() == 1006
+                    ? "1006 – appen stängdes, låstes eller tappade nätet; ansluter igen själv" : status.getCode());
         }
     }
 }
