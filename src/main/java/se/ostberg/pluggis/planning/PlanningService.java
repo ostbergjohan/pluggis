@@ -408,24 +408,53 @@ public class PlanningService {
     /** Med {@code dayOf} kan t.ex. sådant som ligger efter räknas till idag, så att läxan blir ett block. */
     List<PlanItem> grouped(List<PlanItem> items, java.util.function.Function<PlanItem, LocalDate> dayOf) {
         Map<Long, Optional<Homework>> cache = new HashMap<>();
-        java.util.function.Function<PlanItem, Optional<Homework>> hw = i -> cache.computeIfAbsent(i.getHomeworkId(), homework::get);
-        Set<LocalDate> manualDays = new HashSet<>();
-        items.stream().filter(i -> i.getSortOrder() != null).forEach(i -> manualDays.add(dayOf.apply(i)));
-        java.util.Comparator<PlanItem> block = java.util.Comparator
-                .comparing((PlanItem i) -> hw.apply(i).map(Homework::getDueDate).orElse(null),
-                        java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
-                .thenComparing(i -> hw.apply(i).map(Homework::weightOrDefault).orElse(50), java.util.Comparator.reverseOrder())
-                .thenComparing(PlanItem::getHomeworkId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
-                .thenComparing(PlanItem::getId, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
-        List<PlanItem> out = new ArrayList<>(items);
-        out.sort((a, b) -> {
-            int d = dayOf.apply(a).compareTo(dayOf.apply(b));
-            if (d != 0) {
-                return d;
+        java.util.function.Function<Long, Optional<Homework>> hw = id -> cache.computeIfAbsent(id, homework::get);
+        java.util.Comparator<Long> byId = java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder());
+        java.util.Comparator<Integer> byOrder = java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder());
+
+        Map<LocalDate, List<PlanItem>> days = new java.util.TreeMap<>();
+        items.forEach(i -> days.computeIfAbsent(dayOf.apply(i), d -> new ArrayList<>()).add(i));
+        List<PlanItem> out = new ArrayList<>(items.size());
+        for (List<PlanItem> day : days.values()) {
+            boolean manual = day.stream().anyMatch(i -> i.getSortOrder() != null);
+            // Ett block per läxa/prov – alltid, även på handordnade dagar
+            Map<Long, List<PlanItem>> blocks = new java.util.LinkedHashMap<>();
+            day.forEach(i -> blocks.computeIfAbsent(i.getHomeworkId(), k -> new ArrayList<>()).add(i));
+            List<Long> order = new ArrayList<>(blocks.keySet());
+            if (manual) {
+                // Föräldern bestämmer blockens ordning: där blockets första moment ligger
+                java.util.function.Function<Long, Integer> first = id -> blocks.get(id).stream().map(PlanItem::getSortOrder)
+                        .filter(java.util.Objects::nonNull).min(Integer::compare).orElse(null);
+                order.sort(java.util.Comparator.comparing(first, byOrder).thenComparing(id -> id, byId));
+                blocks.values().forEach(b -> b.sort(java.util.Comparator.comparing(PlanItem::getSortOrder, byOrder)
+                        .thenComparing(PlanItem::getId, byId)));
+            } else {
+                // Samma ämne bredvid varandra (NO-läxan intill NO-provet); ämnet med närmast deadline/högst vikt först
+                java.util.function.Function<Long, String> subj = id -> subjectKey(hw.apply(id).orElse(null), id);
+                Map<String, LocalDate> subjDue = new HashMap<>();
+                Map<String, Integer> subjWeight = new HashMap<>();
+                for (Long id : order) {
+                    hw.apply(id).map(Homework::getDueDate).ifPresent(d -> subjDue.merge(subj.apply(id), d, (x, y) -> x.isBefore(y) ? x : y));
+                    subjWeight.merge(subj.apply(id), hw.apply(id).map(Homework::weightOrDefault).orElse(50), Math::max);
+                }
+                java.util.Comparator<LocalDate> dates = java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder());
+                order.sort(java.util.Comparator.comparing((Long id) -> subjDue.get(subj.apply(id)), dates)
+                        .thenComparing(id -> subjWeight.getOrDefault(subj.apply(id), 50), java.util.Comparator.reverseOrder())
+                        .thenComparing(subj)
+                        .thenComparing(id -> hw.apply(id).map(Homework::getDueDate).orElse(null), dates)
+                        .thenComparing(id -> hw.apply(id).map(Homework::weightOrDefault).orElse(50), java.util.Comparator.reverseOrder())
+                        .thenComparing(id -> id, byId));
+                blocks.values().forEach(b -> b.sort(java.util.Comparator.comparing(PlanItem::getId, byId)));
             }
-            return manualDays.contains(dayOf.apply(a)) ? PlanItem.ORDER.compare(a, b) : block.compare(a, b);
-        });
+            order.forEach(id -> out.addAll(blocks.get(id)));
+        }
         return out;
+    }
+
+    /** Ämnet som nyckel ("no", "spanska" …); utan ämne räknas läxan som sitt eget ämne. */
+    public static String subjectKey(Homework h, Long homeworkId) {
+        String s = h == null || h.getSubject() == null ? "" : h.getSubject().trim().toLowerCase(Locale.ROOT);
+        return s.isEmpty() ? "läxa-" + homeworkId : s;
     }
 
     /** Publiceras när en elevs plan har ändrats (för t.ex. Google Kalender). */

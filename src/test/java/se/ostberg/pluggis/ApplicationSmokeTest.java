@@ -262,6 +262,36 @@ class ApplicationSmokeTest {
             }
         }
         assertThat(sawBoth).isTrue();
+
+        // Handordnad dag där A ligger på båda sidor om B → ändå ett block per läxa, i förälderns blockordning
+        String day = perDay.entrySet().stream().filter(e -> e.getValue().contains(a) && e.getValue().contains(b))
+                .findFirst().orElseThrow().getKey();
+        java.util.List<Long> aIds = new java.util.ArrayList<>();
+        java.util.List<Long> bIds = new java.util.ArrayList<>();
+        up.forEach(i -> {
+            if (i.path("planDate").asText().equals(day)) {
+                (i.path("homeworkId").asLong() == a ? aIds : i.path("homeworkId").asLong() == b ? bIds : new java.util.ArrayList<Long>())
+                        .add(i.path("id").asLong());
+            }
+        });
+        java.util.List<Long> mixed = new java.util.ArrayList<>(aIds.subList(0, 1));
+        mixed.addAll(bIds);
+        mixed.addAll(aIds.subList(1, aIds.size()));
+        if (aIds.size() == 1) {
+            mixed.add(0, bIds.get(0));
+        }
+        mvc.perform(put("/api/plan/days/" + day).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"ids\":" + mixed + "}")).andExpect(status().isOk());
+        java.util.List<Long> after = new java.util.ArrayList<>();
+        json(mvc.perform(get("/api/plan/upcoming?days=6").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString())
+                .forEach(i -> {
+                    long hw = i.path("homeworkId").asLong();
+                    if (i.path("planDate").asText().equals(day) && (hw == a || hw == b)) {
+                        after.add(hw);
+                    }
+                });
+        long switches = java.util.stream.IntStream.range(1, after.size()).filter(k -> !after.get(k).equals(after.get(k - 1))).count();
+        assertThat(switches).isLessThanOrEqualTo(1);
     }
 
     @Test
