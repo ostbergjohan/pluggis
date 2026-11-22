@@ -141,6 +141,7 @@ public final class UploadedDocument {
     public String mediaType() { return mediaType; }
     /** Läst text för Word/text, annars null (bild/PDF läses av Claude). */
     public String text() { return text; }
+    public byte[] bytes() { return bytes; }
 
     private static String imageType(String type, String name) {
         if (type.equals("image/jpeg") || type.equals("image/png") || type.equals("image/webp") || type.equals("image/gif")) {

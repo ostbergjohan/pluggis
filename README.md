@@ -220,7 +220,8 @@ Andra vägar in:
 4. **Ladda upp fil** (bild, Word .docx, PDF, .txt): *📎 Ladda upp fil* och välj **Ny läxa eller prov**
    eller en befintlig läxa. Kopplat till en läxa blir filen *material*: Claude läser vad som ingår
    (avsnitt, sidor, begrepp), läxan uppdateras, planen görs om och – om du kryssar i – blir det flashkort.
-   `POST /api/homework/upload` (fält `file`, valfritt `homeworkId`, `flashcards=true`).
+   `POST /api/homework/upload` (fält `file`, upprepas för flera filer – högst 10; valfritt `homeworkId`,
+   `flashcards=true`). Flera sidor läses av Claude tillsammans; foton förminskas i webbläsaren innan de skickas.
    Word-text läses lokalt och sparas även om Claude inte svarar. Gamla .doc stöds inte – spara som .docx.
 
 Kalendern ger oftast bara titel och datum – saknas innehållet frågar coachen vad som ingår. Från skärmdump och text läser Claude ut läxa/prov, datum och innehåll.
@@ -283,7 +284,9 @@ Det här hanterar en minderårigs röst, bilder och skolarbete.
 - Sätt alltid `PLUGGIS_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
   Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.
-- Bilder och PDF:er sparas inte, bara det som lästs ut. Text från Word/textfiler sparas som material på läxan och tas bort med läxan.
+- Material på en läxa sparas: texten (från Word/text, eller som Claude läst av bilden/PDF:en) och en förminskad
+  sidbild för foton, så att eleven kan titta på sidan igen och få den uppläst. Det tas bort med läxan eller eleven.
+  Bilder som laddas upp för att skapa *nya* läxor sparas inte.
 - Prata igenom med eleven vad som sparas och vad en förälder kan se.
 
 ## Nästa steg

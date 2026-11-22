@@ -117,16 +117,37 @@ public class HomeworkController {
      * med {@code homeworkId} blir den material till den läxan (innehåll + ny plan, ev. flashkort).
      */
     @PostMapping(path = "/upload", consumes = "multipart/form-data")
-    public Object upload(@RequestPart("file") MultipartFile file,
+    public Object upload(@RequestParam("file") List<MultipartFile> files,
                          @RequestParam(required = false) Long homeworkId,
                          @RequestParam(defaultValue = "false") boolean flashcards,
                          @RequestParam(required = false) String deviceId,
                          @RequestParam(required = false) String hint) throws IOException {
-        UploadedDocument doc = UploadedDocument.of(file.getBytes(), file.getOriginalFilename(), file.getContentType());
-        if (homeworkId != null) {
-            return materials.attach(homeworkId, doc, flashcards);
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("Ingen fil");
         }
-        return photos.intake(doc, deviceId, hint);
+        if (files.size() > MaterialService.MAX_FILES) {
+            throw new IllegalArgumentException("Högst " + MaterialService.MAX_FILES + " filer åt gången");
+        }
+        List<UploadedDocument> docs = new java.util.ArrayList<>();
+        for (MultipartFile f : files) {
+            docs.add(UploadedDocument.of(f.getBytes(), f.getOriginalFilename(), f.getContentType()));
+        }
+        if (homeworkId != null) {
+            return materials.attach(homeworkId, docs, flashcards);
+        }
+        return photos.intake(docs, deviceId, hint);
+    }
+
+    /** Sidbilden till ett material (förminskad), för att visa den igen. */
+    @GetMapping("/material/{materialId}/image")
+    public ResponseEntity<byte[]> materialImage(@PathVariable long materialId) {
+        return materials.image(materialId)
+                .map(m -> ResponseEntity.ok()
+                        .contentType(org.springframework.http.MediaType.parseMediaType(
+                                m.type() == null ? "image/jpeg" : m.type()))
+                        .header("Cache-Control", "private, max-age=86400")
+                        .body(m.data()))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}/material")

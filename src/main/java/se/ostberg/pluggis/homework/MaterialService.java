@@ -38,8 +38,15 @@ public class MaterialService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Reading(String summary, List<String> sections, @JsonProperty("key_terms") List<String> keyTerms,
-                   String text, String kind, @JsonProperty("due_date") String dueDate, String note) {
+                   String text, String kind, @JsonProperty("due_date") String dueDate, String note, List<Page> pages) {
     }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record Page(Integer file, String text) {
+    }
+
+    /** Högst så många filer per uppladdning (en läsning hos Claude). */
+    public static final int MAX_FILES = 10;
 
     private final MaterialRepository materials;
     private final HomeworkService homework;
@@ -50,9 +57,13 @@ public class MaterialService {
     private final PluggisProperties props;
     private final ObjectMapper mapper;
 
+    private final MaterialImageRepository images;
+
     public MaterialService(MaterialRepository materials, HomeworkService homework, PlanningService planning,
                            FlashcardGenerator flashcards, ClaudeClient claude, Prompts prompts,
-                           PluggisProperties props, ObjectMapper mapper) {
+                           PluggisProperties props, ObjectMapper mapper,
+                           MaterialImageRepository images) {
+        this.images = images;
         this.materials = materials;
         this.homework = homework;
         this.planning = planning;
@@ -64,27 +75,71 @@ public class MaterialService {
     }
 
     public AttachResult attach(long homeworkId, UploadedDocument doc, boolean makeFlashcards) {
+        return attach(homeworkId, List.of(doc), makeFlashcards);
+    }
+
+    /** En eller flera filer (t.ex. flera boksidor) – läses av Claude tillsammans, en materialrad per fil. */
+    public AttachResult attach(long homeworkId, List<UploadedDocument> docs, boolean makeFlashcards) {
+        if (docs == null || docs.isEmpty()) {
+            throw new IllegalArgumentException("Ingen fil");
+        }
+        if (docs.size() > MAX_FILES) {
+            throw new IllegalArgumentException("Högst " + MAX_FILES + " filer åt gången");
+        }
         Homework h = homework.get(homeworkId)
                 .orElseThrow(() -> new IllegalArgumentException("Hittade ingen läxa med id " + homeworkId));
 
         Reading reading;
         String note = null;
         try {
-            reading = read(h, doc);
+            reading = read(h, docs);
             note = reading.note();
         } catch (RuntimeException e) {
             // Word/text kan sparas ändå; bild/PDF kräver Claude.
-            if (doc.text() == null) {
+            if (docs.stream().allMatch(d -> d.text() == null)) {
                 throw new IllegalStateException("Claude kunde inte läsa materialet just nu – försök igen om en stund", e);
             }
             log.warn("Kunde inte läsa material med Claude för läxa {}: {}", homeworkId, e.toString());
-            reading = new Reading(null, List.of(), List.of(), null, null, null, null);
+            reading = new Reading(null, List.of(), List.of(), null, null, null, null, List.of());
             note = "Materialet sparades, men Claude kunde inte läsa av det just nu – planen ändrades inte.";
         }
 
-        String text = doc.text() != null ? doc.text() : reading.text();
-        Material saved = materials.save(new Material(homeworkId, doc.filename(), doc.kind().name(),
-                reading.summary(), text));
+        java.util.Map<Integer, String> pageText = new java.util.HashMap<>();
+        if (reading.pages() != null) {
+            for (Page pg : reading.pages()) {
+                if (pg != null && pg.file() != null && pg.text() != null && !pg.text().isBlank()) {
+                    pageText.put(pg.file(), pg.text());
+                }
+            }
+        }
+        Material saved = null;
+        StringBuilder allText = new StringBuilder();
+        for (int i = 0; i < docs.size(); i++) {
+            UploadedDocument doc = docs.get(i);
+            String text = doc.text() != null ? doc.text()
+                    : pageText.getOrDefault(i + 1, docs.size() == 1 ? reading.text() : null);
+            Material m = new Material(homeworkId, doc.filename(), doc.kind().name(),
+                    i == 0 ? reading.summary() : null, text);
+            if (docs.size() > 1) {
+                m.setPage(i + 1);
+            }
+            boolean keepImage = doc.kind() == UploadedDocument.Kind.IMAGE && doc.bytes() != null
+                    && doc.bytes().length <= 3_000_000;
+            if (keepImage) {
+                m.markImage(doc.mediaType());
+            }
+            Material s1 = materials.save(m);
+            if (keepImage) {
+                images.save(new MaterialImage(s1.getId(), doc.bytes()));
+            }
+            if (saved == null) {
+                saved = s1;
+            }
+            if (text != null) {
+                allText.append(text).append("\n\n");
+            }
+        }
+        String text = allText.isEmpty() ? reading.text() : allText.toString().trim();
 
         List<String> sections = reading.sections() == null ? List.of() : reading.sections();
         boolean changed = reading.summary() != null || !sections.isEmpty();
@@ -126,6 +181,16 @@ public class MaterialService {
         return new AttachResult(homework.get(homeworkId).orElse(h), saved, sections, replanned, deckId, cards, note);
     }
 
+    public record Image(String type, byte[] data) {
+    }
+
+    /** Sidbilden – bara om materialet hör till aktuell elev (materialet filtreras per elev). */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Image> image(long materialId) {
+        return materials.findById(materialId).filter(Material::isHasImage)
+                .flatMap(m -> images.findById(m.getId()).map(i -> new Image(m.imageType(), i.getData())));
+    }
+
     @Transactional(readOnly = true)
     public List<Material> forHomework(long homeworkId) {
         return materials.findByHomeworkIdOrderByCreatedAtAsc(homeworkId);
@@ -137,11 +202,15 @@ public class MaterialService {
             return false;
         }
         materials.deleteById(materialId);
+        images.deleteById(materialId);
         return true;
     }
 
     @Transactional
     public void deleteForHomework(long homeworkId) {
+        for (Material m : materials.findByHomeworkIdOrderByCreatedAtAsc(homeworkId)) {
+            images.deleteById(m.getId());
+        }
         materials.deleteByHomeworkId(homeworkId);
     }
 
@@ -157,14 +226,22 @@ public class MaterialService {
         return sb.toString().trim();
     }
 
-    private Reading read(Homework h, UploadedDocument doc) {
-        ObjectNode req = claude.newRequest(doc.kind() == UploadedDocument.Kind.IMAGE || doc.kind() == UploadedDocument.Kind.PDF
-                        ? props.anthropic().vision() : props.anthropic().planning(),
+    private Reading read(Homework h, List<UploadedDocument> docs) {
+        boolean visual = docs.stream().anyMatch(d -> d.kind() == UploadedDocument.Kind.IMAGE
+                || d.kind() == UploadedDocument.Kind.PDF);
+        ObjectNode req = claude.newRequest(visual ? props.anthropic().vision() : props.anthropic().planning(),
                 prompts.material(), "Dagens datum: " + LocalDate.now(props.zone()));
+        // Sidtexten för uppläsning tar plats: ge utrymme efter antal filer
+        req.put("max_tokens", Math.min(16000, 3000 + 2500 * docs.size()));
         ObjectNode msg = req.putArray("messages").addObject();
         msg.put("role", "user");
         ArrayNode content = msg.putArray("content");
-        doc.addTo(content, mapper);
+        for (int i = 0; i < docs.size(); i++) {
+            if (docs.size() > 1) {
+                content.addObject().put("type", "text").put("text", "Fil " + (i + 1) + ": " + docs.get(i).filename());
+            }
+            docs.get(i).addTo(content, mapper);
+        }
         content.addObject().put("type", "text").put("text",
                 "Materialet hör till: " + (h.getKind() == Homework.Kind.TEST ? "PROV " : "LÄXA ") + h.getTitle()
                         + (h.getSubject() == null ? "" : " (" + h.getSubject() + ")")

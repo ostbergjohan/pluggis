@@ -53,11 +53,19 @@ public class PhotoIntakeService {
 
     /** Bild, skärmdump, PDF, Word eller text → nya läxor/prov. */
     public IntakeResult intake(UploadedDocument doc, String deviceId, String hint) {
+        return intake(java.util.List.of(doc), deviceId, hint);
+    }
+
+    /** Flera skärmdumpar/filer på en gång (t.ex. veckoplanens båda sidor). */
+    public IntakeResult intake(java.util.List<UploadedDocument> docs, String deviceId, String hint) {
         String today = LocalDate.now(props.zone()).toString();
         ObjectNode req = claude.newRequest(props.anthropic().vision(), prompts.extraction(), "Dagens datum: " + today);
 
         ArrayNode content = mapper.createArrayNode();
-        doc.addTo(content, mapper);
+        for (UploadedDocument doc : docs) {
+            doc.addTo(content, mapper);
+        }
+        UploadedDocument doc = docs.get(0);
         ObjectNode textBlock = content.addObject();
         textBlock.put("type", "text");
         textBlock.put("text", hint == null || hint.isBlank()

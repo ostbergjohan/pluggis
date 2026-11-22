@@ -133,6 +133,45 @@ function kindTag(kind) {
 }
 const enc = encodeURIComponent;
 const FILE_ACCEPT = 'image/*,.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MAX_FILES = 10;
+
+/** Förminskar foton (max 2000 px, JPEG) innan uppladdning – snabbare och inom Claudes gränser. */
+async function shrinkImage(file) {
+  if (!file.type || !file.type.startsWith('image/') || file.type === 'image/gif') return file;
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = url; });
+    URL.revokeObjectURL(url);
+    const max = 2000;
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && file.size < 1_500_000) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
+/** FormData med alla filer (foton förminskade). */
+async function filesForm(files) {
+  const fd = new FormData();
+  for (const f of files.slice(0, MAX_FILES)) {
+    const small = await shrinkImage(f);
+    fd.append('file', small, small.name || f.name);
+  }
+  return fd;
+}
+
+/** Bild som kräver token (img src kan inte skicka headers): hämta som blob. */
+async function authImage(path) {
+  const res = await api(path, { raw: true });
+  if (!res.ok) throw new Error(String(res.status));
+  return URL.createObjectURL(await res.blob());
+}
 
 async function loadHomework(all = true) {
   state.homework = await api(`/api/homework?openOnly=${!all}`);
@@ -274,11 +313,12 @@ views.laxor = async (main) => {
   const showDone = h('input', { type: 'checkbox', checked: store.get('lc.showDone', '0') === '1',
     onchange: () => { store.set('lc.showDone', showDone.checked ? '1' : '0'); render(); } });
   const forms = h('div');
-  const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none',
+  const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none',
     onchange: () => {
-      const file = photoInput.files[0];
+      const files = [...photoInput.files];
       photoInput.value = '';
-      if (file) forms.replaceChildren(uploadForm(file));
+      if (files.length > MAX_FILES) toast(`Högst ${MAX_FILES} filer åt gången – tar de första ${MAX_FILES}`, true);
+      if (files.length) forms.replaceChildren(uploadForm(files.slice(0, MAX_FILES)));
     } });
   const photoBtn = h('button', { onclick: () => photoInput.click() }, '📎 Ladda upp fil');
 
@@ -351,7 +391,7 @@ views.laxor = async (main) => {
         h('button', { onclick: () => forms.replaceChildren() }, 'Avbryt')));
   }
 
-  function uploadForm(file) {
+  function uploadForm(files) {
     const target = h('select', {}, h('option', { value: '' }, 'Ny läxa eller prov – läs av allt i filen'),
       state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER' && !(x.dueDate && daysUntil(x.dueDate) < 0))
         .sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'))
@@ -359,13 +399,12 @@ views.laxor = async (main) => {
     const cards = h('input', { type: 'checkbox' });
     const cardsRow = h('label', { style: 'display:none;gap:6px;align-items:center' }, cards, 'Gör också flashkort av materialet');
     target.addEventListener('change', () => { cardsRow.style.display = target.value ? 'flex' : 'none'; });
-    return h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, `Ladda upp: ${file.name}`),
+    return h('div', { class: 'panel', style: 'margin-bottom:16px' }, h('h2', {}, files.length === 1 ? `Ladda upp: ${files[0].name}` : `Ladda upp ${files.length} filer`),
       h('label', {}, 'Vad är det här?'), target, cardsRow,
       h('p', { class: 'item-meta' }, 'Koppla till en läxa eller ett prov: Claude läser vad som ingår (avsnitt, sidor, begrepp), lägger in det och gör om planen.'),
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
-          const fd = new FormData();
-          fd.append('file', file);
+          const fd = await filesForm(files);
           const q = new URLSearchParams({ deviceId: state.deviceId });
           if (target.value) { q.set('homeworkId', target.value); q.set('flashcards', String(cards.checked)); }
           const r = await run(() => api(`/api/homework/upload?${q}`, { method: 'POST', form: fd }), e.target);
@@ -548,13 +587,13 @@ function homeworkItem(x, rerender) {
     const f = homeworkFields(x);
     const planBox = h('div', {}, h('span', { class: 'spinner' }));
     const matBox = h('div', {}, h('span', { class: 'spinner' }));
-    const matInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none', onchange: async () => {
-      const file = matInput.files[0];
+    const matInput = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none', onchange: async () => {
+      const files = [...matInput.files].slice(0, MAX_FILES);
       matInput.value = '';
-      if (!file) return;
+      if (!files.length) return;
       const cards = confirm('Ska Pluggis också göra flashkort av materialet?');
-      const fd = new FormData(); fd.append('file', file);
-      matBox.replaceChildren(h('span', { class: 'spinner' }), ' Claude läser materialet…');
+      matBox.replaceChildren(h('span', { class: 'spinner' }), files.length > 1 ? ` Claude läser ${files.length} filer…` : ' Claude läser materialet…');
+      const fd = await filesForm(files);
       const r = await run(() => api(`/api/homework/upload?homeworkId=${x.id}&flashcards=${cards}&deviceId=${enc(state.deviceId)}`,
         { method: 'POST', form: fd }));
       if (r) {
@@ -606,14 +645,23 @@ function homeworkItem(x, rerender) {
         matBox.replaceChildren(h('div', { class: 'empty' }, 'Inget material än. Ladda upp en skärmdump, Word-fil, PDF eller text så läser Claude vad som ingår.'));
         return;
       }
-      matBox.replaceChildren(...list.map(m => h('div', { class: 'check' },
-        h('span', { class: 'tag' }, { IMAGE: 'Bild', PDF: 'PDF', WORD: 'Word', TEXT: 'Text' }[m.kind] || m.kind),
-        h('div', { style: 'flex:1' }, h('div', { class: 'task' }, m.filename || 'fil'),
-          m.summary ? h('div', { class: 'item-meta' }, m.summary) : null),
-        h('button', { class: 'small danger', onclick: async (e) => {
-          const r = await run(() => api(`/api/homework/material/${m.id}`, { method: 'DELETE' }), e.target);
-          if (r !== undefined) showMaterial();
-        } }, '✕'))));
+      matBox.replaceChildren(...list.map(m => {
+        const thumb = m.hasImage ? h('img', { class: 'mat-thumb', alt: m.filename || 'sida' }) : null;
+        if (thumb) authImage(`/api/homework/material/${m.id}/image`).then(u => { thumb.src = u; thumb.onclick = () => window.open(u, '_blank'); }).catch(() => thumb.remove());
+        const textBox = h('pre', { class: 'mat-text', style: 'display:none' }, m.text || '');
+        return h('div', { class: 'check' },
+          thumb || h('span', { class: 'tag' }, { IMAGE: 'Bild', PDF: 'PDF', WORD: 'Word', TEXT: 'Text' }[m.kind] || m.kind),
+          h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'task' }, (m.page ? `Sida ${m.page} · ` : '') + (m.filename || 'fil')),
+            m.summary ? h('div', { class: 'item-meta' }, m.summary) : null,
+            m.text ? h('button', { class: 'small', style: 'margin-top:4px', onclick: (e) => {
+              const show = textBox.style.display === 'none';
+              textBox.style.display = show ? '' : 'none'; e.target.textContent = show ? 'Dölj text' : 'Visa text';
+            } }, 'Visa text') : null, textBox),
+          h('button', { class: 'small danger', onclick: async (e) => {
+            const r = await run(() => api(`/api/homework/material/${m.id}`, { method: 'DELETE' }), e.target);
+            if (r !== undefined) showMaterial();
+          } }, '✕'));
+      }));
     }
 
     async function showPlan() {

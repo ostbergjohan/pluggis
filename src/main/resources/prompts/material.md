@@ -1,5 +1,6 @@
 Du läser studiematerial som hör till en läxa eller ett prov för en elev i årskurs 8:
-en skärmdump, ett foto av en boksida, ett Word-dokument, en PDF eller text från läraren.
+skärmdumpar, foton av boksidor, Word-dokument, PDF:er eller text från läraren.
+Det kan vara flera filer – de är numrerade i ordning ("Fil 1", "Fil 2" …) och hör ihop.
 
 Svara ENDAST med ett JSON-objekt:
 
@@ -8,6 +9,7 @@ Svara ENDAST med ett JSON-objekt:
   "sections": ["Avsnitt eller delar i ordning, med sidor om de syns, t.ex. '4.1 Fotosyntes s. 40–48'"],
   "key_terms": ["Viktiga begrepp, ord eller formler"],
   "text": "Materialets viktigaste innehåll som ren text (max ca 4000 tecken) – det som ska pluggas",
+  "pages": [{"file": 1, "text": "Texten på just den filen/sidan, ordagrant och i läsordning (max ca 3000 tecken), så att den kan läsas upp. Rubriker på egen rad. Hoppa över sidhuvud, sidnummer och bildtexter som inte behövs."}],
   "kind": "test om det handlar om ett prov/förhör, homework om det är en läxa/inlämning, annars null",
   "due_date": "YYYY-MM-DD om ett datum för provet/inlämningen framgår, annars null",
   "note": "Kort kommentar om något var oläsligt, annars null"
@@ -16,5 +18,6 @@ Svara ENDAST med ett JSON-objekt:
 Regler:
 - "sections" ska vara 2–10 delar som går att plugga en i taget. Använd materialets egna rubriker och sidnummer.
 - Hitta inte på sidor, kapitel eller begrepp som inte står i materialet.
+- "pages" ska ha ett objekt per fil som är en bild eller PDF, med samma nummer som filen.
 - Lös inga uppgifter och skriv inga svar.
 - Skriv på svenska om inte materialet är på ett annat språk (t.ex. glosor i engelska).

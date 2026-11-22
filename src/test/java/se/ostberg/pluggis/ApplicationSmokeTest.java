@@ -478,6 +478,26 @@ class ApplicationSmokeTest {
         assertThat(json(list).get(0).path("text").asText()).contains("Vikingatiden");
         assertThat(json(list).get(0).path("kind").asText()).isEqualTo("WORD");
 
+        // Flera filer i samma uppladdning → en materialrad per fil, med sidnummer
+        byte[] word2 = se.ostberg.pluggis.support.UploadedDocumentTest.docx(
+                "<w:document><w:body><w:p><w:r><w:t>Asatron: Oden, Tor och Frej</w:t></w:r></w:p></w:body></w:document>");
+        var f1 = new org.springframework.mock.web.MockMultipartFile("file", "s1.docx", "application/octet-stream", word);
+        var f2 = new org.springframework.mock.web.MockMultipartFile("file", "s2.docx", "application/octet-stream", word2);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .multipart("/api/homework/upload").file(f1).file(f2).param("homeworkId", String.valueOf(id))
+                        .header(TOKEN, "test-token"))
+                .andExpect(status().isOk());
+        JsonNode all = json(mvc.perform(get("/api/homework/" + id + "/material").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString());
+        assertThat(all).hasSize(3);
+        assertThat(all.get(1).path("page").asInt()).isEqualTo(1);
+        assertThat(all.get(2).path("page").asInt()).isEqualTo(2);
+        assertThat(all.get(2).path("text").asText()).contains("Asatron");
+        assertThat(all.get(2).path("hasImage").asBoolean()).isFalse();
+        assertThat(all.get(2).has("image")).isFalse();
+        mvc.perform(get("/api/homework/material/" + all.get(2).path("id").asLong() + "/image").header(TOKEN, "test-token"))
+                .andExpect(status().isNotFound());
+
         // Ny läxa från fil kräver Claude – ska ge ett begripligt fel, inte 500
         var png = new org.springframework.mock.web.MockMultipartFile("file", "skarm.png", "image/png", new byte[]{1, 2, 3});
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders

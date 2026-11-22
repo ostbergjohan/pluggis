@@ -37,6 +37,15 @@ public class Material {
 
     private Instant createdAt = Instant.now();
 
+    /** Finns en sparad sidbild (i MaterialImage, så att listor inte hämtar bilderna)? */
+    private Boolean hasImage;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private String imageType;
+
+    /** Ordning inom en uppladdning (sida 1, 2 …). */
+    private Integer page;
+
     protected Material() {
     }
 
@@ -49,6 +58,18 @@ public class Material {
     }
 
     public Long getId() { return id; }
+    public boolean isHasImage() { return Boolean.TRUE.equals(hasImage); }
+    public String imageType() { return imageType; }
+    public Integer getPage() { return page; }
+
+    public void markImage(String type) {
+        this.hasImage = true;
+        this.imageType = type;
+    }
+
+    public void setPage(Integer page) {
+        this.page = page;
+    }
     public Long getHomeworkId() { return homeworkId; }
     public String getFilename() { return filename; }
     public String getKind() { return kind; }

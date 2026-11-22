@@ -122,6 +122,7 @@ public class StudentService {
             throw new IllegalArgumentException("Det måste finnas minst en elev");
         }
         // Elevens läxor, plan, material och flashkort tas bort med eleven
+        jdbc.update("delete from material_image where id in (select id from material where student_key = ?)", String.valueOf(id));
         for (String table : new String[]{"plan_item", "material", "card", "deck", "homework"}) {
             jdbc.update("delete from " + table + " where student_key = ?", String.valueOf(id));
         }

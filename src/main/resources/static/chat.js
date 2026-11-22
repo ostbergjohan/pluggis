@@ -5,6 +5,31 @@
 const $ = (s) => document.querySelector(s);
 const enc = encodeURIComponent;
 const FILE_ACCEPT = 'image/*,.pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const MAX_FILES = 10;
+
+/** Förminskar foton (max 2000 px, JPEG) innan uppladdning – snabbare och inom Claudes gränser. */
+async function shrinkImage(file) {
+  if (!file.type || !file.type.startsWith('image/') || file.type === 'image/gif') return file;
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = url; });
+    URL.revokeObjectURL(url);
+    const scale = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && file.size < 1_500_000) return file;
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.85));
+    return blob ? new File([blob], (file.name || 'bild').replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
+  } catch { return file; }
+}
+
+/** Bild som kräver kod (img kan inte skicka headers): hämta som blob. */
+async function authImage(path) {
+  const res = await fetch(path, { headers: { 'X-Pluggis-Token': S.token } });
+  if (!res.ok) throw new Error(String(res.status));
+  return URL.createObjectURL(await res.blob());
+}
 const store = {
   get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* privat läge */ } },
@@ -534,6 +559,7 @@ views.plan = async () => {
 };
 
 views.laxor = async () => {
+  if (S.openHomework) return homeworkDetail(S.openHomework);
   const page = h('div', { class: 'page' },
     h('button', { class: 'big', onclick: () => openUpload() }, '📷 Fota eller ladda upp en läxa'),
     h('h2', {}, 'Läxor och prov'));
@@ -554,7 +580,7 @@ views.laxor = async () => {
   function row(x) {
     const isPast = x.dueDate && daysUntil(x.dueDate) < 0;
     const missing = !isPast && !x.description && !(x.steps || []).length;
-    return h('div', { class: 'row' },
+    return h('div', { class: 'row tap', onclick: (e) => { if (e.target.closest('button')) return; S.openHomework = x.id; show('laxor'); } },
       h('div', { class: 'grow' },
         h('div', {}, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
         h('div', { class: 'meta' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · '),
@@ -636,21 +662,98 @@ function kindLabel(kind) {
     HOMEWORK_DONE: 'Läxa klar', PLAN_ITEM_DONE: 'Bockat av i planen', STREAK: 'Dagar i rad', BONUS: 'Bonus' })[kind] || 'Poäng';
 }
 
+/** En läxa/ett prov: vad som ingår och materialet (sidor med bild, text och uppläsning). */
+async function homeworkDetail(id) {
+  const [all, material] = await Promise.all([api('/api/homework?openOnly=false'), api(`/api/homework/${id}/material`)]);
+  const x = all.find(y => y.id === id);
+  const page = h('div', { class: 'page' },
+    h('button', { class: 'small-btn', onclick: () => { S.openHomework = null; stopReading(); show('laxor'); } }, '‹ Tillbaka'));
+  if (!x) { page.append(h('div', { class: 'empty' }, 'Hittade inte läxan.')); return page; }
+  page.append(h('h2', { style: 'margin-top:12px' }, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
+    h('div', { class: 'meta', style: 'color:var(--muted)' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · ')));
+  if (x.description) page.append(h('p', { style: 'white-space:pre-wrap' }, x.description));
+  if ((x.steps || []).length) page.append(h('h3', {}, 'Det här ingår'), h('div', { class: 'box' }, x.steps.map(st => h('div', { class: 'row' }, st))));
+
+  const texts = material.filter(m => m.text).map(m => m.text);
+  page.append(h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:18px' },
+    h('h3', { style: 'margin:0;flex:1' }, `Material (${material.length})`),
+    texts.length > 1 ? h('button', { class: 'small-btn', onclick: (e) => readAloud(texts.join('\n\n'), e.target) }, '🔊 Läs upp allt') : null));
+  if (!material.length) {
+    page.append(h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget material än. Fota sidorna i boken så vet Pluggis vad som ingår.')));
+  } else {
+    page.append(h('div', { class: 'mats' }, material.map(m => {
+      const img = m.hasImage ? h('img', { class: 'mat-img', alt: m.filename || 'sida', loading: 'lazy' }) : null;
+      if (img) authImage(`/api/homework/material/${m.id}/image`).then(u => { img.src = u; img.onclick = () => zoom(u); }).catch(() => img.remove());
+      const text = h('div', { class: 'mat-text', hidden: true }, m.text || '');
+      return h('div', { class: 'mat' }, img,
+        h('div', { class: 'mat-body' },
+          h('div', { class: 'mat-title' }, m.page ? `Sida ${m.page}` : (m.filename || 'Fil')),
+          m.summary ? h('div', { class: 'meta' }, m.summary) : null,
+          m.text ? h('div', { class: 'mat-actions' },
+            h('button', { class: 'small-btn', onclick: (e) => readAloud(m.text, e.target) }, '🔊 Läs upp'),
+            h('button', { class: 'small-btn', onclick: (e) => { text.hidden = !text.hidden; e.target.textContent = text.hidden ? 'Visa text' : 'Dölj text'; } }, 'Visa text')) : null,
+          text));
+    })));
+  }
+  page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
+  return page;
+}
+
+function zoom(url) {
+  const sheet = $('#sheet');
+  sheet.replaceChildren(h('img', { src: url, class: 'zoomed', alt: 'sida' }));
+  sheet.onclick = () => { sheet.hidden = true; sheet.replaceChildren(); };
+  sheet.hidden = false;
+}
+
+// ---- Läs upp material ----
+let readingBtn = null;
+function stopReading() {
+  speechRun++;
+  stopServerAudio();
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  if (readingBtn) { readingBtn.textContent = readingBtn.dataset.label || '🔊 Läs upp'; readingBtn = null; }
+}
+async function readAloud(text, btn) {
+  if (readingBtn === btn) { stopReading(); return; }   // tryck igen = sluta
+  stopReading();
+  readingBtn = btn;
+  btn.dataset.label = btn.textContent;
+  btn.textContent = '⏹ Sluta';
+  // Pluggis röst om den finns (Azure/Piper), annars telefonens
+  const usePluggis = S.serverVoice && S.voice !== 'telefon';
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* */ }
+  if (usePluggis) {
+    if (!playerUnlocked) { try { player.src = SILENCE; player.play().then(() => { playerUnlocked = true; }).catch(() => {}); } catch { /* */ } }
+    const run = speechRun + 1;
+    await speakServer(text);
+    if (speechRun === run && readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; }
+  } else if (window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+    u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
+    speechSynthesis.speak(u);
+  }
+}
+
 // ---- Uppladdning ----
 async function openUpload(homeworkId) {
-  const picker = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none' });
+  const picker = h('input', { type: 'file', accept: FILE_ACCEPT, multiple: true, style: 'display:none' });
   document.body.append(picker);
   picker.addEventListener('change', async () => {
-    const file = picker.files[0];
+    let files = [...picker.files];
     picker.remove();
-    if (!file) return;
+    if (!files.length) return;
+    if (files.length > MAX_FILES) { toast(`Högst ${MAX_FILES} åt gången – tar de första ${MAX_FILES}`, true); files = files.slice(0, MAX_FILES); }
     if (!S.homework) { try { S.homework = (await api('/api/homework')).filter(x => x.kind !== 'OTHER'); } catch { S.homework = []; } }
-    showSheet(file, homeworkId);
+    showSheet(files, homeworkId);
   });
   picker.click();
 }
 
-function showSheet(file, homeworkId) {
+function showSheet(files, homeworkId) {
+  const file = files[0];
+  const label = files.length === 1 ? file.name : `${files.length} filer`;
   const sheet = $('#sheet');
   const target = h('select', {}, h('option', { value: '' }, 'En ny läxa eller ett nytt prov'),
     (S.homework || []).filter(x => x.status === 'OPEN' && !(x.dueDate && daysUntil(x.dueDate) < 0)).map(x =>
@@ -662,8 +765,9 @@ function showSheet(file, homeworkId) {
   const go = h('button', { class: 'go' }, 'Skicka');
   const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
   go.addEventListener('click', async () => {
-    go.disabled = true; go.textContent = 'Pluggis läser…';
-    const fd = new FormData(); fd.append('file', file);
+    go.disabled = true; go.textContent = files.length > 1 ? `Pluggis läser ${files.length} sidor…` : 'Pluggis läser…';
+    const fd = new FormData();
+    for (const f of files) { const small = await shrinkImage(f); fd.append('file', small, small.name || f.name); }
     const q = new URLSearchParams({ deviceId: S.deviceId });
     if (target.value) { q.set('homeworkId', target.value); q.set('flashcards', String(cards.checked)); }
     try {
@@ -673,13 +777,14 @@ function showSheet(file, homeworkId) {
         const parts = [r.sections && r.sections.length ? `${r.sections.length} avsnitt inlagda` : 'Materialet sparat',
           r.replanned ? 'ny plan klar' : null, r.deckId ? `${r.cardCount} flashkort` : null].filter(Boolean);
         toast(parts.join(' · '));
-        addMsg('note', `📎 ${file.name}: ${parts.join(' · ')}`);
+        addMsg('note', `📎 ${label}: ${parts.join(' · ')}`);
       } else {
         const n = (r.saved || []).length;
         toast(n ? `La till ${n} st` : (r.note || 'Hittade inga läxor i filen'));
         addMsg('note', `📷 ${n ? `La till: ${(r.saved || []).map(x => x.title).join(', ')}` : (r.note || 'Hittade inga läxor')}`);
       }
       S.homework = null;
+      if (target.value) S.openHomework = Number(target.value);
       if (S.tab !== 'chatt') show(S.tab);
     } catch (e) {
       go.disabled = false; go.textContent = 'Skicka';
@@ -687,7 +792,7 @@ function showSheet(file, homeworkId) {
     }
   });
   sheet.replaceChildren(h('div', { class: 'panel', onclick: (e) => e.stopPropagation() },
-    h('h2', {}, `📎 ${file.name}`),
+    h('h2', {}, `📎 ${label}`),
     h('label', {}, 'Vad är det?'), target, cardsRow,
     h('div', { class: 'actions' }, h('button', { onclick: close }, 'Avbryt'), go)));
   sheet.onclick = close;
@@ -702,6 +807,8 @@ async function refreshPoints() {
 
 // ---- Flikar ----
 async function show(tab) {
+  if (tab !== 'laxor') { S.openHomework = null; }
+  if (typeof stopReading === 'function' && readingBtn) stopReading();
   S.tab = tab;
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
   const view = $('#view');
