@@ -167,7 +167,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 |---|---|
 | Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
-| Plan | Tre veckor framåt dag för dag, plus det som ligger efter |
+| Plan | Tre veckor framåt dag för dag, plus det som ligger efter. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas. Flyttade läxor planeras inte om på natten förrän du trycker Planera igen |
 | Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
 | Tab5-simulator | Ansluter via samma WebSocket som Tab5: knappar, timer, kort, poäng, foto – med uppläsning och mikrofon (svenska) i webbläsaren |
