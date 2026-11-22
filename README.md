@@ -230,7 +230,9 @@ Kalendern ger oftast bara titel och datum – saknas innehållet frågar coachen
 `POST /api/plan/homework/{id}/content`) gör Claude en plan med små moment (max ~20 min) på
 pluggdagarna fram till datumet. Inför prov är det nya materialet klart 1–2 dagar innan och sista
 dagarna är repetition och flashkort. Avbockade moment ger poäng och ligger kvar vid omplanering.
-Pluggdagar och max minuter per dag: `PLUGGIS_STUDY_DAYS`, `PLUGGIS_MAX_MINUTES_PER_DAY`.
+**Max minuter per dag och pluggdagar** ställs per elev under **Inställningar → Planering** (max gäller allt
+plugg den dagen, alla läxor och prov tillsammans). Kryssa i *Gör om befintliga planer* så planeras allt om.
+Standard för nya elever: `PLUGGIS_MAX_MINUTES_PER_DAY` (40) och `PLUGGIS_STUDY_DAYS`.
 
 **Påminnelser:** kl. 16:30 (vardagar) säger Tab5 vad som står först på dagens plan och vad som
 ska in imorgon, och kl. 18:30 kommer en mjuk knuff om inget pass startats. Tiderna ändras med

@@ -60,6 +60,14 @@ public class PlanningController {
         return planning.plan(homeworkId);
     }
 
+    /** Gör om alla planer för vald elev i bakgrunden (Claude tar några sekunder per läxa). */
+    @PostMapping("/replan-all")
+    public Map<String, Object> replanAll() {
+        Runnable job = se.ostberg.pluggis.student.StudentContext.wrap(() -> planning.replanAll());
+        Thread.ofVirtual().name("replan-all").start(job);
+        return Map.of("started", true);
+    }
+
     @PostMapping("/items/{itemId}/done")
     public ResponseEntity<PlanItem> done(@PathVariable long itemId, @RequestParam(required = false) String deviceId) {
         return ResponseEntity.of(planning.complete(itemId, deviceId));

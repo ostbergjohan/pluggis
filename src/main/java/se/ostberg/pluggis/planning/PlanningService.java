@@ -61,8 +61,12 @@ public class PlanningService {
     private final PluggisProperties props;
     private final ObjectMapper mapper;
 
+    private final se.ostberg.pluggis.student.StudentService students;
+
     public PlanningService(PlanItemRepository repo, HomeworkService homework, RewardsService rewards,
-                           ClaudeClient claude, Prompts prompts, PluggisProperties props, ObjectMapper mapper) {
+                           ClaudeClient claude, Prompts prompts, PluggisProperties props, ObjectMapper mapper,
+                           se.ostberg.pluggis.student.StudentService students) {
+        this.students = students;
         this.repo = repo;
         this.homework = homework;
         this.rewards = rewards;
@@ -70,6 +74,50 @@ public class PlanningService {
         this.prompts = prompts;
         this.props = props;
         this.mapper = mapper;
+    }
+
+    /** Aktuell elevs pluggdagar, annars konfigurationens. */
+    public java.util.Set<java.time.DayOfWeek> studyDays() {
+        String d = students.current().getStudyDays();
+        if (d != null && !d.isBlank()) {
+            java.util.Set<java.time.DayOfWeek> out = java.util.EnumSet.noneOf(java.time.DayOfWeek.class);
+            for (String part : d.split(",")) {
+                try {
+                    out.add(java.time.DayOfWeek.valueOf(part.trim()));
+                } catch (IllegalArgumentException ignored) {
+                    // okänd dag
+                }
+            }
+            if (!out.isEmpty()) {
+                return out;
+            }
+        }
+        return props.studyDays();
+    }
+
+    /** Aktuell elevs max minuter per dag, annars konfigurationens (40). */
+    public int maxMinutesPerDay() {
+        Integer m = students.current().getMaxMinutesPerDay();
+        return m != null && m > 0 ? m : props.maxMinutesPerDay();
+    }
+
+    /** Gör om alla befintliga planer för aktuell elev (t.ex. efter ändrade pluggtider). Returnerar antal. */
+    public int replanAll() {
+        LocalDate today = todayDate();
+        int n = 0;
+        for (Homework h : homework.openSchoolwork()) {
+            if (h.getDueDate() == null || h.getDueDate().isBefore(today)
+                    || repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
+                continue;
+            }
+            try {
+                plan(h.getId());
+                n++;
+            } catch (RuntimeException e) {
+                log.warn("Kunde inte planera om läxa {}: {}", h.getId(), e.toString());
+            }
+        }
+        return n;
     }
 
     /** Gör (om) planen. Avsiktligt utan omslutande transaktion – Claude-anropet tar några sekunder. */
@@ -85,7 +133,7 @@ public class PlanningService {
         LocalDate today = todayDate();
         List<PlanItem> done = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(homeworkId).stream()
                 .filter(PlanItem::isDone).toList();
-        List<LocalDate> days = PlanDays.available(today, h.getDueDate(), props.studyDays());
+        List<LocalDate> days = PlanDays.available(today, h.getDueDate(), studyDays());
 
         List<PlanDays.Draft> drafts;
         String note = null;
@@ -197,10 +245,24 @@ public class PlanningService {
             ask.append("Delsteg/avsnitt: ").append(String.join(" | ", h.getSteps())).append('\n');
         }
         ask.append("Kortlek finns: ").append(h.getDeckId() != null ? "ja" : "nej").append('\n');
-        ask.append("Max minuter per dag: ").append(props.maxMinutesPerDay()).append('\n');
+        ask.append("Max minuter per dag (allt plugg den dagen, även andra läxor): ").append(maxMinutesPerDay()).append('\n');
         ask.append("Dagar att använda: ");
         days.forEach(d -> ask.append(d).append(" (").append(DAY_LABEL.format(d)).append("), "));
         ask.append('\n');
+        if (!days.isEmpty()) {
+            // Andra läxors moment samma dagar räknas in i dagens max
+            java.util.Map<LocalDate, Integer> busy = new java.util.TreeMap<>();
+            for (PlanItem other : repo.findByPlanDateBetweenOrderByPlanDateAscIdAsc(days.get(0), days.get(days.size() - 1))) {
+                if (!other.getHomeworkId().equals(h.getId()) && !other.isDone()) {
+                    busy.merge(other.getPlanDate(), other.getMinutes(), Integer::sum);
+                }
+            }
+            if (!busy.isEmpty()) {
+                ask.append("Redan planerat för andra läxor (räknas in i max per dag): ");
+                busy.forEach((d, m) -> ask.append(d).append(": ").append(m).append(" min, "));
+                ask.append('\n');
+            }
+        }
         if (!done.isEmpty()) {
             ask.append("Redan gjort: ");
             done.forEach(d -> ask.append(d.getTask()).append("; "));

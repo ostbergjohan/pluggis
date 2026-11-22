@@ -40,6 +40,13 @@ public class Student {
 
     private Boolean calendarOnlySchoolwork;
 
+    /** Planering: högst så många minuter plugg per dag (null = standard från konfigurationen). */
+    private Integer maxMinutesPerDay;
+
+    /** Planering: pluggdagar, t.ex. "MONDAY,TUESDAY,SUNDAY" (null = standard). */
+    @Column(length = 80)
+    private String studyDays;
+
     private Instant createdAt = Instant.now();
 
     protected Student() {
@@ -73,4 +80,8 @@ public class Student {
     public void setExtra(String extra) { this.extra = extra; }
     public void setCalendarUrl(String calendarUrl) { this.calendarUrl = calendarUrl; }
     public void setCalendarOnlySchoolwork(boolean only) { this.calendarOnlySchoolwork = only; }
+    public Integer getMaxMinutesPerDay() { return maxMinutesPerDay; }
+    public void setMaxMinutesPerDay(Integer m) { this.maxMinutesPerDay = m; }
+    public String getStudyDays() { return studyDays; }
+    public void setStudyDays(String days) { this.studyDays = days; }
 }

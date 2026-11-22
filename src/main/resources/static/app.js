@@ -1217,6 +1217,7 @@ views.installningar = async (main) => {
       h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.')),
     studentsPanel(),
     studentPanel(),
+    planningPanel(),
     voicePanel(),
     h('section', { class: 'panel', style: 'margin-top:16px' },
       h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
@@ -1279,6 +1280,43 @@ function studentsPanel() {
       } }, '+ Lägg till elev')));
   }
   paint();
+  return panel;
+}
+
+function planningPanel() {
+  const who = () => (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name;
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Planering'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  const DAYS = [['MONDAY', 'Mån'], ['TUESDAY', 'Tis'], ['WEDNESDAY', 'Ons'], ['THURSDAY', 'Tor'], ['FRIDAY', 'Fre'], ['SATURDAY', 'Lör'], ['SUNDAY', 'Sön']];
+  (async () => {
+    let s;
+    try { s = await api('/api/student'); } catch (e) { panel.replaceChildren(h('h2', {}, 'Planering'), h('div', { class: 'empty' }, e.message)); return; }
+    const minutes = h('input', { type: 'range', min: '10', max: '120', step: '5', value: String(s.maxMinutesPerDay) });
+    const label = h('strong', {}, `${s.maxMinutesPerDay} min`);
+    minutes.addEventListener('input', () => { label.textContent = `${minutes.value} min`; });
+    const boxes = DAYS.map(([id, txt]) => {
+      const cb = h('input', { type: 'checkbox', checked: s.studyDays.includes(id) });
+      cb.dataset.day = id;
+      return h('label', { class: 'daybox' }, cb, txt);
+    });
+    const replan = h('input', { type: 'checkbox', checked: true });
+    panel.replaceChildren(h('h2', {}, `Planering för ${who() || s.name || 'eleven'}`),
+      h('label', {}, 'Max plugg per dag (alla läxor och prov tillsammans): ', label), minutes,
+      h('p', { class: 'item-meta' }, 'För årskurs 8 brukar 20–45 minuter vara lagom en vanlig dag. Inför prov kan planen lägga mer på de sista dagarna, men aldrig över max.'),
+      h('label', {}, 'Pluggdagar'), h('div', { class: 'days' }, boxes),
+      h('label', { style: 'display:flex;gap:6px;align-items:center;margin-top:10px' }, replan, 'Gör om befintliga planer med de nya inställningarna'),
+      h('div', { class: 'toolbar', style: 'margin-top:12px' },
+        h('button', { class: 'primary', onclick: async (e) => {
+          const days = boxes.map(b => b.querySelector('input')).filter(c => c.checked).map(c => c.dataset.day);
+          if (!days.length) return toast('Välj minst en pluggdag', true);
+          const r = await run(() => api('/api/student', { method: 'PUT', body: { maxMinutesPerDay: Number(minutes.value), studyDays: days } }), e.target);
+          if (!r) return;
+          s = r;
+          if (replan.checked) {
+            await run(() => api('/api/plan/replan-all', { method: 'POST' }), null, 'Sparat – planerna görs om (tar en liten stund)');
+          } else toast('Sparat – gäller nya planer');
+        } }, 'Spara')));
+  })();
   return panel;
 }
 

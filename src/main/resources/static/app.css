@@ -237,3 +237,7 @@ td input { padding: 5px 8px; }
 
 .mat-thumb { width: 64px; height: 84px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); flex: none; cursor: zoom-in; background: var(--line); }
 .mat-text { white-space: pre-wrap; font: 14px/1.45 inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-top: 6px; max-height: 320px; overflow: auto; }
+
+.days { display: flex; gap: 6px; flex-wrap: wrap; }
+.daybox { display: flex; gap: 4px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; margin: 0; cursor: pointer; }
+.daybox input { width: 16px; height: 16px; }

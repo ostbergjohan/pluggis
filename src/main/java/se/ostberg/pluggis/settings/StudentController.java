@@ -13,24 +13,60 @@ import java.util.Map;
 @RequestMapping("/api/student")
 public class StudentController {
 
-    public record Update(String name, String tone, String extra) {
+    public record Update(String name, String tone, String extra, Integer maxMinutesPerDay, java.util.List<String> studyDays) {
     }
 
     private final StudentProfile profile;
+    private final se.ostberg.pluggis.planning.PlanningService planning;
+    private final se.ostberg.pluggis.student.StudentService students;
 
-    public StudentController(StudentProfile profile) {
+    public StudentController(StudentProfile profile, se.ostberg.pluggis.planning.PlanningService planning,
+                             se.ostberg.pluggis.student.StudentService students) {
         this.profile = profile;
+        this.planning = planning;
+        this.students = students;
     }
 
     @GetMapping
     public Map<String, Object> get() {
-        return Map.of("name", profile.name(), "tone", profile.tone(), "extra", profile.extra(),
-                "tones", StudentProfile.TONES.values());
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("name", profile.name());
+        m.put("tone", profile.tone());
+        m.put("extra", profile.extra());
+        m.put("tones", StudentProfile.TONES.values());
+        m.put("maxMinutesPerDay", planning.maxMinutesPerDay());
+        m.put("studyDays", planning.studyDays().stream().sorted().map(Enum::name).toList());
+        return m;
     }
 
     @PutMapping
     public Map<String, Object> put(@RequestBody Update body) {
         profile.update(body.name(), body.tone(), body.extra());
+        if (body.maxMinutesPerDay() != null || body.studyDays() != null) {
+            var s = students.current();
+            if (body.maxMinutesPerDay() != null) {
+                s.setMaxMinutesPerDay(Math.max(10, Math.min(240, body.maxMinutesPerDay())));
+            }
+            if (body.studyDays() != null) {
+                var days = body.studyDays().stream().map(d -> {
+                    try {
+                        return java.time.DayOfWeek.valueOf(d.trim().toUpperCase(java.util.Locale.ROOT));
+                    } catch (IllegalArgumentException e) {
+                        return null;
+                    }
+                }).filter(java.util.Objects::nonNull).distinct().sorted().map(Enum::name).toList();
+                if (days.isEmpty()) {
+                    throw new IllegalArgumentException("Välj minst en pluggdag");
+                }
+                s.setStudyDays(String.join(",", days));
+            }
+            students.save(s);
+        }
         return get();
+    }
+
+    @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
+    public org.springframework.http.ResponseEntity<Map<String, String>> bad(IllegalArgumentException e) {
+        return org.springframework.http.ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
     }
 }

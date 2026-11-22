@@ -336,6 +336,18 @@ class ApplicationSmokeTest {
                 .andExpect(status().isOk());
         assertThat(studentProfile.promptSection()).contains("Fred", "humor", "fotboll", "inga färdiga svar");
 
+        // Planering per elev: max minuter och pluggdagar
+        String plan = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
+                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"maxMinutesPerDay\":25,\"studyDays\":[\"monday\",\"WEDNESDAY\",\"SUNDAY\"]}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(plan).path("maxMinutesPerDay").asInt()).isEqualTo(25);
+        assertThat(json(plan).path("studyDays").toString()).isEqualTo("[\"MONDAY\",\"WEDNESDAY\",\"SUNDAY\"]");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
+                .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"studyDays\":[]}")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/plan/replan-all").header(TOKEN, "test-token")).andExpect(status().isOk());
+
         String link = mvc.perform(post("/api/chat/link").header(TOKEN, "test-token"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String path = json(link).path("path").asText();
