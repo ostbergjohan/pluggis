@@ -83,7 +83,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         session.getAttributes().put(DEVICE_ID, deviceId);
         session.getAttributes().put(STUDENT_ID,
                 studentId != null ? studentId : se.ostberg.pluggis.student.StudentContext.defaultId());
-        registry.register(deviceId, session);
+        registry.register(deviceId, session, query.getFirst("client"));
         log.info("Enhet ansluten: {}", deviceId);
 
         String device = deviceId;

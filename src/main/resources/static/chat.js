@@ -334,10 +334,12 @@ function paintSpeak() {
 }
 
 // ---- WebSocket till coachen ----
+// Ett id per öppnad sida: servern stänger vår gamla anslutning när vi ansluter igen.
+const CLIENT_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 function connect() {
   if (S.ws && S.ws.readyState <= 1) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws/device?deviceId=${enc(S.deviceId)}&token=${enc(S.token)}`);
+  const ws = new WebSocket(`${proto}://${location.host}/ws/device?deviceId=${enc(S.deviceId)}&token=${enc(S.token)}&client=${CLIENT_ID}`);
   ws.binaryType = 'arraybuffer';
   S.ws = ws;
   ws.onopen = () => {
@@ -354,6 +356,7 @@ function connect() {
     setTimeout(() => { if (document.visibilityState === 'visible') connect(); }, wait);
   };
   ws.onmessage = (e) => {
+    if (S.ws !== ws) { try { ws.close(); } catch { /* redan */ } return; }   // gammal anslutning – ignorera
     if (typeof e.data !== 'string') return;
     let m; try { m = JSON.parse(e.data); } catch { return; }
     onServer(m);
@@ -421,7 +424,11 @@ function onServer(m) {
   if (m.type === 'thinking' || m.type === 'say') { clearTimeout(S.waitTimer); S.pending = null; }
   switch (m.type) {
     case 'thinking': setThinking(true); break;
-    case 'say': setThinking(false); addMsg('bot', m.text); speak(m.text); break;
+    case 'say':
+      setThinking(false);
+      if (m.text === S.lastSay && Date.now() - S.lastSayAt < 15000) break;   // samma svar en gång till – säg det inte igen
+      S.lastSay = m.text; S.lastSayAt = Date.now();
+      addMsg('bot', m.text); speak(m.text); break;
     case 'heard': addMsg('me', m.text); break;
     case 'reminder': addMsg('bot reminder', '🔔 ' + m.text); speak(m.text); break;
     case 'error': setThinking(false); addMsg('err', m.message || m.text || 'Något gick fel'); break;

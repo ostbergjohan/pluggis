@@ -36,8 +36,41 @@ public class DeviceRegistry {
 
     /** Flera anslutningar per enhet är ok: Tab5 och mobilen ser samma samtal. */
     void register(String deviceId, WebSocketSession raw) {
+        register(deviceId, raw, null);
+    }
+
+    /**
+     * {@code clientId}: samma flik/app som ansluter igen (t.ex. iPhone efter bakgrunden). Den gamla
+     * anslutningen stängs då, annars kan den leva kvar och få varje svar en gång till.
+     */
+    void register(String deviceId, WebSocketSession raw, String clientId) {
         WebSocketSession safe = new ConcurrentWebSocketSessionDecorator(raw, SEND_TIME_LIMIT_MS, BUFFER_LIMIT_BYTES);
-        devices.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>()).put(raw.getId(), new Conn(safe, false));
+        var conns = devices.computeIfAbsent(deviceId, k -> new ConcurrentHashMap<>());
+        if (clientId != null && !clientId.isBlank()) {
+            raw.getAttributes().put(CLIENT_ID, clientId);
+            conns.entrySet().removeIf(e -> {
+                WebSocketSession old = e.getValue().session();
+                if (!e.getKey().equals(raw.getId()) && clientId.equals(old.getAttributes().get(CLIENT_ID))) {
+                    try {
+                        old.close(org.springframework.web.socket.CloseStatus.NORMAL.withReason("ersatt av ny anslutning"));
+                    } catch (IOException | IllegalStateException ignored) {
+                        // redan stängd
+                    }
+                    log.debug("Ersatte gammal anslutning för {} ({})", deviceId, clientId);
+                    return true;
+                }
+                return false;
+            });
+        }
+        conns.put(raw.getId(), new Conn(safe, false));
+    }
+
+    static final String CLIENT_ID = "pluggis.clientId";
+
+    /** Antal öppna anslutningar (för test). */
+    int connections(String deviceId) {
+        var c = devices.get(deviceId);
+        return c == null ? 0 : c.size();
     }
 
     void unregister(String deviceId, WebSocketSession raw) {

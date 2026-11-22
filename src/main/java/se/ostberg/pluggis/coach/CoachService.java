@@ -93,8 +93,10 @@ public class CoachService {
             StringBuilder spoken = new StringBuilder();
             try {
                 for (int round = 0; round < MAX_TOOL_ROUNDS; round++) {
+                    String already = spoken.isEmpty() ? "" : "\n\nRedan sagt till eleven i det här svaret (har lästs upp): \""
+                            + spoken + "\"\nUpprepa inte det. Säg bara det som är nytt, eller ingenting om allt redan är sagt.";
                     ObjectNode req = claude.newRequest(props.anthropic().coach(),
-                            prompts.coach() + student.promptSection(), statePrompt(deviceId));
+                            prompts.coach() + student.promptSection(), statePrompt(deviceId) + already);
                     req.set("tools", tools.definitions());
                     req.set("messages", conv.toJson());
 
@@ -108,7 +110,7 @@ public class CoachService {
                     }
                     conv.addAssistant(mapper.valueToTree(resp.content()));
                     String text = resp.text();
-                    if (!text.isBlank()) {
+                    if (!text.isBlank() && !SpokenRepeat.repeats(spoken.toString(), text)) {
                         spoken.append(spoken.isEmpty() ? "" : " ").append(text);
                     }
 
