@@ -90,18 +90,35 @@ const dayName = (iso) => {
 // Tre lägen: av, "pluggis" (Pluggis egen röst från servern, samma som Tab5) eller "telefon" (iPhones röst).
 // iPhone spelar bara upp ljud som "låsts upp" av ett tryck – det görs när man väljer läge och när man skickar.
 const VOICE_MODES = ['av', 'pluggis', 'telefon'];
-let audioCtx = null;
+
+// Ett enda <audio>-element som "låses upp" av första trycket och sedan återanvänds.
+// Till skillnad från Web Audio hörs det även när iPhone står på ljudlöst, och det fastnar inte
+// i iOS "avbrutet"-läge efter samtal, notiser eller skärmlås.
+const player = new Audio();
+player.preload = 'auto';
+player.setAttribute('playsinline', '');
+let playerUnlocked = false;
+const SILENCE = (() => {
+  // 0,1 s tyst wav (8 kHz, 8 bit, mono)
+  const n = 800, buf = new Uint8Array(44 + n), v = new DataView(buf.buffer);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) buf[o + i] = str.charCodeAt(i); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 8000, true);
+  v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true); buf.fill(128, 44);
+  let bin = ''; buf.forEach(b => { bin += String.fromCharCode(b); });
+  return 'data:audio/wav;base64,' + btoa(bin);
+})();
 
 function unlockAudio() {
-  // iOS 17+: spela även när telefonen står på ljudlöst (sidoknappen)
   try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* äldre iOS */ }
-  try {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state !== 'running') audioCtx.resume();
-    // En kort tystnad låser upp uppspelningen på iOS
-    const buf = audioCtx.createBuffer(1, 1, 22050);
-    const src = audioCtx.createBufferSource(); src.buffer = buf; src.connect(audioCtx.destination); src.start(0);
-  } catch { /* ingen Web Audio */ }
+  if (!playerUnlocked && S.voice === 'pluggis') {
+    try {
+      player.src = SILENCE;
+      const p = player.play();
+      if (p && p.then) p.then(() => { playerUnlocked = true; }).catch(() => {});
+      else playerUnlocked = true;
+    } catch { /* försök igen vid nästa tryck */ }
+  }
   if (S.voice === 'telefon' && window.speechSynthesis && !S.phoneUnlocked) {
     // iOS släpper bara fram uppläsning som först startats av ett tryck
     const u = new SpeechSynthesisUtterance('.'); u.volume = 0.01; u.lang = 'sv-SE';
@@ -179,33 +196,51 @@ async function speakServer(text) {
     try { buf = await next; } catch { if (run === speechRun) toast('Kunde inte hämta Pluggis röst', true); return; }
     if (run !== speechRun) return;               // ett nytt svar har kommit – sluta läsa det gamla
     next = i + 1 < list.length ? fetchVoice(list[i + 1]) : null;
-    await playBuffer(buf);
+    const ok = await playBuffer(buf);
     if (run !== speechRun) return;
+    if (!ok && !playerUnlocked) {
+      // Ljudet blockerades – läs resten med telefonens röst hellre än att det blir tyst
+      if (window.speechSynthesis) speakPhone(list.slice(i).join(' '));
+      return;
+    }
   }
 }
+let currentUrl = null;
 function stopServerAudio() {
-  try { if (currentSource) currentSource.stop(); } catch { /* redan slut */ }
-  currentSource = null;
+  try { player.pause(); } catch { /* inget spelas */ }
+  if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
 }
+
+/** Spelar en wav. Löser alltid ut – med tidsgräns – så att en fastnad uppspelning aldrig stoppar nästa svar. */
 function playBuffer(arrayBuffer) {
-  return new Promise(async (resolve) => {
-    if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return playWithElement(arrayBuffer).then(resolve); } }
-    if (audioCtx.state !== 'running') {
-      try { await audioCtx.resume(); } catch { /* kräver tryck */ }
-      if (audioCtx.state !== 'running') toast('Tryck någonstans på skärmen så hörs Pluggis');
-    }
-    const play = (buf) => {
-      const src = audioCtx.createBufferSource();
-      src.buffer = buf; src.connect(audioCtx.destination);
-      src.onended = () => { if (currentSource === src) currentSource = null; resolve(); };
-      currentSource = src;
-      src.start(0);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      player.onended = player.onerror = null;
+      resolve(ok);
     };
-    const fail = () => { playWithElement(arrayBuffer).then(resolve); };
+    // wav från Piper: ca 44 kB per sekund → tidsgräns = längden + 4 s
+    const seconds = Math.min(60, arrayBuffer.byteLength / 44100 + 4);
+    const timer = setTimeout(() => finish(false), seconds * 1000);
     try {
-      const p = audioCtx.decodeAudioData(arrayBuffer.slice(0), play, fail);
-      if (p && p.catch) p.catch(fail);
-    } catch { fail(); }
+      stopServerAudio();
+      currentUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: 'audio/wav' }));
+      player.onended = () => finish(true);
+      player.onerror = () => finish(false);
+      player.src = currentUrl;
+      const p = player.play();
+      if (p && p.catch) {
+        p.catch(() => {
+          // iOS vägrade spela (inget tryck än) – be om ett tryck
+          playerUnlocked = false;
+          toast('Tryck på skärmen så hörs Pluggis');
+          finish(false);
+        });
+      }
+    } catch { finish(false); }
   });
 }
 
@@ -256,6 +291,7 @@ function connect() {
     S.retry = 0;
     $('#conn').className = 'dot on';
     ws.send(JSON.stringify({ type: 'hello', audio: false }));
+    if (S.queued) { const q = S.queued, retry = S.queuedRetry; S.queued = null; S.queuedRetry = false; send(q, retry); }
   };
   ws.onclose = (e) => {
     if (S.ws === ws) S.ws = null;
@@ -270,16 +306,50 @@ function connect() {
     onServer(m);
   };
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { connect(); refreshPoints(); } });
-setInterval(() => { if (S.ws && S.ws.readyState === 1) S.ws.send('{"type":"ping"}'); }, 25000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { checkAlive(); refreshPoints(); } });
+window.addEventListener('pageshow', () => checkAlive());
+window.addEventListener('online', () => checkAlive());
+// Livstecken: iOS kan lämna en anslutning som ser öppen ut men är död. Svarar den inte på ping
+// inom 6 s ansluter vi om.
+let pongTimer = null;
+function checkAlive() {
+  if (!S.ws || S.ws.readyState !== 1) { connect(); return; }
+  clearTimeout(pongTimer);
+  const ws = S.ws;
+  try { ws.send('{"type":"ping"}'); } catch { /* stängd */ }
+  pongTimer = setTimeout(() => {
+    if (S.ws === ws) { S.ws = null; try { ws.close(); } catch { /* redan */ } $('#conn').className = 'dot off'; connect(); }
+  }, 6000);
+}
+setInterval(() => { if (document.visibilityState === 'visible') checkAlive(); }, 20000);
 
-function send(obj) {
-  if (!S.ws || S.ws.readyState !== 1) { toast('Inte ansluten än – försöker igen…', true); connect(); return false; }
+function send(obj, isRetry) {
+  if (!S.ws || S.ws.readyState !== 1) {
+    // Köa och skicka när anslutningen är uppe igen
+    S.queued = obj;
+    toast('Ansluter igen…');
+    connect();
+    return true;
+  }
   S.ws.send(JSON.stringify(obj));
+  if (obj.type === 'text' || obj.type === 'button') {
+    // Kommer inget "tänker" inom 5 s var anslutningen död – anslut om och skicka igen (en gång)
+    clearTimeout(S.waitTimer);
+    S.pending = obj;
+    S.waitTimer = setTimeout(() => {
+      if (S.pending !== obj || isRetry) return;
+      const ws = S.ws; S.ws = null;
+      try { if (ws) ws.close(); } catch { /* redan */ }
+      S.queued = obj; S.queuedRetry = true;
+      connect();
+    }, 5000);
+  }
   return true;
 }
 
 function onServer(m) {
+  if (m.type === 'pong') { clearTimeout(pongTimer); return; }
+  if (m.type === 'thinking' || m.type === 'say') { clearTimeout(S.waitTimer); S.pending = null; }
   switch (m.type) {
     case 'thinking': setThinking(true); break;
     case 'say': setThinking(false); addMsg('bot', m.text); speak(m.text); break;
