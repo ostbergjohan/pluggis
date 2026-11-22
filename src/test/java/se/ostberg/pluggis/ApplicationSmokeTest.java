@@ -113,6 +113,22 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void homeworkWeightIsSavedRoundedAndClamped() throws Exception {
+        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Nationellt prov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        String r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"weight\":87,\"replan\":false}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(json(r).path("weight").asInt()).isEqualTo(90);
+        r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"weight\":500,\"replan\":false}")).andReturn().getResponse().getContentAsString();
+        assertThat(json(r).path("weight").asInt()).isEqualTo(100);
+        // Utan vikt i anropet ändras den inte
+        r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Nationellt prov i matte\",\"replan\":false}")).andReturn().getResponse().getContentAsString();
+        assertThat(json(r).path("weight").asInt()).isEqualTo(100);
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

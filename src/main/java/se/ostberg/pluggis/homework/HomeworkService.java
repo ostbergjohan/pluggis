@@ -131,7 +131,14 @@ public class HomeworkService {
     @Transactional
     public Optional<Homework> edit(long id, String subject, String title, String description, List<String> steps,
                                    Homework.Kind kind, LocalDate dueDate, Boolean open, boolean clearDueDate) {
+        return edit(id, subject, title, description, steps, kind, dueDate, open, clearDueDate, null);
+    }
+
+    @Transactional
+    public Optional<Homework> edit(long id, String subject, String title, String description, List<String> steps,
+                                   Homework.Kind kind, LocalDate dueDate, Boolean open, boolean clearDueDate, Integer weight) {
         return repo.findById(id).map(h -> {
+            h.setWeight(weight);
             h.edit(subject, title);
             h.updateContent(description, steps, null, null);
             h.editKindAndDate(kind, dueDate, clearDueDate);

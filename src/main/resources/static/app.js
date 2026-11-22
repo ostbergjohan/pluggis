@@ -387,7 +387,7 @@ views.laxor = async (main) => {
           const created = await run(() => api('/api/homework', { method: 'POST',
             body: { subject: v.subject, title: v.title, description: v.description, dueDate: v.dueDate, steps: v.steps } }), e.target);
           if (!created) return;
-          await api(`/api/homework/${created.id}`, { method: 'PUT', body: { kind: v.kind, replan: false } });
+          await api(`/api/homework/${created.id}`, { method: 'PUT', body: { kind: v.kind, weight: v.weight, replan: false } });
           if (v.dueDate && (v.description || v.steps.length)) {
             await run(() => api(`/api/plan/homework/${created.id}`, { method: 'POST' }), null, 'Sparad och planerad');
           } else toast('Sparad');
@@ -556,12 +556,16 @@ function homeworkFields(x) {
   const noDate = h('button', { type: 'button', class: 'small', title: 'Ta bort datumet', onclick: () => { due.value = ''; } }, '✕');
   const description = h('textarea', { rows: 3, placeholder: 'Vad ingår? T.ex. "Utkik kap 4 s. 40–72 + begreppslistan"' }, x.description || '');
   const steps = h('textarea', { rows: 3, placeholder: 'Ett per rad (valfritt) – avsnitt eller delsteg' }, (x.steps || []).join('\n'));
+  const weight = h('select', {}, [10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(w => h('option', { value: w },
+    `${w} %${w === 10 ? ' – litet' : w === 50 ? ' – normalt' : w === 100 ? ' – mycket viktigt' : ''}`)));
+  weight.value = String(x.weight || 50);
   const el = h('div', {},
     h('div', { class: 'row' },
       h('div', {}, h('label', {}, 'Titel'), title),
       h('div', {}, h('label', {}, 'Ämne'), subject),
       h('div', {}, h('label', {}, 'Typ'), kind),
-      h('div', {}, h('label', {}, 'Datum (inlämning/prov)'), h('div', { style: 'display:flex;gap:6px;align-items:center' }, due, noDate))),
+      h('div', {}, h('label', {}, 'Datum (inlämning/prov)'), h('div', { style: 'display:flex;gap:6px;align-items:center' }, due, noDate)),
+      h('div', {}, h('label', { title: 'Hur viktigt det är. Högre vikt ger mer tid och fler repetitioner i planen.' }, 'Vikt'), weight)),
     h('label', {}, 'Vad som ingår'), description,
     h('label', {}, 'Avsnitt / delsteg'), steps);
   return {
@@ -570,6 +574,7 @@ function homeworkFields(x) {
       title: title.value.trim(), subject: subject.value.trim(), kind: kind.value,
       dueDate: due.value || null, clearDueDate: !due.value && !!x.dueDate,
       description: description.value.trim(), steps: lines(steps.value),
+      weight: Number(weight.value),
     }),
   };
 }
@@ -587,6 +592,7 @@ function homeworkItem(x, rerender) {
       kindTag(x.kind),
       h('div', { class: 'item-title' }, x.title),
       missing ? h('span', { class: 'tag late' }, 'innehåll saknas') : null,
+      x.weight && x.weight !== 50 && x.kind !== 'OTHER' ? h('span', { class: 'tag' + (x.weight >= 80 ? ' late' : ''), title: 'Vikt' }, `vikt ${x.weight} %`) : null,
       x.status === 'DONE' ? h('span', { class: 'tag done' }, 'klar') : null,
       h('div', { class: 'item-meta' }, meta)));
 

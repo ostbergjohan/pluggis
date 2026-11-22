@@ -112,7 +112,9 @@ public class PlanningService {
         LocalDate today = todayDate();
         int n = 0;
         List<Homework> open = new ArrayList<>(homework.openSchoolwork());
-        open.sort(java.util.Comparator.comparing(Homework::getDueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+        // Närmast deadline först; samma dag → viktigast först
+        open.sort(java.util.Comparator.comparing(Homework::getDueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                .thenComparing(Homework::weightOrDefault, java.util.Comparator.reverseOrder()));
         for (Homework h : open) {
             if (h.getDueDate() == null || h.getDueDate().isBefore(today)
                     || repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
@@ -372,6 +374,7 @@ public class PlanningService {
         if (!h.getSteps().isEmpty()) {
             ask.append("Delsteg/avsnitt: ").append(String.join(" | ", h.getSteps())).append('\n');
         }
+        ask.append("Vikt: ").append(h.weightOrDefault()).append(" % (hur viktigt föräldern tycker att det här är; 50 % = normalt)\n");
         ask.append("Kortlek finns: ").append(h.getDeckId() != null ? "ja" : "nej").append('\n');
         ask.append("Max minuter per dag (allt plugg den dagen, även andra läxor): ").append(maxMinutesPerDay()).append('\n');
         var st = students.current();

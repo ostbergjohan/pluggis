@@ -59,20 +59,23 @@ public class HomeworkController {
 
     public record EditHomework(String subject, String title, String description, List<String> steps,
                                Homework.Kind kind, LocalDate dueDate, Boolean open, Boolean replan,
-                               Boolean clearDueDate) {
+                               Boolean clearDueDate, Integer weight) {
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Homework> edit(@PathVariable long id, @RequestBody EditHomework body) {
         boolean clear = Boolean.TRUE.equals(body.clearDueDate());
+        Integer before = homework.get(id).map(Homework::getWeight).orElse(null);
         var updated = homework.edit(id, body.subject(), body.title(), body.description(), body.steps(),
-                body.kind(), body.dueDate(), body.open(), clear);
+                body.kind(), body.dueDate(), body.open(), clear, body.weight());
+        boolean weightChanged = body.weight() != null && updated.isPresent()
+                && !java.util.Objects.equals(before, updated.get().getWeight());
         if (updated.isPresent() && (updated.get().isOther() || updated.get().getDueDate() == null)) {
             planning.deleteForHomework(id); // annat och odaterat planeras inte
             return ResponseEntity.of(updated);
         }
         if (updated.isPresent() && !Boolean.FALSE.equals(body.replan())
-                && (body.description() != null || body.steps() != null || body.dueDate() != null)) {
+                && (body.description() != null || body.steps() != null || body.dueDate() != null || weightChanged)) {
             try {
                 planning.replanIfPlanned(id);
             } catch (IllegalArgumentException ignored) {

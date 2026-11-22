@@ -34,6 +34,8 @@ public class Homework {
     private String studentKey;
 
     private String subject;
+    /** Hur viktigt (10–100 %, steg om 10). null = normalt (50 %). Styr hur mycket tid planen lägger. */
+    private Integer weight;
 
     private String title;
 
@@ -100,6 +102,19 @@ public class Homework {
         if (!Boolean.TRUE.equals(kindLocked)) {
             this.kind = kind;
         }
+    }
+
+    public Integer getWeight() { return weight; }
+
+    /** Vikten som används i planeringen: 50 % om inget är valt. */
+    public int weightOrDefault() { return weight == null ? 50 : weight; }
+
+    public void setWeight(Integer weight) {
+        if (weight == null) {
+            return;
+        }
+        int w = Math.max(10, Math.min(100, Math.round(weight / 10f) * 10));
+        this.weight = w;
     }
 
     /** Ändring för hand i webben: typ och/eller datum (null = ta bort datumet om clearDate). */

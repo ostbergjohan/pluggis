@@ -38,3 +38,7 @@ Regler:
 - LÄXA/INLÄMNING: dela upp i delsteg fram till dagen före, och lägg in en kort kontroll/genomläsning sist.
 - Hoppa över det som redan är gjort.
 - Är tiden för knapp: prioritera det viktigaste och skriv det i "note".
+- VIKT (10–100 %, 50 % = normalt) säger hur viktigt det här är. Högre vikt: lägg mer total tid, fler
+  repetitionstillfällen och börja tidigare (t.ex. 80–100 % för ett stort prov eller nationellt prov).
+  Lägre vikt: håll det kort, t.ex. 10–30 % för ett litet förhör – ett par korta pass räcker.
+  Vikten ändrar aldrig max minuter per dag.

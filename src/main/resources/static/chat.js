@@ -638,7 +638,7 @@ views.laxor = async () => {
     const missing = !isPast && !x.description && !(x.steps || []).length;
     return h('div', { class: 'row tap', onclick: (e) => { if (e.target.closest('button')) return; S.openHomework = x.id; show('laxor'); } },
       h('div', { class: 'grow' },
-        h('div', {}, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
+        h('div', {}, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title, x.weight >= 80 ? ' ⭐' : ''),
         h('div', { class: 'meta' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · '),
           missing ? ' · ' : '', missing ? h('span', { class: 'tag late' }, 'vad ingår?') : '')),
       isPast ? null : h('button', { class: 'small-btn', onclick: () => openUpload(x.id) }, '📎 Material'));
