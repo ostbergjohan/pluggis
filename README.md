@@ -318,6 +318,11 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
   eller en mening med en lucka (`___`) att fylla i. Eleven gör dem från fliken **Kort och quiz** eller läxans sida i
   chatten, föräldern med *⚡ Gör quiz* i admin, och coachen med `create_quiz`. De är kortlekar som alla andra
   (samma repetition och poäng); i röstförhöret läser coachen upp alternativen A–D. Prompten finns i `prompts/quiz.md`.
+- **Förklara för Pluggis:** eleven får ett begrepp ur sitt material ("Hur kan växter äta ljus?") och förklarar med egna
+  ord – skrivet eller med tangentbordets mikrofon. Pluggis spelar en nyfiken yngre kompis och ställer högst två
+  följdfrågor mot det som saknas, och visar sedan vilka nyckelpunkter som kom med (✓) och vad som kan läggas till (○).
+  +5 poäng för att ha förklarat (en gång per begrepp och dag). Finns under **Kort och quiz** och på läxans sida.
+  Prompten finns i `prompts/explain.md`.
 
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),
   eller så fotar eleven glosor/anteckningar (långt tryck på röda knappen).

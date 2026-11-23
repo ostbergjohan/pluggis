@@ -148,6 +148,19 @@ public class RewardsService {
         return true;
     }
 
+    /** Eleven har förklarat ett begrepp för Pluggis (en gång per begrepp och dag). */
+    @Transactional
+    public void onExplained(String deviceId, String concept) {
+        if (deviceId == null) {
+            return;
+        }
+        String ref = "explain:" + (concept == null ? "" : concept.toLowerCase(java.util.Locale.ROOT).trim());
+        if (points.countByDeviceIdAndRefKeyAndAwardedOn(deviceId, ref, today()) > 0) {
+            return;
+        }
+        award(deviceId, PointEvent.Kind.BONUS, RewardRules.EXPLAINED, "Förklarade " + concept + " för Pluggis", ref);
+    }
+
     /** Föräldern tar bort en enskild poänghändelse (t.ex. felaktig bonus). */
     @Transactional
     public boolean deleteEvent(String deviceId, long eventId) {

@@ -316,6 +316,17 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void studentCanStartExplainingAndUnknownRoundsAreGone() throws Exception {
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        // Claude nås inte i testet: vänligt 503, inte stoppad av behörigheten
+        mvc.perform(post("/api/explain/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isServiceUnavailable());
+        mvc.perform(post("/api/explain/00000000-0000-0000-0000-000000000000/answer").header(TOKEN, code)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"hej\"}")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

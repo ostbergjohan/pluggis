@@ -732,9 +732,10 @@ function quizMaker(list) {
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
   return h('div', { class: 'box quiz-maker' },
     h('div', { class: 'quiz-title' }, 'Gör ett nytt quiz'), sel,
-    h('div', { class: 'quiz-btns' },
+    h('div', { class: 'quiz-btns three' },
       h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
-      h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet'))));
+      h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
+      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(Number(sel.value), e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis'))));
 }
 
 async function makeQuiz(homeworkId, mode, btn) {
@@ -748,6 +749,72 @@ async function makeQuiz(homeworkId, mode, btn) {
     toast(e.message || 'Det gick inte att göra frågor just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
   }
+}
+
+// ---- Förklara för Pluggis ----
+async function explainFor(homeworkId, btn) {
+  btn = btn && btn.closest('button');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis funderar…</span><small>tar några sekunder</small>'; }
+  let r;
+  try {
+    r = await api('/api/explain/start', { method: 'POST', body: { homeworkId } });
+  } catch (e) {
+    toast(e.message || 'Det gick inte just nu', true);
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    return;
+  }
+  const log = h('div', { class: 'ex-log' });
+  const input = h('textarea', { rows: 3, placeholder: 'Förklara med egna ord – skriv, eller tryck på mikrofonen på tangentbordet' });
+  const send = h('button', { class: 'big' }, 'Skicka');
+  const box = h('div', { class: 'ex-input' }, input, send);
+  const bubble = (who, text) => {
+    const b = h('div', { class: `ex-msg ${who}` }, who === 'pluggis' ? h('span', { class: 'ex-who' }, '🧠') : null, h('div', {}, text));
+    log.append(b); if (b.scrollIntoView) b.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    if (who === 'pluggis') speak(text);
+  };
+  $('#view').replaceChildren(h('div', { class: 'page' },
+    h('div', { style: 'display:flex;align-items:center;gap:8px' },
+      h('button', { class: 'small-btn', onclick: () => { stopReading(); show(S.openHomework ? 'laxor' : 'kort'); } }, '‹ Tillbaka'),
+      h('h2', { style: 'margin:0;flex:1' }, `Förklara: ${r.concept}`)),
+    h('p', { class: 'meta', style: 'color:var(--muted);margin:6px 0 10px' }, 'Pluggis kan inte det här – lär ut det! Med egna ord räcker, det behöver inte vara perfekt.'),
+    log, box));
+  if (r.note) toast(r.note);
+  bubble('pluggis', r.reply);
+  input.focus();
+
+  send.addEventListener('click', async () => {
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+    stopReading();
+    bubble('me', text);
+    input.value = ''; send.disabled = true; send.textContent = 'Pluggis lyssnar…';
+    try {
+      const t = await api(`/api/explain/${r.id}/answer?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { text } });
+      bubble('pluggis', t.reply);
+      if (t.done) {
+        box.replaceWith(explainSummary(t, homeworkId));
+        refreshPoints();
+        return;
+      }
+    } catch (e) {
+      toast(e.message || 'Det gick inte att skicka', true);
+    }
+    send.disabled = false; send.textContent = 'Skicka'; input.focus();
+  });
+}
+
+function explainSummary(t, homeworkId) {
+  const all = t.covered.length + t.missing.length;
+  return h('div', { class: 'box ex-summary' },
+    h('div', { class: 'ex-score' }, `Du fick med ${t.covered.length} av ${all}`,
+      S.points !== false ? h('span', { class: 'meta' }, '  +5 poäng') : null),
+    t.covered.map(p => h('div', { class: 'ex-point ok' }, '✓ ', p)),
+    t.missing.length ? h('div', { class: 'meta', style: 'margin:8px 0 2px' }, 'Det här kan du lägga till nästa gång:') : null,
+    t.missing.map(p => h('div', { class: 'ex-point miss' }, '○ ', p)),
+    h('div', { class: 'quiz-btns', style: 'margin-top:12px' },
+      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(homeworkId, e.target) }, '🧠', h('span', {}, 'En till')),
+      h('button', { class: 'quiz-btn', onclick: () => show('kort') }, '🃏', h('span', {}, 'Till quiz och kort'))));
 }
 
 const norm = (t) => (t || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -964,9 +1031,10 @@ async function homeworkDetail(id) {
   }
   page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
   if (x.kind !== 'OTHER') {
-    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns' },
+    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns three' },
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'quiz', e.target) }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
-      h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
+      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(x.id, e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis'))));
   }
   return page;
 }

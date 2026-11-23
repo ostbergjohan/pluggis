@@ -252,3 +252,17 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .choice:disabled { color: var(--ink); opacity: 1; }
 .cloze-gap { display: inline-block; min-width: 4em; border-bottom: 3px solid var(--accent); color: var(--accent); margin: 0 4px; }
 .next-btn { margin-top: 4px; width: 100%; }
+
+.quiz-btns.three { grid-template-columns: 1fr 1fr 1fr; }
+.ex-log { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.ex-msg { display: flex; gap: 8px; align-items: flex-start; max-width: 88%; padding: 10px 12px; border-radius: 16px; font-size: 16px; line-height: 1.35; }
+.ex-msg.pluggis { background: var(--panel); border: 1px solid var(--line); align-self: flex-start; }
+.ex-msg.me { background: var(--accent); color: #fff; align-self: flex-end; }
+.ex-who { font-size: 20px; }
+.ex-input { display: flex; flex-direction: column; gap: 8px; }
+.ex-input textarea { width: 100%; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--line); padding: 10px; font-size: 16px; background: var(--panel); color: var(--ink); }
+.ex-summary { padding: 14px; }
+.ex-score { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+.ex-point { padding: 4px 0; }
+.ex-point.ok { color: var(--accent); }
+.ex-point.miss { color: var(--muted); }

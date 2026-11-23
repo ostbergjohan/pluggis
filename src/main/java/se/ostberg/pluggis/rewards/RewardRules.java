@@ -27,6 +27,8 @@ public final class RewardRules {
     public static final int PLAN_ITEM_DONE = 3;
     /** Allt i dagens plan avbockat (även det som låg efter). */
     public static final int DAY_COMPLETE = 5;
+    /** Förklarat ett begrepp för Pluggis (lär ut) – en ansträngning, oavsett hur bra det blev. */
+    public static final int EXPLAINED = 5;
 
     public static final int STREAK_POINTS_PER_DAY = 3;
     public static final int STREAK_MAX_DAYS_COUNTED = 7;

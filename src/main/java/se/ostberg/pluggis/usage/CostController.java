@@ -21,16 +21,19 @@ import java.util.TreeMap;
 @RequestMapping("/api/costs")
 public class CostController {
 
-    private static final Map<String, String> LABELS = Map.of(
-            "coach", "Coachen (röst och chatt)",
-            "vision", "Foto av läxa",
-            "material", "Material (bilder, dokument)",
-            "planning", "Planering",
-            "intake-text", "Läxa från text",
-            "flashcards", "Flashkort",
-            "flashcards-vision", "Flashkort från bild",
-            "flashcards-document", "Flashkort från dokument",
-            "flashcards-fix", "Flashkort, rättning");
+    private static final Map<String, String> LABELS = Map.ofEntries(
+            Map.entry("coach", "Coachen (röst och chatt)"),
+            Map.entry("vision", "Foto av läxa"),
+            Map.entry("material", "Material (bilder, dokument)"),
+            Map.entry("planning", "Planering"),
+            Map.entry("intake-text", "Läxa från text"),
+            Map.entry("flashcards", "Flashkort"),
+            Map.entry("flashcards-vision", "Flashkort från bild"),
+            Map.entry("flashcards-document", "Flashkort från dokument"),
+            Map.entry("flashcards-fix", "Flashkort, rättning"),
+            Map.entry("quiz", "Snabbquiz och lucktext"),
+            Map.entry("explain-start", "Förklara för Pluggis"),
+            Map.entry("explain-answer", "Förklara för Pluggis, svar"));
 
     private final UsageDayRepository repo;
     private final CostProperties costs;
