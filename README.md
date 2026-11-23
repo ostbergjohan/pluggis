@@ -28,6 +28,39 @@ påminnelser, poäng och svensk uppläsning.
 | Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
 | Google Kalender: planen som pass i elevens kalender | ✅ |
 
+## Adresser och appar på hemskärmen
+
+Pluggis körs på din dator/server och nås från telefoner på samma nätverk (hemma-wifi, eller via Tailscale/VPN utifrån).
+Byt `<server>` mot datorns adress – på Linux syns den med `hostname -I` (t.ex. `192.168.1.20`).
+
+| Vad | Adress | För |
+|---|---|---|
+| **Föräldravyn (admin)** | `http://<server>:8080/` | Dig: läxor, plan, elever, inställningar, kostnad. Ange token under Inställningar första gången. |
+| **Elevchatten** | `http://<server>:8080/chat.html` | Eleven. Logga in med elevens kod på 5 tecken. |
+| **Elevens personliga länk** | `http://<server>:8080/chat.html#k=KOD` | Loggar in direkt. Kopiera/dela den under admin → Inställningar → Elever. |
+
+### Lägg till som app – iPhone
+
+Gör det för elevchatten på elevens telefon, och för admin på din.
+
+1. Öppna länken i **Safari** (det måste vara Safari).
+2. Tryck på **Dela** (fyrkanten med pil uppåt) längst ner.
+3. Välj **Lägg till på hemskärmen** (scrolla ner i listan om den inte syns), och tryck **Lägg till**.
+4. Ikonen heter *Pluggis* (elevchatten) eller *Pluggis admin* och öppnas i helskärm som en vanlig app.
+
+Hemskärmsappen har egen inloggning, skild från Safari: får eleven frågan om kod första gången, skriv in den en gång.
+Nya versioner hämtas automatiskt när appen öppnas.
+
+### Lägg till som app – Android
+
+1. Öppna länken i **Chrome**.
+2. Tryck på **⋮** (tre punkter uppe till höger).
+3. Välj **Lägg till på startskärmen** (eller **Installera app** om det alternativet finns), och bekräfta.
+4. Ikonen *Pluggis* / *Pluggis admin* hamnar på startskärmen.
+
+Över vanlig `http` blir det en genväg som öppnas i ett eget Chrome-fönster; full "installerad app" kräver https
+(t.ex. via Tailscale med HTTPS). Allt fungerar likadant.
+
 ## Kom igång
 
 **Nycklar, tokens och konton som behövs** (måste/valfritt, var du får dem, vad de kostar): se [docs/konfiguration.md](docs/konfiguration.md).
