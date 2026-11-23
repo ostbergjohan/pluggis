@@ -28,6 +28,28 @@ påminnelser, poäng och svensk uppläsning.
 | Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
 | Google Kalender: planen som pass i elevens kalender | ✅ |
 
+## Så ser elevchatten ut
+
+Elevchatten i en iPhone (testdata).
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/chatt.png" width="220" alt="Chatt med coachen"><br><sub>Chatt med coachen</sub></td>
+    <td align="center"><img src="docs/screenshots/plan.png" width="220" alt="Plan – ett block per ämne"><br><sub>Plan – ett block per ämne</sub></td>
+    <td align="center"><img src="docs/screenshots/laxor.png" width="220" alt="Läxor och prov"><br><sub>Läxor och prov</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/prov.png" width="220" alt="Provets sida med material"><br><sub>Provets sida med material</sub></td>
+    <td align="center"><img src="docs/screenshots/ova.png" width="220" alt="Öva – kort, quiz och Förklara"><br><sub>Öva – kort, quiz och Förklara</sub></td>
+    <td align="center"><img src="docs/screenshots/snabbquiz-ratt.png" width="220" alt="Snabbquiz"><br><sub>Snabbquiz</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/lucktext.png" width="220" alt="Lucktext"><br><sub>Lucktext</sub></td>
+    <td align="center"><img src="docs/screenshots/forklara-klart.png" width="220" alt="Förklara för Pluggis"><br><sub>Förklara för Pluggis</sub></td>
+    <td align="center"><img src="docs/screenshots/poang.png" width="220" alt="Poäng och veckopeng"><br><sub>Poäng och veckopeng</sub></td>
+  </tr>
+</table>
+
 ## Adresser och appar på hemskärmen
 
 Pluggis körs på din dator/server och nås från telefoner på samma nätverk (hemma-wifi, eller via Tailscale/VPN utifrån).
