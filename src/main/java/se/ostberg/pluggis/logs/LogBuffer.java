@@ -41,8 +41,24 @@ public class LogBuffer extends AppenderBase<ILoggingEvent> {
         setContext(context);
         setName("pluggis-web-log");
         start();
+        ensureAttached();
+    }
+
+    /** Kopplar (om) bufferten till rot-loggern – t.ex. om loggningen initierats om efter start. */
+    private void ensureAttached() {
+        if (!(LoggerFactory.getILoggerFactory() instanceof LoggerContext context)) {
+            return;
+        }
         Logger root = context.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
-        if (root.getAppender(getName()) == null) {
+        var existing = root.getAppender(getName());
+        if (existing != this) {
+            if (existing != null) {
+                root.detachAppender(existing);
+            }
+            if (!isStarted()) {
+                setContext(context);
+                start();
+            }
             root.addAppender(this);
         }
     }
@@ -64,7 +80,12 @@ public class LogBuffer extends AppenderBase<ILoggingEvent> {
      * Rader efter {@code afterSeq} med minst {@code minLevel}, ev. filtrerat på text.
      * Högst {@code limit} rader (de senaste).
      */
-    public synchronized List<LogLine> since(long afterSeq, String minLevel, String contains, int limit) {
+    public List<LogLine> since(long afterSeq, String minLevel, String contains, int limit) {
+        ensureAttached();
+        return read(afterSeq, minLevel, contains, limit);
+    }
+
+    private synchronized List<LogLine> read(long afterSeq, String minLevel, String contains, int limit) {
         Level min = Level.toLevel(minLevel == null ? "DEBUG" : minLevel, Level.DEBUG);
         String needle = contains == null || contains.isBlank() ? null : contains.toLowerCase(Locale.ROOT);
         List<LogLine> out = new ArrayList<>();
