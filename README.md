@@ -2,32 +2,31 @@
 
 [![build](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml) [![docker](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml)
 
-Backend för en fysisk studiekompis på skrivbordet: en **M5Stack Tab5** med kamera,
-mikrofoner och högtalare, plus en **Dual Button** (U025) och eventuellt en LED-list som timer.
-Hjärnan är Claude, som coachar med frågor i stället för färdiga svar och är byggd
-för att hjälpa elever med ADHD att komma igång, hålla tiden och ta ett steg i taget.
+En AI-studiekompis för elever med ADHD: en elevchatt i mobilen (som app på hemskärmen) och en
+föräldravy i webbläsaren. Hjärnan är Claude, som coachar med frågor i stället för färdiga svar och
+hjälper eleven att komma igång, hålla tiden och ta ett steg i taget – med pluggplan, flashkort,
+påminnelser, poäng och svensk uppläsning.
 
 ## Vad som finns
 
 | Del | Status |
 |---|---|
 | Coach med Claude + verktyg (starta/avsluta pass, spara/lista/klarmarkera läxor) | ✅ |
-| Läxpass med timer som ägs av backenden, löpande `timer`-händelser till enheten | ✅ |
+| Läxpass med timer som ägs av backenden | ✅ |
 | Foto → Claude läser ut uppgifter som JSON → sparas som läxor | ✅ |
 | Flashkort: generera från ämne, text eller foto, Leitner-repetition, röstförhör, Anki-export | ✅ |
 | Poäng för pluggande med streak och valfri veckopeng (tak per vecka) | ✅ |
 | Pluggplan dag för dag utifrån vad som ingår (sidor, kapitel, begrepp), omplanering | ✅ |
-| Påminnelser på Tab5 (eftermiddag + kvällsknuff, "imorgon är det prov") | ✅ |
+| Påminnelser i chatten (vid pluggtiden + kvällsknuff, "imorgon är det prov") | ✅ |
 | Läxor in via InfoMentors kalenderprenumeration (webcals), .ics-fil, skärmdump, Word, PDF eller inklistrad text | ✅ |
 | Material på en läxa/prov (skärmdump, Word, PDF, text) → innehåll, ny plan, valfria flashkort | ✅ |
-| WebSocket för Tab5 (text, knappar, timer, foto, kort, poäng) | ✅ |
-| Webbgränssnitt: föräldravy (läxor, plan, flashkort, poäng, statistik) + Tab5-simulator | ✅ |
+| Elevchatt i mobilen: chatt, plan, läxor, material, flashkort och poäng | ✅ |
+| Föräldravy: läxor, plan (dra och släpp), flashkort, poäng, kostnad, statistik, flera elever | ✅ |
 | REST för test med curl / iOS-genväg | ✅ |
 | Prometheus-metrik för Claude-latens och tokens | ✅ |
 | Ljud: KB-Whisper (tal till text) + Piper (text till tal), uppläsning mening för mening | ✅ |
 | Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
-| Firmware för Tab5 | ⏳ eget repo eller `firmware/` senare |
-| Föräldravy | ⏳ |
+| Google Kalender: planen som pass i elevens kalender | ✅ |
 
 ## Kom igång
 
@@ -49,15 +48,16 @@ Data hamnar i en H2-fil under `./data`. Kör med Postgres via `SPRING_PROFILES_A
 
 ```bash
 T=$PLUGGIS_DEVICE_TOKEN
+D=fred   # elevens enhets-id (syns i admin under Elever)
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"text":"(Knapptryck: jag vill börja plugga nu.)"}' \
-  localhost:8080/api/devices/tab5-1/coach
+  -d '{"text":"jag vill börja plugga nu"}' \
+  localhost:8080/api/devices/$D/coach
 
 curl -s -H "X-Pluggis-Token: $T" -F image=@stencil.jpg \
-  "localhost:8080/api/homework/photo?deviceId=tab5-1"
+  "localhost:8080/api/homework/photo?deviceId=$D"
 
 curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/homework
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/tab5-1/sessions/active
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/$D/sessions/active
 ```
 
 Flashkort och poäng:
@@ -66,39 +66,32 @@ Flashkort och poäng:
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"topic":"Engelska glosor: djur","subject":"Engelska","count":10}' \
   localhost:8080/api/flashcards/generate
-curl -s -H "X-Pluggis-Token: $T" -F image=@glosor.jpg "localhost:8080/api/flashcards/photo?deviceId=tab5-1"
+curl -s -H "X-Pluggis-Token: $T" -F image=@glosor.jpg "localhost:8080/api/flashcards/photo?deviceId=$D"
 curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/flashcards/decks
 curl -s -H "X-Pluggis-Token: $T" -o kort.tsv localhost:8080/api/flashcards/decks/1/export.tsv   # till Anki
 
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/tab5-1/rewards            # veckans poäng och kronor
+curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/$D/rewards            # veckans poäng och kronor
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"points":50,"reason":"Bra jobbat på provet!"}' localhost:8080/api/devices/tab5-1/rewards/bonus
-curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/tab5-1/rewards/payouts  # markera veckan utbetald
-```
-
-WebSocket (t.ex. med `websocat`):
-
-```bash
-websocat "ws://localhost:8080/ws/device?deviceId=tab5-1&token=$T"
-{"type":"text","text":"jag har matteläxa till fredag"}
-{"type":"button","button":"main","gesture":"long"}
+  -d '{"points":50,"reason":"Bra jobbat på provet!"}' localhost:8080/api/devices/$D/rewards/bonus
+curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/$D/rewards/payouts  # markera veckan utbetald
 ```
 
 ## Arkitektur
 
 ```
-Tab5 (firmware)                      Spring Boot "pluggis"
- ├─ mikrofon/högtalare ─┐            ├─ device/   WebSocket, knappar, händelser → enhet
- ├─ Dual Button (Grove) ├─ WS ──────▶├─ coach/    Claude-loop med verktyg + historik
- ├─ LED-list (sidoport) ┘            ├─ session/  pass + timer (@Scheduled)
- └─ kamera ── POST /api/homework/photo ─▶ homework/ läxor + fotoavläsning
-iOS-genväg ── POST /api/homework/photo ─┘ claude/   tunn klient mot Messages API
-                                     └─ /actuator/prometheus → Grafana
+Elevchatten (mobil) ── WebSocket + REST ──▶ Spring Boot "pluggis"
+Föräldravyn (webb)  ── REST ─────────────▶  ├─ coach/     Claude-loop med verktyg + historik
+iOS-genväg ── POST /api/homework/photo ──▶  ├─ homework/  läxor, material, fotoavläsning
+                                            ├─ planning/  pluggplan, omplanering, block per ämne
+                                            ├─ flashcards/ kortlekar och repetition
+                                            ├─ calendar/  InfoMentor-import · gcal/ Google Kalender
+                                            ├─ speech/    KB-Whisper + Piper / Azure
+                                            └─ /actuator/prometheus → Grafana
 ```
 
 - **Prompterna** ligger i `src/main/resources/prompts/` – ändra coachens ton och regler där.
-- **Knappar** översätts i `ButtonMapper` till syntetiska meddelanden som
-  "(Knapptryck: jag vill börja plugga nu.)", så beteendet styrs av prompten.
+- **Snabbknapparna** i chatten (börja, förhör, avsluta) blir korta meddelanden till coachen,
+  så beteendet styrs av prompten.
 - **Pass och läxor** skickas med i systemprompten varje anrop, så coachen vet läget
   även efter omstart. Själva samtalet hålls i minnet och nollställs efter 30 min tystnad.
 
@@ -159,7 +152,7 @@ via faster-whisper, och Piper med svensk röst. Enklast:
 docker compose up --build      # Pluggis + speech, öppna http://localhost:8080
 ```
 
-I Tab5-simulatorn: kryssa i *Serverns röst* och håll inne *🎙 Håll och prata*.
+I elevchatten: välj rösten *Pluggis* under 🔊 för serverns svenska röst.
 
 ## Webbgränssnitt
 
@@ -172,15 +165,15 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Plan | Tre veckor framåt dag för dag, plus det som ligger efter. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas. Flyttade läxor planeras inte om på natten förrän du trycker Planera igen |
 | Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
-| Tab5-simulator | Ansluter via samma WebSocket som Tab5: knappar, timer, kort, poäng, foto – med uppläsning och mikrofon (svenska) i webbläsaren |
+| Kostnad | Vad Claude kostar per dag, funktion och elev; välj API, hybrid eller abonnemang |
 | Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
-| Inställningar | Token, enhets-id, elevens namn och coachens ton, elevlänk till mobilen, röst och tempo, iOS-genvägen |
+| Inställningar | Token, elever och elevlänkar, elevens namn och coachens ton, poäng av/på, planering, Google Kalender, röst och tempo, iOS-genvägen |
 
 ### Flera elever
 
 Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och poäng.
 
-- **Inställningar → Elever:** lägg till elev (namn, och Tab5:ans enhets-id om eleven har en), byt kod eller ta bort.
+- **Inställningar → Elever:** lägg till elev, byt kod eller ta bort.
 - Välj vilken elev du tittar på i **elevväljaren** uppe till vänster i föräldravyn.
 - Varje elev får en **fast kod på 5 tecken** (t.ex. `K7M2Q`, inga lättförväxlade tecken som 0/O och 1/I).
   Koden är elevens inloggning i mobilchatten. *Ny kod* gör den gamla ogiltig.
@@ -193,14 +186,13 @@ Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och p
 
 `/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
 🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
-material (foto, skärmdump, Word, PDF), öva flashkort själv (fliken **Kort**: visa svar, rätt/fel, uppläsning – ger poäng men syns inte på Tab5), och se poängen.
+material (foto, skärmdump, Word, PDF), öva flashkort själv (fliken **Kort**: visa svar, rätt/fel, uppläsning – ger poäng), och se poängen.
 
 - Eleven öppnar `/chat.html` och skriver in sin kod – eller får länken med koden (`/chat.html#k=KOD`) via
   *Kopiera länk* / *Dela* under Inställningar → Elever. Öppna i Safari → Dela → *Lägg till på hemskärmen*.
 - Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning, kortlekar (öva, inte ändra) och poäng – inte inställningar,
   poängbonus, utbetalningar, kalender, loggar eller syskonens data.
 - Tryck på Pluggis-namnet i chatten för att logga ut (t.ex. på en delad telefon).
-- Tab5 och mobilen för samma elev kan vara anslutna samtidigt och ser samma samtal.
 
 ### Eleven och coachens ton
 
@@ -221,7 +213,7 @@ Andra vägar in:
 
 1. **.ics-fil:** samma flik → *Välj .ics-fil*, förhandsgranska och välj vilka händelser som ska med.
 2. **Skärmdump av veckoplanen** → iOS-genväg "Pluggis: läxor"
-   (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=tab5-1`,
+   (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=$D`,
    formulär med fältet `image`, header `X-Pluggis-Token`).
 3. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
 4. **Ladda upp fil** (bild, Word .docx, PDF, .txt): *📎 Ladda upp fil* och välj **Ny läxa eller prov**
@@ -252,13 +244,13 @@ tidigare start i planen, lägre vikt håller det kort. Max per dag gäller allti
 - **Hela dagen klar** ger +5 i bonus, och chatten visar nedräkning och "% klart" per prov/läxa (coachen nämner det också).
 - **Pluggtid och om-så-plan** per elev (Inställningar → Planering), t.ex. "16:15, efter mellanmålet".
 
-**Påminnelser:** vid elevens pluggtid (standard 16:30) säger Tab5/chatten vad som står först på dagens plan
+**Påminnelser:** vid elevens pluggtid (standard 16:30) säger chatten vad som står först på dagens plan
 och vad som ska in imorgon, och två timmar senare kommer en mjuk knuff om inget pass startats. Bara på pluggdagarna.
 
 ```bash
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"text":"v.48: Engelska glosförhör fredag, kap 3 s. 42. NO-prov 4/12 fotosyntesen, Utkik s. 40–72"}' \
-  "localhost:8080/api/homework/text?deviceId=tab5-1"
+  "localhost:8080/api/homework/text?deviceId=$D"
 curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
   -d '{"content":"Utkik kap 4 s. 40–72 + begreppslistan","kind":"TEST"}' \
   localhost:8080/api/plan/homework/2/content
@@ -310,7 +302,7 @@ Grundtanken är att **belöna ansträngning mer än rätt svar** – det är van
 | Streak (dagar i rad med pass) | 3 × antal dagar (max 7) |
 | Bonus från förälder | valfritt |
 
-- **Av/på per elev:** Inställningar → Eleven och coachen → *Använd poäng*. Av döljer poängknappen och fliken Poäng i elevchatten, poängnotiser i chatten och på Tab5, och coachen nämner inte poäng eller pengar. Poängen räknas ändå i bakgrunden.
+- **Av/på per elev:** Inställningar → Eleven och coachen → *Använd poäng*. Av döljer poängknappen och fliken Poäng i elevchatten, poängnotiser i chatten, och coachen nämner inte poäng eller pengar. Poängen räknas ändå i bakgrunden.
 - Poäng dras **aldrig** av.
 - Kronor: `PLUGGIS_SEK_PER_POINT` (standard 0,10 = 10 poäng/krona) med tak `PLUGGIS_WEEKLY_CAP_SEK`
   (standard 50 kr/vecka). Sätt `PLUGGIS_REWARDS_ENABLED=false` om coachen inte ska prata om pengar.
@@ -336,8 +328,5 @@ Det här hanterar en minderårigs röst, bilder och skolarbete.
 
 ## Nästa steg
 
-1. Kompilera och kör testerna lokalt (`mvn verify`) och prova coachen med curl.
-2. Tab5: flasha färdig firmware och få upp WebSocket + knappar (text först, ljud sen).
-3. Ljud på riktiga Tab5: tryck-och-prata enligt `docs/protokoll.md`, mät latens i Grafana.
-4. Föräldravy: veckans pass, läxor, poäng och utbetalning (enkel sida eller Grafana-panel).
-5. MCP-server så att samma läxlista nås från Claude-appen och hemagenten.
+1. Kompilera och kör testerna lokalt (`mvn verify`).
+2. MCP-server så att samma läxlista nås från Claude-appen och hemagenten.

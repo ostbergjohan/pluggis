@@ -35,16 +35,15 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 
 ## 1. Föräldertoken (`PLUGGIS_DEVICE_TOKEN`)
 
-Lösenordet till allt utom elevchatten: föräldravyn, Tab5, iOS-genvägen och curl.
+Lösenordet till allt utom elevchatten: föräldravyn, iOS-genvägen och curl.
 
 - **Skapa:** `openssl rand -hex 24` (eller valfri lång slumpad sträng).
 - **Lägg:** `PLUGGIS_DEVICE_TOKEN=...` i `.env`.
 - **Används i:**
   - Föräldravyn: Inställningar → Token (sparas i webbläsaren, en gång per dator eller telefon).
-  - Tab5-firmware: `?token=` på WebSocket-adressen.
   - iOS-genvägen och curl: headern `X-Pluggis-Token`.
 - **Saknas den** är API:t öppet för alla på nätet. Loggen varnar då: *"pluggis.device-token är inte satt – API:t är öppet"*.
-- **Byta:** ändra i `.env`, kör `docker compose up -d` och uppdatera token i föräldravyn, på Tab5 och i genvägen.
+- **Byta:** ändra i `.env`, kör `docker compose up -d` och uppdatera token i föräldravyn och i genvägen.
 
 ## 2. Claude – välj ett av tre sätt
 
@@ -150,7 +149,7 @@ Läxor och prov hämtas från skolans kalenderprenumeration.
 |---|---|---|
 | `PLUGGIS_MAX_MINUTES_PER_DAY` | `40` | Max plugg per dag för nya elever (ändras per elev i admin) |
 | `PLUGGIS_STUDY_DAYS` | `MONDAY,…,THURSDAY,SUNDAY` | Pluggdagar för nya elever (ändras per elev i admin) |
-| `PLUGGIS_REMINDERS_ENABLED` | `true` | Påminnelser på Tab5 och i chatten |
+| `PLUGGIS_REMINDERS_ENABLED` | `true` | Påminnelser i chatten |
 | `PLUGGIS_REWARDS_ENABLED` | `true` | Om coachen pratar om veckopeng (poäng av/på per elev finns i admin) |
 | `PLUGGIS_SEK_PER_POINT` / `PLUGGIS_WEEKLY_CAP_SEK` | `0.10` / `50` | Kronor per poäng och tak per vecka |
 | `PLUGGIS_SPEECH_URL` | sätts av docker-compose | Ljudtjänsten (Whisper och Piper) |
@@ -177,7 +176,7 @@ I föräldravyn visar **Kostnad** status för API-nyckel, Claude Code-token och 
 
 | Vad | Gör så här |
 |---|---|
-| `PLUGGIS_DEVICE_TOKEN` | Ny sträng i `.env` → `docker compose up -d` → uppdatera föräldravyn, Tab5 och genvägen |
+| `PLUGGIS_DEVICE_TOKEN` | Ny sträng i `.env` → `docker compose up -d` → uppdatera föräldravyn och genvägen |
 | `ANTHROPIC_API_KEY` | Ta bort nyckeln i console.anthropic.com → skapa ny → `.env` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Kör `claude setup-token` för en ny token → `.env`. Byt även lösenord på ditt Claude-konto om du misstänker missbruk |
 | `AZURE_SPEECH_KEY` | *Regenerate key* i Azure-portalen → `.env` |
