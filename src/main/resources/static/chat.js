@@ -639,8 +639,10 @@ views.plan = async () => {
 
   function planRow(item, homeworkTitle, overdue) {
     const tick = h('button', { class: 'tick', 'aria-label': 'Klar', disabled: item.done || null }, item.done ? '✓' : '');
+    const examBtn = !item.done && /testprov/i.test(item.task)
+      ? h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => { e.stopPropagation(); startExam(item.homeworkId, e.target); } }, '📝 Starta') : null;
     const row = h('div', { class: 'row' + (item.done ? ' done' : '') }, tick,
-      h('div', { class: 'grow' }, h('div', { class: 'task' }, item.task),
+      h('div', { class: 'grow' }, h('div', { class: 'task' }, item.task, examBtn),
         h('div', { class: 'meta' }, `${item.minutes} min`, homeworkTitle ? ` · ${homeworkTitle}` : '',
           overdue ? ' · ' : '', overdue ? h('span', { class: 'tag late' }, 'ligger efter') : '')));
     tick.addEventListener('click', async () => {
@@ -732,10 +734,11 @@ function quizMaker(list) {
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
   return h('div', { class: 'box quiz-maker' },
     h('div', { class: 'quiz-title' }, 'Gör ett nytt quiz'), sel,
-    h('div', { class: 'quiz-btns three' },
+    h('div', { class: 'quiz-btns four' },
       h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
-      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(Number(sel.value), e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(Number(sel.value), e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startExam(Number(sel.value), e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov'))));
 }
 
 async function makeQuiz(homeworkId, mode, btn) {
@@ -748,6 +751,112 @@ async function makeQuiz(homeworkId, mode, btn) {
   } catch (e) {
     toast(e.message || 'Det gick inte att göra frågor just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}
+
+// ---- Testprov ----
+async function startExam(homeworkId, btn) {
+  btn = btn && btn.closest('button');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis gör provet…</span><small>tar en halv minut</small>'; }
+  let ex;
+  try {
+    ex = await api('/api/exam/start', { method: 'POST', body: { homeworkId, count: 10 } });
+  } catch (e) {
+    toast(e.message || 'Det gick inte just nu', true);
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    return;
+  }
+  if (ex.note) toast(ex.note);
+  const answers = {};
+  let i = -1;
+  const mins = Math.max(5, Math.round(ex.questions.length * 1.2));
+  // Startsida
+  $('#view').replaceChildren(h('div', { class: 'page' },
+    h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Tillbaka'),
+    h('div', { class: 'box exam-intro' },
+      h('div', { class: 'exam-ico' }, '📝'), h('h2', {}, ex.title),
+      h('p', {}, `${ex.questions.length} frågor · ca ${mins} minuter`),
+      h('p', { class: 'meta' }, 'Som ett riktigt prov: svara på allt, sedan lämnar du in och får resultatet. Du kan gå fram och tillbaka. Gissa hellre än att lämna tomt!'),
+      h('button', { class: 'big', onclick: () => go(0) }, 'Starta provet'))));
+
+  function go(n) {
+    i = n;
+    const q = ex.questions[i];
+    const last = i === ex.questions.length - 1;
+    const bar = h('div', { class: 'quiz-progress' }, h('div', { style: `width:${Math.round(100 * i / ex.questions.length)}%` }));
+    const body = h('div', { class: 'fc-card exam-q' });
+    if (q.type === 'cloze') { const [a, b] = q.question.split('___'); body.append(a, h('span', { class: 'cloze-gap' }, answers[q.n] || '\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0'), b || ''); }
+    else body.textContent = q.question;
+    let input;
+    if (q.type === 'open') {
+      input = h('textarea', { rows: 5, class: 'exam-text', placeholder: 'Skriv ditt svar – egna ord, 1–3 meningar (eller tryck på mikrofonen på tangentbordet)' });
+      input.value = answers[q.n] || '';
+      input.addEventListener('input', () => { answers[q.n] = input.value; });
+    } else {
+      const buttons = q.choices.map((c, k) => {
+        const b = h('button', { class: 'choice' + (answers[q.n] === c ? ' picked' : ''), onclick: () => {
+          answers[q.n] = c; buttons.forEach(x => x.classList.remove('picked')); b.classList.add('picked');
+          if (q.type === 'cloze') body.querySelector('.cloze-gap').textContent = c;
+        } }, h('span', { class: 'choice-letter' }, 'ABCD'[k]), h('span', {}, c));
+        return b;
+      });
+      input = h('div', { class: 'choices' }, buttons);
+    }
+    const unanswered = () => ex.questions.filter(x => !(answers[x.n] || '').trim()).length;
+    $('#view').replaceChildren(h('div', { class: 'page' },
+      h('div', { style: 'display:flex;align-items:center;gap:8px' },
+        h('h2', { style: 'margin:0;flex:1' }, `Fråga ${i + 1} av ${ex.questions.length}`),
+        h('span', { class: 'meta' }, q.type === 'open' ? '2 p' : '1 p')),
+      bar, body, h('div', { style: 'margin-top:14px' }, input),
+      h('div', { class: 'exam-nav' },
+        i > 0 ? h('button', { class: 'small-btn', onclick: () => go(i - 1) }, '‹ Förra') : h('span'),
+        last ? h('button', { class: 'big', onclick: () => {
+            const left = unanswered();
+            if (left && !confirm(`${left} ${left === 1 ? 'fråga' : 'frågor'} utan svar. Lämna in ändå?`)) return;
+            submit();
+          } }, 'Lämna in')
+          : h('button', { class: 'big', onclick: () => go(i + 1) }, 'Nästa ›'))));
+    if (q.type === 'open') input.focus();
+  }
+
+  async function submit() {
+    $('#view').replaceChildren(h('div', { class: 'page' }, h('div', { class: 'box exam-intro' },
+      h('div', { class: 'exam-ico' }, '⏳'), h('h2', {}, 'Pluggis rättar…'), h('p', { class: 'meta' }, 'Skrivfrågorna läses igenom – det tar några sekunder.'))));
+    let r;
+    try {
+      r = await api(`/api/exam/${ex.id}/submit?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { answers } });
+    } catch (e) {
+      toast(e.message || 'Det gick inte att lämna in', true);
+      go(ex.questions.length - 1);
+      return;
+    }
+    refreshPoints();
+    result(r);
+  }
+
+  function result(r) {
+    const mood = r.percent >= 80 ? 'Riktigt starkt! 🎉' : r.percent >= 50 ? 'Bra jobbat – du är på god väg 💪' : 'Bra att du gjorde det nu – nu vet du vad du ska kolla 💪';
+    $('#view').replaceChildren(h('div', { class: 'page' },
+      h('div', { class: 'box exam-score' },
+        h('div', { class: 'exam-big' }, `${r.points} / ${r.maxPoints}`),
+        h('div', {}, `${r.percent} % · ${mood}`),
+        S.points !== false ? h('div', { class: 'meta' }, '+10 poäng för att du gjorde provet') : null),
+      r.review.length ? h('div', { class: 'box exam-review' },
+        h('div', { class: 'quiz-title' }, 'Det här ska du kolla igen'),
+        r.review.map(t => h('div', { class: 'ex-point miss' }, '○ ', t)),
+        r.reviewDeckId ? h('button', { class: 'big', style: 'margin-top:10px', onclick: () => practiceDeck({ deck: { id: r.reviewDeckId, name: '🔁 Repetera' }, dueNow: r.review.length }) },
+          '🔁 Öva på det du missade') : null) : null,
+      h('h3', {}, 'Alla frågor'),
+      h('div', { class: 'box' }, r.items.map(it => h('div', { class: 'row exam-item' },
+        h('div', { class: 'exam-mark ' + (it.points === it.max ? 'ok' : it.points ? 'half' : 'miss') }, it.points === it.max ? '✓' : it.points ? '½' : '✗'),
+        h('div', { class: 'grow' },
+          h('div', { class: 'task' }, `${it.n}. ${it.question}`),
+          h('div', { class: 'meta' }, 'Ditt svar: ', (it.yourAnswer || '').trim() || '–'),
+          it.points < it.max ? h('div', { class: 'meta exam-answer' }, (it.type === 'open' ? 'Ett bra svar: ' : 'Rätt svar: ') + it.answer) : null,
+          it.feedback ? h('div', { class: 'meta' }, it.feedback) : null),
+        h('div', { class: 'meta' }, `${it.points}/${it.max}`)))),
+      h('button', { class: 'big', style: 'margin-top:14px', onclick: () => show('kort') }, 'Tillbaka till Öva')));
   }
 }
 
@@ -1031,10 +1140,11 @@ async function homeworkDetail(id) {
   }
   page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
   if (x.kind !== 'OTHER') {
-    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns three' },
+    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns four' },
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'quiz', e.target) }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
-      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(x.id, e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => explainFor(x.id, e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startExam(x.id, e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov'))));
   }
   return page;
 }

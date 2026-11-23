@@ -345,6 +345,11 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
   följdfrågor mot det som saknas, och visar sedan vilka nyckelpunkter som kom med (✓) och vad som kan läggas till (○).
   +5 poäng för att ha förklarat (en gång per begrepp och dag). Finns under **Öva** och på läxans sida.
   Prompten finns i `prompts/explain.md`.
+- **Testprov:** ett övningsprov som liknar det riktiga – cirka 10 frågor över hela det som ingår (flerval, lucktext och
+  2–3 skrivfrågor), en fråga i taget, lämna in och få resultatet. Flerval och lucktext rättas direkt, skrivfrågorna av
+  Claude (0–2 poäng, generöst). Resultatsidan visar poäng, rätt svar och "Det här ska du kolla igen", och de missade
+  frågorna blir en lek "🔁 Repetera: …". +10 poäng för att ha gjort provet. Planen lägger in "Testprov i Pluggis"
+  1–2 dagar före provet, med en 📝 Starta-knapp i chatten. Prompten finns i `prompts/exam.md`.
 
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),
   eller så fotar eleven glosor/anteckningar (långt tryck på röda knappen).

@@ -29,6 +29,8 @@ public final class RewardRules {
     public static final int DAY_COMPLETE = 5;
     /** Förklarat ett begrepp för Pluggis (lär ut) – en ansträngning, oavsett hur bra det blev. */
     public static final int EXPLAINED = 5;
+    /** Gjort ett helt testprov – ansträngningen räknas, inte resultatet. */
+    public static final int MOCK_EXAM = 10;
 
     public static final int STREAK_POINTS_PER_DAY = 3;
     public static final int STREAK_MAX_DAYS_COUNTED = 7;

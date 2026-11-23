@@ -30,6 +30,8 @@ Regler:
   (skriv nyckelord, rita, förhör dig, räkna, förklara högt).
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
   Kombinera läsning med något aktivt: nyckelord, tankekarta, egna frågor, räkna exempel.
+- PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (10–15 min, typ REVIEW) 1–2 dagar före
+  provet, efter att allt material gåtts igenom. Skriv det exakt så – eleven får en knapp för det i appen.
 - PROV: allt nytt material ska vara genomgånget senast 1–2 dagar före provet. De sista dagarna:
   repetition (REVIEW), självförhör, och FLASHCARDS om det finns en kortlek. Repetera tidigare
   avsnitt med några dagars mellanrum, inte bara på slutet.

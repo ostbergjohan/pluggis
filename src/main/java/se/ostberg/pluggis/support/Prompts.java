@@ -19,6 +19,7 @@ public class Prompts {
     private final String material;
     private final String quiz;
     private final String explain;
+    private final String exam;
 
     public Prompts() {
         this.coach = load("prompts/coach-system.md");
@@ -29,6 +30,11 @@ public class Prompts {
         this.material = load("prompts/material.md");
         this.quiz = load("prompts/quiz.md");
         this.explain = load("prompts/explain.md");
+        this.exam = load("prompts/exam.md");
+    }
+
+    public String exam() {
+        return exam;
     }
 
     public String explain() {

@@ -327,6 +327,16 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void studentCanStartAMockExam() throws Exception {
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        mvc.perform(post("/api/exam/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isServiceUnavailable()); // Claude nås inte i testet – men behörigheten släppte igenom
+        mvc.perform(post("/api/exam/00000000-0000-0000-0000-000000000000/submit").header(TOKEN, code)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"answers\":{\"1\":\"x\"}}")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

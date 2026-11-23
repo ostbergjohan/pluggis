@@ -161,6 +161,19 @@ public class RewardsService {
         award(deviceId, PointEvent.Kind.BONUS, RewardRules.EXPLAINED, "Förklarade " + concept + " för Pluggis", ref);
     }
 
+    /** Eleven har lämnat in ett testprov (en gång per läxa/prov och dag). */
+    @Transactional
+    public void onMockExam(String deviceId, Long homeworkId, String title) {
+        if (deviceId == null) {
+            return;
+        }
+        String ref = "exam:" + (homeworkId == null ? title : homeworkId);
+        if (points.countByDeviceIdAndRefKeyAndAwardedOn(deviceId, ref, today()) > 0) {
+            return;
+        }
+        award(deviceId, PointEvent.Kind.BONUS, RewardRules.MOCK_EXAM, "Gjorde ett testprov: " + title, ref);
+    }
+
     /** Föräldern tar bort en enskild poänghändelse (t.ex. felaktig bonus). */
     @Transactional
     public boolean deleteEvent(String deviceId, long eventId) {
