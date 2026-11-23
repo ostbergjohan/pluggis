@@ -39,7 +39,7 @@ button { font: inherit; color: inherit; }
 main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
 
 .tabbar {
-  flex: none; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--panel);
+  flex: none; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--panel);
   border-top: 1px solid var(--line); padding-bottom: var(--safe-b);
 }
 .tabbar button {
@@ -97,7 +97,8 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 /* Plan och läxor */
 .page { padding: 14px 14px 24px; }
 .page h2 { font-size: 20px; margin: 6px 0 10px; }
-.page h3 { font-size: 15px; text-transform: capitalize; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+.page h3 { font-size: 15px; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+.page h3::first-letter { text-transform: uppercase; }
 .box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .row { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .row:last-child { border-bottom: 0; }
@@ -266,3 +267,5 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .ex-point { padding: 4px 0; }
 .ex-point.ok { color: var(--accent); }
 .ex-point.miss { color: var(--muted); }
+
+.tabbar button[hidden] { display: none; }

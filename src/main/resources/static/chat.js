@@ -872,7 +872,7 @@ function practiceDeck(d) {
     const hintBtn = card.hint ? h('button', { class: 'small-btn', onclick: (e) => { hintEl.hidden = false; e.target.remove(); } }, '💡 Ledtråd') : null;
     if (card.kind === 'BASIC' || !(card.wrongOptions || []).length) {
       front.textContent = card.front;
-      controls.replaceChildren(hintBtn, h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar'));
+      controls.replaceChildren(...[hintBtn, h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar')].filter(Boolean));
       return;
     }
     // Flerval och lucktext: alternativen i slumpad ordning
@@ -885,7 +885,7 @@ function practiceDeck(d) {
     }
     const buttons = card.choices.map((c, i) => h('button', { class: 'choice', onclick: () => pick(card, c, buttons) },
       h('span', { class: 'choice-letter' }, 'ABCD'[i]), h('span', {}, c)));
-    controls.replaceChildren(h('div', { class: 'choices' }, buttons), hintBtn);
+    controls.replaceChildren(...[h('div', { class: 'choices' }, buttons), hintBtn].filter(Boolean));
   }
 
   async function pick(card, value, buttons) {
