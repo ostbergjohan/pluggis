@@ -36,6 +36,7 @@ public class ChatAccess {
             Pattern.compile("GET /api/flashcards/decks"),
             Pattern.compile("GET /api/flashcards/decks/\\d+/next"),
             Pattern.compile("POST /api/flashcards/cards/\\d+/grade"),
+            Pattern.compile("POST /api/flashcards/quiz"),
     };
 
     private final SettingsService settings;

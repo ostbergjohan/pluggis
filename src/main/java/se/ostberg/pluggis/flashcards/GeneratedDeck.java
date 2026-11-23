@@ -14,7 +14,10 @@ public record GeneratedDeck(
         String note) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record GeneratedCard(String front, String back, String hint) {
+    public record GeneratedCard(String front, String back, String hint, String type, List<String> options) {
+        public GeneratedCard(String front, String back, String hint) {
+            this(front, back, hint, null, null);
+        }
     }
 
     public List<FlashcardService.NewCard> toNewCards() {

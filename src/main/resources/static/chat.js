@@ -695,91 +695,165 @@ views.laxor = async () => {
   return page;
 };
 
-// ---- Flashkort ----
+// ---- Flashkort, snabbquiz och lucktext ----
 views.kort = async () => {
-  const page = h('div', { class: 'page' }, h('h2', {}, 'Flashkort'));
+  const page = h('div', { class: 'page' }, h('h2', {}, 'Kort och quiz'));
   const [decks, hw] = await Promise.all([api('/api/flashcards/decks'), api('/api/homework?openOnly=false').catch(() => [])]);
+  const hwById = new Map(hw.map(x => [x.id, x]));
+  // Skapa quiz till en kommande läxa/prov
+  const upcoming = hw.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER').sort((a, b) => (a.dueDate || '9').localeCompare(b.dueDate || '9'));
+  if (upcoming.length) page.append(quizMaker(upcoming));
   if (!decks.length) {
     page.append(h('div', { class: 'box' }, h('div', { class: 'empty' },
-      'Inga kortlekar än. Be Pluggis i chatten: "Gör flashkort om …", eller skicka material med 📎 och kryssa i flashkort.')));
+      'Inga kortlekar än. Gör ett snabbquiz ovan, be Pluggis "Gör flashkort om …", eller skicka material med 📎.')));
     return page;
   }
-  const hwById = new Map(hw.map(x => [x.id, x]));
   const due = decks.reduce((n, d) => n + d.dueNow, 0);
-  page.append(h('p', { class: 'meta', style: 'color:var(--muted);margin:0 0 10px' },
-    due ? `${due} kort att repetera nu – bra läge att köra!` : 'Inga kort är dags att repetera just nu. Du kan öva ändå.'));
-  // Lekar med kort att repetera först, sen kopplade till ett kommande prov
+  page.append(h('p', { class: 'meta', style: 'color:var(--muted);margin:14px 0 10px' },
+    due ? `${due} att repetera nu – bra läge att köra!` : 'Inget är dags att repetera just nu. Du kan öva ändå.'));
   const sorted = [...decks].sort((a, b) => (b.dueNow > 0) - (a.dueNow > 0) || b.dueNow - a.dueNow);
   page.append(h('div', { class: 'box' }, sorted.map(d => {
     const x = d.deck.homeworkId ? hwById.get(d.deck.homeworkId) : null;
     const pct = d.cards ? Math.round(100 * d.learned / d.cards) : 0;
-    return h('div', { class: 'row tap', onclick: () => practice(d, x) },
+    return h('div', { class: 'row tap', onclick: () => practiceDeck(d) },
       h('div', { class: 'grow' },
         h('div', {}, d.deck.name, x && x.weight >= 80 ? ' ⭐' : ''),
-        h('div', { class: 'meta' }, [d.deck.subject, `${d.cards} kort`, `${pct} % sitter`, x && x.dueDate ? rel(x.dueDate) : null].filter(Boolean).join(' · ')),
+        h('div', { class: 'meta' }, [d.deck.subject, `${d.cards} ${/Snabbquiz|Lucktext/.test(d.deck.name) ? 'frågor' : 'kort'}`, `${pct} % sitter`, x && x.dueDate ? rel(x.dueDate) : null].filter(Boolean).join(' · ')),
         h('div', { class: 'deck-bar' }, h('div', { style: `width:${pct}%` }))),
       d.dueNow ? h('span', { class: 'tag late' }, `${d.dueNow} nu`) : h('span', { class: 'tag' }, 'öva'));
   })));
   page.append(h('p', { class: 'hint-small' }, 'Tips: tryck 🃏 Förhör mig i chatten så förhör Pluggis dig med rösten i stället.'));
   return page;
-
-  function practice(d, x) {
-    let onlyDue = d.dueNow > 0;
-    const score = { done: 0, right: 0 };
-    const front = h('div', { class: 'fc-front' });
-    const back = h('div', { class: 'fc-back', hidden: true });
-    const hintEl = h('div', { class: 'fc-hint', hidden: true });
-    const controls = h('div', { class: 'fc-controls' });
-    const status = h('div', { class: 'meta fc-status' });
-    const say = h('button', { class: 'small-btn', onclick: () => readAloud(front.textContent, say) }, '🔊 Läs upp');
-    const view = h('div', { class: 'page' },
-      h('div', { style: 'display:flex;align-items:center;gap:8px' },
-        h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Lekar'),
-        h('h2', { style: 'margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, d.deck.name)),
-      h('div', { class: 'fc-card' }, front, hintEl, back), h('div', { style: 'text-align:center;margin-top:8px' }, say),
-      controls, status);
-    $('#view').replaceChildren(view);
-    next();
-
-    async function next() {
-      back.hidden = true; hintEl.hidden = true;
-      let res = await api(`/api/flashcards/decks/${d.deck.id}/next?practiceAnyway=${!onlyDue}`, { raw: true }).catch(() => null);
-      if (res && res.status === 404 && onlyDue) {
-        // Alla som var dags är gjorda
-        front.textContent = score.done ? `Klart! ${score.right} rätt av ${score.done} 🎉` : 'Inget att repetera just nu.';
-        controls.replaceChildren(h('button', { class: 'big', onclick: () => { onlyDue = false; next(); } }, 'Öva lite till ändå'),
-          h('button', { class: 'small-btn', onclick: () => show('kort') }, 'Tillbaka till lekarna'));
-        say.hidden = true;
-        return;
-      }
-      if (!res || !res.ok) { front.textContent = 'Inga kort i leken.'; controls.replaceChildren(); say.hidden = true; return; }
-      const card = await res.json();
-      say.hidden = false;
-      front.textContent = card.front;
-      back.textContent = card.back;
-      hintEl.textContent = card.hint ? `Ledtråd: ${card.hint}` : '';
-      controls.replaceChildren(
-        card.hint ? h('button', { class: 'small-btn', onclick: (e) => { hintEl.hidden = false; e.target.remove(); } }, '💡 Ledtråd') : null,
-        h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar'));
-    }
-    function reveal(card) {
-      if (readingBtn) stopReading();
-      back.hidden = false;
-      controls.replaceChildren(
-        h('button', { class: 'fc-wrong', onclick: () => grade(card, false) }, '✗ Fel'),
-        h('button', { class: 'fc-right', onclick: () => grade(card, true) }, '✓ Rätt'));
-    }
-    async function grade(card, correct) {
-      try {
-        await api(`/api/flashcards/cards/${card.id}/grade?deviceId=${enc(S.deviceId)}&quiet=true`, { method: 'POST', body: { correct } });
-      } catch (e) { toast(e.message, true); return; }
-      score.done++; if (correct) score.right++;
-      status.textContent = `${score.right} rätt av ${score.done}`;
-      refreshPoints();
-      next();
-    }
-  }
 };
+
+/** Välj läxa/prov och sort, så gör Claude frågorna av materialet. */
+function quizMaker(list) {
+  const sel = h('select', { class: 'quiz-sel' }, list.map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ' · ' + rel(x.dueDate) : ''}`)));
+  const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
+  return h('div', { class: 'box quiz-maker' },
+    h('div', { class: 'quiz-title' }, 'Gör ett nytt quiz'), sel,
+    h('div', { class: 'quiz-btns' },
+      h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
+      h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet'))));
+}
+
+async function makeQuiz(homeworkId, mode, btn) {
+  const label = btn ? btn.closest('button').innerHTML : '';
+  if (btn) { btn = btn.closest('button'); btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis gör frågor…</span><small>tar några sekunder</small>'; }
+  try {
+    const r = await api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId, mode, count: 10 } });
+    if (r.note) toast(r.note);
+    practiceDeck({ deck: r.deck, dueNow: r.cardCount });
+  } catch (e) {
+    toast(e.message || 'Det gick inte att göra frågor just nu', true);
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}
+
+const norm = (t) => (t || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/** Öva en lek: vanliga kort (visa svar → rätt/fel) eller flerval/lucktext (tryck på ett alternativ). */
+function practiceDeck(d) {
+  let onlyDue = d.dueNow > 0;
+  const score = { done: 0, right: 0, total: d.dueNow || null };
+  const front = h('div', { class: 'fc-front' });
+  const back = h('div', { class: 'fc-back', hidden: true });
+  const hintEl = h('div', { class: 'fc-hint', hidden: true });
+  const controls = h('div', { class: 'fc-controls' });
+  const status = h('div', { class: 'meta fc-status' });
+  const bar = h('div', { class: 'quiz-progress' }, h('div'));
+  const say = h('button', { class: 'small-btn', onclick: () => readAloud(spoken(), say) }, '🔊 Läs upp');
+  let current = null;
+  const spoken = () => {
+    if (!current) return front.textContent;
+    const q = current.front.replace(/___/g, ' lucka ');
+    if (current.kind === 'BASIC' || !current.choices) return q;
+    return `${q} ${current.choices.map((c, i) => `${'ABCD'[i]}, ${c}`).join('. ')}.`;
+  };
+  $('#view').replaceChildren(h('div', { class: 'page' },
+    h('div', { style: 'display:flex;align-items:center;gap:8px' },
+      h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Lekar'),
+      h('h2', { style: 'margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, d.deck.name)),
+    bar, h('div', { class: 'fc-card' }, front, hintEl, back), h('div', { style: 'text-align:center;margin-top:8px' }, say),
+    controls, status));
+  next();
+
+  function progress() {
+    const n = score.total ? Math.min(100, Math.round(100 * score.done / score.total)) : 0;
+    bar.firstChild.style.width = `${n}%`;
+    bar.hidden = !score.total;
+  }
+
+  async function next() {
+    back.hidden = true; hintEl.hidden = true; progress();
+    const res = await api(`/api/flashcards/decks/${d.deck.id}/next?practiceAnyway=${!onlyDue}`, { raw: true }).catch(() => null);
+    if (res && res.status === 404 && onlyDue) {
+      current = null;
+      front.textContent = !score.done ? 'Inget att repetera just nu.' : score.right * 2 >= score.done
+        ? `Klart! ${score.right} rätt av ${score.done} 🎉` : `Klart! ${score.right} rätt av ${score.done} – bra att du körde. En gång till så sitter det bättre 💪`;
+      controls.replaceChildren(h('button', { class: 'big', onclick: () => { onlyDue = false; score.total = null; next(); } }, 'Öva lite till ändå'),
+        h('button', { class: 'small-btn', onclick: () => show('kort') }, 'Tillbaka till lekarna'));
+      say.hidden = true; bar.hidden = true;
+      return;
+    }
+    if (!res || !res.ok) { current = null; front.textContent = 'Inga kort i leken.'; controls.replaceChildren(); say.hidden = true; return; }
+    const card = await res.json();
+    current = card;
+    say.hidden = false;
+    back.textContent = card.back;
+    hintEl.textContent = card.hint ? `Ledtråd: ${card.hint}` : '';
+    const hintBtn = card.hint ? h('button', { class: 'small-btn', onclick: (e) => { hintEl.hidden = false; e.target.remove(); } }, '💡 Ledtråd') : null;
+    if (card.kind === 'BASIC' || !(card.wrongOptions || []).length) {
+      front.textContent = card.front;
+      controls.replaceChildren(hintBtn, h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar'));
+      return;
+    }
+    // Flerval och lucktext: alternativen i slumpad ordning
+    card.choices = [...card.wrongOptions, card.back].map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    if (card.kind === 'CLOZE') {
+      const [a, b] = card.front.split('___');
+      front.replaceChildren(a, h('span', { class: 'cloze-gap' }, '      '), b || '');
+    } else {
+      front.textContent = card.front;
+    }
+    const buttons = card.choices.map((c, i) => h('button', { class: 'choice', onclick: () => pick(card, c, buttons) },
+      h('span', { class: 'choice-letter' }, 'ABCD'[i]), h('span', {}, c)));
+    controls.replaceChildren(h('div', { class: 'choices' }, buttons), hintBtn);
+  }
+
+  async function pick(card, value, buttons) {
+    if (readingBtn) stopReading();
+    const correct = norm(value) === norm(card.back);
+    buttons.forEach(b => {
+      b.disabled = true;
+      const v = b.lastChild.textContent;
+      if (norm(v) === norm(card.back)) b.classList.add('right');
+      else if (v === value) b.classList.add('wrong');
+    });
+    if (card.kind === 'CLOZE') front.querySelector('.cloze-gap').textContent = card.back;
+    if (!correct && card.kind !== 'CLOZE') back.hidden = false;
+    await send(card, correct);
+    controls.append(h('button', { class: 'big next-btn', onclick: next }, correct ? 'Rätt! Nästa →' : 'Nästa →'));
+  }
+
+  function reveal(card) {
+    if (readingBtn) stopReading();
+    back.hidden = false;
+    controls.replaceChildren(
+      h('button', { class: 'fc-wrong', onclick: async () => { await send(card, false); next(); } }, '✗ Fel'),
+      h('button', { class: 'fc-right', onclick: async () => { await send(card, true); next(); } }, '✓ Rätt'));
+  }
+
+  async function send(card, correct) {
+    try {
+      await api(`/api/flashcards/cards/${card.id}/grade?deviceId=${enc(S.deviceId)}&quiet=true`, { method: 'POST', body: { correct } });
+    } catch (e) { toast(e.message, true); return; }
+    score.done++; if (correct) score.right++;
+    status.textContent = `${score.right} rätt av ${score.done}`;
+    progress();
+    refreshPoints();
+  }
+}
 
 views.poang = async () => {
   const [w, events] = await Promise.all([
@@ -889,6 +963,11 @@ async function homeworkDetail(id) {
     })));
   }
   page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
+  if (x.kind !== 'OTHER') {
+    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns' },
+      h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'quiz', e.target) }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
+      h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet'))));
+  }
   return page;
 }
 

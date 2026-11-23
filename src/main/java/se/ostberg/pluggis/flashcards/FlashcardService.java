@@ -13,7 +13,12 @@ import java.util.Optional;
 @Service
 public class FlashcardService {
 
-    public record NewCard(String front, String back, String hint) {
+    /** {@code kind}: BASIC, CHOICE eller CLOZE; {@code wrong}: felaktiga alternativ. */
+    public record NewCard(String front, String back, String hint, String kind, List<String> wrong) {
+        public NewCard(String front, String back, String hint) {
+            this(front, back, hint, null, null);
+        }
+
     }
 
     public record DeckStats(Deck deck, long cards, long dueNow, long learned) {
@@ -60,7 +65,7 @@ public class FlashcardService {
         Instant now = clock.instant();
         return newCards.stream()
                 .filter(c -> notBlank(c.front()) && notBlank(c.back()))
-                .map(c -> cards.save(new Card(deckId, c.front().trim(), c.back().trim(), c.hint(), now)))
+                .map(c -> cards.save(new Card(deckId, c.front().trim(), c.back().trim(), c.hint(), now, c.kind(), c.wrong())))
                 .toList();
     }
 

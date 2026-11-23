@@ -45,6 +45,10 @@ public class FlashcardController {
     public record GenerateRequest(String topic, String sourceText, String subject, Integer count, Long homeworkId) {
     }
 
+    /** {@code mode}: quiz (flerval), cloze (lucktext) eller mix. */
+    public record QuizRequest(Long homeworkId, String mode, Integer count, String topic, String sourceText, String subject) {
+    }
+
     public record GradeRequest(boolean correct) {
     }
 
@@ -61,6 +65,48 @@ public class FlashcardController {
         this.events = events;
         this.homework = homework;
         this.planning = planning;
+    }
+
+    private se.ostberg.pluggis.homework.MaterialService materials;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setMaterials(se.ostberg.pluggis.homework.MaterialService materials) {
+        this.materials = materials;
+    }
+
+    /**
+     * Snabbquiz eller lucktext från en läxas innehåll och material (eller fritt ämne/text).
+     * Eleven får också göra det från chatten (bara för sina egna läxor).
+     */
+    @PostMapping("/quiz")
+    public ResponseEntity<?> quiz(@RequestBody QuizRequest body) {
+        String topic = body.topic();
+        String subject = body.subject();
+        StringBuilder source = new StringBuilder(body.sourceText() == null ? "" : body.sourceText());
+        if (body.homeworkId() != null) {
+            var h = homework.get(body.homeworkId()).orElse(null);
+            if (h == null) {
+                return ResponseEntity.notFound().build();
+            }
+            topic = topic == null ? h.getTitle() : topic;
+            subject = subject == null ? h.getSubject() : subject;
+            if (h.getDescription() != null && !h.getDescription().isBlank()) {
+                source.append(source.isEmpty() ? "" : "\n\n").append("Det här ingår: ").append(h.getDescription());
+            }
+            if (h.getSteps() != null && !h.getSteps().isEmpty()) {
+                source.append("\n").append(String.join("\n", h.getSteps()));
+            }
+            String mat = materials == null ? "" : materials.allText(body.homeworkId());
+            if (!mat.isBlank()) {
+                source.append("\n\nMaterial:\n").append(mat.length() > 20000 ? mat.substring(0, 20000) : mat);
+            }
+        }
+        try {
+            return ResponseEntity.ok(generator.quiz(body.mode(), topic, source.toString(), subject,
+                    body.count() == null ? 10 : body.count(), body.homeworkId()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.unprocessableEntity().body(java.util.Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/decks")

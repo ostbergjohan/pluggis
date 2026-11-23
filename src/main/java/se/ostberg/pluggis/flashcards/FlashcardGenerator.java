@@ -124,6 +124,80 @@ public class FlashcardGenerator {
         return new Result(deck, flashcards.cards(deck.getId()).size(), generated.note());
     }
 
+    /** "quiz" = flerval, "cloze" = lucktext, "mix" = blandat. */
+    public Result quiz(String mode, String topic, String sourceText, String subject, int count, Long homeworkId) {
+        String m = mode == null ? "mix" : mode.trim().toLowerCase(java.util.Locale.ROOT);
+        String kinds = switch (m) {
+            case "cloze" -> "Bara lucktext (\"cloze\").";
+            case "quiz", "choice" -> "Bara flerval (\"choice\").";
+            default -> "Blanda flerval (\"choice\") och lucktext (\"cloze\"), ungefär hälften av varje.";
+        };
+        StringBuilder ask = new StringBuilder("Gör ").append(clamp(count)).append(" frågor. ").append(kinds);
+        if (subject != null && !subject.isBlank()) {
+            ask.append(" Ämne: ").append(subject).append('.');
+        }
+        if (topic != null && !topic.isBlank()) {
+            ask.append(" Område: ").append(topic).append('.');
+        }
+        if (sourceText != null && !sourceText.isBlank()) {
+            ask.append("\n\nUtgå ENDAST från detta material:\n").append(sourceText);
+        } else {
+            ask.append("\n\nInget material finns – håll dig till grunderna i området på årskurs 8-nivå "
+                    + "och skriv det i note.");
+        }
+        ObjectNode req = claude.newRequest(props.anthropic().flashcards(), prompts.quiz());
+        ObjectNode msg = req.putArray("messages").addObject();
+        msg.put("role", "user");
+        msg.put("content", ask.toString());
+        GeneratedDeck generated = JsonExtract.parse(claude.create(req, "quiz").text(), mapper, GeneratedDeck.class);
+        java.util.List<FlashcardService.NewCard> cards = quizCards(generated);
+        if (cards.isEmpty()) {
+            throw new IllegalArgumentException(generated.note() == null ? "Inga frågor kunde skapas" : generated.note());
+        }
+        String base = generated.deckName() == null || generated.deckName().isBlank()
+                ? (topic == null || topic.isBlank() ? "Quiz" : topic) : generated.deckName();
+        String name = ("cloze".equals(m) ? "✏️ Lucktext: " : "⚡ Snabbquiz: ") + base;
+        String subj = generated.subject() == null ? subject : generated.subject();
+        Deck deck = flashcards.createDeck(name, subj, homeworkId, Deck.Source.GENERATED, cards);
+        return new Result(deck, flashcards.cards(deck.getId()).size(), generated.note());
+    }
+
+    /** Släpp bara igenom frågor som går att spela: minst två felaktiga alternativ, inget avslöjat svar, lucka i lucktext. */
+    static java.util.List<FlashcardService.NewCard> quizCards(GeneratedDeck g) {
+        java.util.List<FlashcardService.NewCard> out = new java.util.ArrayList<>();
+        if (g == null || g.cards() == null) {
+            return out;
+        }
+        for (GeneratedDeck.GeneratedCard c : g.cards()) {
+            if (c == null || c.front() == null || c.back() == null || c.front().isBlank() || c.back().isBlank()) {
+                continue;
+            }
+            String type = "cloze".equalsIgnoreCase(c.type()) ? "CLOZE" : "CHOICE";
+            String front = c.front().trim().replaceAll("_{2,}|\\[\\s*\\.{3}\\s*\\]|…{1,}", "___");
+            String back = c.back().trim();
+            if (type.equals("CLOZE") && (!front.contains("___") || front.indexOf("___") != front.lastIndexOf("___"))) {
+                continue;
+            }
+            if (CardCheck.leaks(front.replace("___", " "), back)) {
+                continue;
+            }
+            java.util.LinkedHashSet<String> wrong = new java.util.LinkedHashSet<>();
+            if (c.options() != null) {
+                for (String o : c.options()) {
+                    if (o != null && !o.isBlank() && !o.trim().equalsIgnoreCase(back)) {
+                        wrong.add(o.trim());
+                    }
+                }
+            }
+            if (wrong.size() < 2) {
+                continue;
+            }
+            String hint = c.hint() == null || c.hint().isBlank() || CardCheck.leaks(c.hint(), back) ? null : c.hint().trim();
+            out.add(new FlashcardService.NewCard(front, back, hint, type, new java.util.ArrayList<>(wrong).subList(0, Math.min(3, wrong.size()))));
+        }
+        return out;
+    }
+
     /** Svar till omskrivningen: samma ordning som korten vi skickade. */
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
     record Rewritten(java.util.List<GeneratedDeck.GeneratedCard> cards) {

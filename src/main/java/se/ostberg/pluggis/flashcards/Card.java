@@ -60,7 +60,45 @@ public class Card {
 
     private Instant lastReviewedAt;
 
+    /** BASIC (vanligt kort), CHOICE (flerval) eller CLOZE (lucktext med "___" i framsidan). null = BASIC. */
+    @Column(name = "card_kind", length = 10)
+    private String kind;
+
+    /** Felaktiga alternativ (JSON-lista) för CHOICE och CLOZE. Rätt svar är {@code back}. */
+    @Column(name = "card_options", length = 1500)
+    private String options;
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper JSON = new com.fasterxml.jackson.databind.ObjectMapper();
+
     protected Card() {
+    }
+
+    public Card(Long deckId, String front, String back, String hint, Instant now, String kind, java.util.List<String> wrong) {
+        this(deckId, front, back, hint, now);
+        this.kind = kind == null || kind.equals("BASIC") ? null : kind;
+        if (wrong != null && !wrong.isEmpty()) {
+            try {
+                this.options = JSON.writeValueAsString(wrong);
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                this.options = null;
+            }
+        }
+    }
+
+    public String getKind() {
+        return kind == null ? "BASIC" : kind;
+    }
+
+    /** De felaktiga alternativen (tom lista för vanliga kort). */
+    public java.util.List<String> getWrongOptions() {
+        if (options == null || options.isBlank()) {
+            return java.util.List.of();
+        }
+        try {
+            return JSON.readValue(options, JSON.getTypeFactory().constructCollectionType(java.util.List.class, String.class));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            return java.util.List.of();
+        }
     }
 
     public Card(Long deckId, String front, String back, String hint, Instant now) {

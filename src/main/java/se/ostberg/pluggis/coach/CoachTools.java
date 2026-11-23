@@ -112,6 +112,12 @@ public class CoachTools {
                         .<Object>map(i -> Map.of("ok", true, "id", i.getId(),
                                 "points", rewards.summaryForPrompt(deviceId)))
                         .orElse(Map.of("ok", false, "error", "Hittade inget moment med det id:t"));
+                case "create_quiz" -> {
+                    FlashcardGenerator.Result r = generator.quiz(text(input, "mode", "mix"), text(input, "topic", null),
+                            text(input, "source_text", null), text(input, "subject", null),
+                            input.path("count").asInt(8), input.hasNonNull("homework_id") ? input.path("homework_id").asLong() : null);
+                    yield Map.of("ok", true, "deck_id", r.deck().getId(), "name", r.deck().getName(), "cards", r.cardCount());
+                }
                 case "next_card" -> flashcards.next(input.path("deck_id").asLong(),
                                 input.path("practice_anyway").asBoolean(false), deviceId)
                         .<Object>map(CoachTools::cardForModel)
@@ -152,6 +158,13 @@ public class CoachTools {
         m.put("hint", c.getHint());
         m.put("answer_secret", c.getBack());
         m.put("box", c.getBox());
+        if (!"BASIC".equals(c.getKind())) {
+            java.util.List<String> alts = new java.util.ArrayList<>(c.getWrongOptions());
+            alts.add(c.getBack());
+            java.util.Collections.shuffle(alts);
+            m.put("type", c.getKind().equals("CLOZE") ? "lucktext" : "flerval");
+            m.put("alternatives", alts);
+        }
         return m;
     }
 
@@ -195,9 +208,19 @@ public class CoachTools {
         prop(create, "homework_id", "integer", "Läxa/prov som leken hör till, om någon");
         required(create, "topic");
 
+        ObjectNode quiz = tool(tools, "create_quiz",
+                "Gör ett snabbquiz (flerval) eller lucktext till en läxa/ett prov, som en kortlek. "
+                        + "Förhör sedan med next_card som vanligt.");
+        prop(quiz, "homework_id", "integer", "Läxans/provets id, om det gäller en");
+        prop(quiz, "mode", "string", "quiz (flerval), cloze (lucktext) eller mix");
+        prop(quiz, "topic", "string", "Område, t.ex. 'Fotosyntesen'");
+        prop(quiz, "source_text", "string", "Elevens eget material, om du har det");
+        prop(quiz, "count", "integer", "Antal frågor, 5–15");
+
         ObjectNode next = tool(tools, "next_card",
                 "Hämtar nästa kort att förhöra och visar framsidan på skärmen. "
-                        + "Läs upp framsidan. Säg ALDRIG answer_secret innan eleven svarat.");
+                        + "Läs upp framsidan. Säg ALDRIG answer_secret innan eleven svarat. "
+                        + "Har kortet alternatives (flerval/lucktext): läs frågan och alternativen med bokstäver A–D.");
         prop(next, "deck_id", "integer", "Kortlekens id");
         prop(next, "practice_anyway", "boolean", "true = öva även om inga kort är förfallna");
         required(next, "deck_id");

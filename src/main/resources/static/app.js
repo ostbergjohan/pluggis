@@ -664,6 +664,10 @@ function homeworkItem(x, rerender) {
               count: 15, homeworkId: x.id } }), e.target);
           if (r) toast(`Kortlek "${r.deck.name}" med ${r.cardCount} kort skapad`);
         } }, '🃏 Gör flashkort'),
+        x.kind !== 'OTHER' ? h('button', { onclick: async (e) => {
+          const r = await run(() => api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId: x.id, mode: 'mix', count: 10 } }), e.target);
+          if (r) toast(`"${r.deck.name}" med ${r.cardCount} frågor skapad – finns under Kort i elevchatten`);
+        } }, '⚡ Gör quiz') : null,
         h('span', { class: 'spacer' }),
         x.status === 'OPEN'
           ? h('button', { onclick: async () => { await run(() => api(`/api/homework/${x.id}/done`, { method: 'POST' }), null, 'Markerad som klar'); rerender(); } }, '✓ Klar')
@@ -1038,7 +1042,9 @@ views.kort = async (main) => {
     const tbody = h('tbody');
     const row = (c) => {
       const front = h('input', { value: c.front }), back = h('input', { value: c.back }), hint = h('input', { value: c.hint || '' });
-      return h('tr', {}, h('td', {}, front), h('td', {}, back), h('td', {}, hint), h('td', {}, `fack ${c.box}`),
+      const kind = c.kind === 'CHOICE' ? 'flerval' : c.kind === 'CLOZE' ? 'lucktext' : null;
+      return h('tr', {}, h('td', {}, front, kind ? h('div', { class: 'item-meta' }, `${kind} · fel alternativ: ${(c.wrongOptions || []).join(', ')}`) : null),
+        h('td', {}, back), h('td', {}, hint), h('td', {}, `fack ${c.box}`),
         h('td', { style: 'white-space:nowrap' },
           h('button', { class: 'small', onclick: (e) => run(() => api(`/api/flashcards/cards/${c.id}`, { method: 'PUT',
             body: { front: front.value, back: back.value, hint: hint.value } }), e.target, 'Sparat') }, 'Spara'), ' ',

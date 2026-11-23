@@ -294,6 +294,27 @@ class ApplicationSmokeTest {
         assertThat(switches).isLessThanOrEqualTo(1);
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    se.ostberg.pluggis.flashcards.FlashcardService flashcardService;
+
+    @Test
+    void quizCardsCarryTheirAlternativesAndStudentsMayAskForAQuiz() throws Exception {
+        var deck = flashcardService.createDeck("⚡ Snabbquiz: test", "NO", null, se.ostberg.pluggis.flashcards.Deck.Source.GENERATED,
+                java.util.List.of(new se.ostberg.pluggis.flashcards.FlashcardService.NewCard(
+                        "Det gröna färgämnet ___ fångar ljus.", "klorofyll", null, "CLOZE", java.util.List.of("glukos", "stärkelse", "cellulosa"))));
+        JsonNode card = json(mvc.perform(get("/api/flashcards/decks/" + deck.getId() + "/next?practiceAnyway=true").header(TOKEN, "test-token"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(card.path("kind").asText()).isEqualTo("CLOZE");
+        assertThat(card.path("wrongOptions")).hasSize(3);
+
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        // Claude nås inte i testet – men eleven ska inte stoppas av behörigheten
+        int st = mvc.perform(post("/api/flashcards/quiz").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"topic\":\"Fotosyntes\",\"mode\":\"cloze\"}")).andReturn().getResponse().getStatus();
+        assertThat(st).isNotIn(401, 403);
+    }
+
     @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());

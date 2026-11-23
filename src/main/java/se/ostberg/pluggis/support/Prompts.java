@@ -17,6 +17,7 @@ public class Prompts {
     private final String flashcards;
     private final String studyPlan;
     private final String material;
+    private final String quiz;
 
     public Prompts() {
         this.coach = load("prompts/coach-system.md");
@@ -25,6 +26,11 @@ public class Prompts {
         this.flashcards = load("prompts/flashcards.md");
         this.studyPlan = load("prompts/study-plan.md");
         this.material = load("prompts/material.md");
+        this.quiz = load("prompts/quiz.md");
+    }
+
+    public String quiz() {
+        return quiz;
     }
 
     public String material() {
