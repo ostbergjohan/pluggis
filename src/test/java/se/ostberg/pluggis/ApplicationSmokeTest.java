@@ -312,7 +312,7 @@ class ApplicationSmokeTest {
         // Claude nås inte i testet – men eleven ska inte stoppas av behörigheten
         int st = mvc.perform(post("/api/flashcards/quiz").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"topic\":\"Fotosyntes\",\"mode\":\"cloze\"}")).andReturn().getResponse().getStatus();
-        assertThat(st).isNotIn(401, 403);
+        assertThat(st).isEqualTo(503); // nådde Claude-steget (inte stoppad av behörigheten), vänligt fel
     }
 
     @Test

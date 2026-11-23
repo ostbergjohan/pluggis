@@ -106,6 +106,9 @@ public class FlashcardController {
                     body.count() == null ? 10 : body.count(), body.homeworkId()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.unprocessableEntity().body(java.util.Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            org.slf4j.LoggerFactory.getLogger(FlashcardController.class).warn("Quiz kunde inte skapas: {}", e.toString());
+            return ResponseEntity.status(503).body(java.util.Map.of("error", "Pluggis kunde inte göra frågor just nu – prova igen om en stund"));
         }
     }
 
