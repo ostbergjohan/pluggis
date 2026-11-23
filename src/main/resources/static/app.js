@@ -16,6 +16,8 @@ const store = {
 const state = {
   token: store.get('lc.token', ''),
   deviceId: store.get('lc.device', 'tab5-1'),
+  // Tab5-hårdvaran är dold tills den används på riktigt (Inställningar → Tab5)
+  showTab5: store.get('lc.showTab5', '') === '1',
   studentId: store.get('lc.student', ''),
   students: [],
   homework: [],
@@ -950,7 +952,7 @@ function claudeBackendPanel(st) {
 
 views.kort = async (main) => {
   main.append(h('h1', {}, 'Flashkort'),
-    h('p', { class: 'sub' }, 'Skapa kortlekar för hand, låt Claude göra dem från ett ämne eller ett foto, och öva här eller på Tab5.'));
+    h('p', { class: 'sub' }, `Skapa kortlekar för hand, låt Claude göra dem från ett ämne eller ett foto, och öva här, i elevchatten${T5(' eller på Tab5')}.`));
   const forms = h('div');
   const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none', onchange: async () => {
     const file = photoInput.files[0];
@@ -1110,7 +1112,7 @@ views.poang = async (main) => {
   try {
     const st = await api('/api/student');
     if (st.pointsEnabled === false) main.append(h('p', { class: 'item-meta', style: 'color:var(--gold)' },
-      '⏸ Poäng är avstängt för den här eleven – visas inte i chatten eller på Tab5. Slå på under Inställningar → Eleven och coachen.'));
+      `⏸ Poäng är avstängt för den här eleven – visas inte i chatten${T5(' eller på Tab5')}. Slå på under Inställningar → Eleven och coachen.`));
   } catch { /* visa ändå */ }
   const base = `/api/devices/${enc(state.deviceId)}/rewards`;
   const [week, events, payouts] = await Promise.all([api(base), api(`${base}/events`), api(`${base}/payouts`)]);
@@ -1487,6 +1489,7 @@ views.installningar = async (main) => {
     planningPanel(),
     googlePanel(),
     voicePanel(),
+    tab5Panel(),
     h('section', { class: 'panel', style: 'margin-top:16px' },
       h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
       h('ol', {},
@@ -1495,6 +1498,18 @@ views.installningar = async (main) => {
         h('li', {}, 'Metod POST, Rubriker: X-Pluggis-Token = din token, Begärans brödtext: Formulär, fält "image" = Genvägsindata.'),
         h('li', {}, 'Lägg till "Visa resultat". Dela sedan skärmdumpen av veckoplanen till genvägen.'))));
 };
+
+function tab5Panel() {
+  const on = h('input', { type: 'checkbox', checked: state.showTab5 });
+  on.addEventListener('change', () => {
+    state.showTab5 = on.checked;
+    store.set('lc.showTab5', on.checked ? '1' : '');
+    applyTab5(); pollDevice(); route();
+  });
+  return h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Tab5 (hårdvara)'),
+    h('label', { style: 'display:flex;gap:8px;align-items:center' }, on, 'Visa Tab5: simulatorn, anslutningsstatus och enhets-id'),
+    h('p', { class: 'item-meta' }, 'Dolt så länge ni bara använder elevchatten i mobilen. Inget slutar fungera – det syns bara inte. Gäller den här webbläsaren.'));
+}
 
 function studentsPanel() {
   const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Elever'),
@@ -1511,7 +1526,7 @@ function studentsPanel() {
       return h('div', { class: 'student-row' },
         h('div', { class: 'row' },
           h('div', {}, h('label', {}, 'Namn'), name),
-          h('div', {}, h('label', {}, 'Enhets-id (Tab5)'), device),
+          state.showTab5 ? h('div', {}, h('label', {}, 'Enhets-id (Tab5)'), device) : null,
           h('div', {}, h('label', {}, 'Kod till mobilchatten'), h('div', { class: 'code' }, s.code))),
         h('div', { class: 'toolbar', style: 'margin-top:8px' },
           h('button', { class: 'small primary', onclick: async (e) => {
@@ -1540,7 +1555,7 @@ function studentsPanel() {
       ...rows,
       h('h3', { style: 'margin-top:16px' }, 'Lägg till elev'),
       h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Namn'), newName), h('div', {}, h('label', {}, 'Enhets-id (valfritt)'), newDevice)),
-      h('p', { class: 'item-meta' }, 'Enhets-id är det id elevens Tab5 ansluter med. Har eleven ingen Tab5 kan du lämna det tomt.'),
+      state.showTab5 ? h('p', { class: 'item-meta' }, 'Enhets-id är det id elevens Tab5 ansluter med. Har eleven ingen Tab5 kan du lämna det tomt.') : null,
       h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: async (e) => {
         if (!newName.value.trim()) return toast('Ange ett namn', true);
         const r = await run(() => api('/api/students', { method: 'POST', body: { name: newName.value, deviceId: newDevice.value } }), e.target, 'Elev tillagd');
@@ -1669,7 +1684,7 @@ function studentPanel() {
       h('label', {}, 'Egna önskemål till coachen'), extra,
       h('p', { class: 'item-meta' }, 'Läggs till efter coachens fasta regler. Coachen ger fortfarande inga färdiga svar, oavsett vad som står här.'),
       h('label', { style: 'display:flex;gap:8px;align-items:center;margin-top:12px' }, usePoints, 'Använd poäng'),
-      h('p', { class: 'item-meta' }, 'Av: poängen syns inte i elevchatten eller på Tab5, och coachen pratar inte om poäng eller veckopeng. De räknas ändå i bakgrunden, så inget försvinner om du slår på igen.'),
+      h('p', { class: 'item-meta' }, `Av: poängen syns inte i elevchatten${T5(' eller på Tab5')}, och coachen pratar inte om poäng eller veckopeng. De räknas ändå i bakgrunden, så inget försvinner om du slår på igen.`),
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
           const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value, pointsEnabled: usePoints.checked } }), e.target, 'Sparat – gäller från nästa svar');
@@ -1720,7 +1735,7 @@ function voicePanel() {
         h('button', { onclick: listen }, '▶ Lyssna'),
         h('button', { class: 'primary', onclick: (e) => run(() => api('/api/speech', { method: 'PUT',
           body: { voice: select.value, speed: Number(speed.value) } }), e.target, 'Rösten sparad') }, 'Spara')),
-      h('p', { class: 'item-meta' }, 'Gäller Tab5 och simulatorn med "Serverns röst". Röster: Piper (svenska).'));
+      h('p', { class: 'item-meta' }, `Gäller elevchatten med rösten "Pluggis"${T5(', Tab5 och simulatorn')}.`));
   })();
   return panel;
 }
@@ -1756,6 +1771,7 @@ async function route() {
 
 async function pollDevice() {
   const el = $('#deviceStatus');
+  if (!state.showTab5) return;
   try {
     const r = await fetch('/api/devices', { headers: state.token ? { 'X-Pluggis-Token': state.token } : {} });
     if (!r.ok) throw new Error();
@@ -1770,6 +1786,13 @@ async function pollDevice() {
 }
 
 // ---------- Elever ----------
+
+/** Visa eller dölj allt som bara gäller Tab5-hårdvaran. */
+function applyTab5() {
+  document.querySelectorAll('[data-tab5]').forEach(el => { el.hidden = !state.showTab5; });
+  if (!state.showTab5 && location.hash === '#simulator') location.hash = '#oversikt';
+}
+const T5 = (withTab5, without = '') => state.showTab5 ? withTab5 : without;
 
 /** Hämtar elever och fyller elevväljaren. Vald elev styr läxor, plan, kort, poäng och Tab5-id. */
 async function loadStudents() {
@@ -1802,5 +1825,6 @@ $('#studentSel').addEventListener('change', (e) => {
 });
 
 window.addEventListener('hashchange', route);
+applyTab5();
 loadStudents().then(() => { route(); pollDevice(); });
 setInterval(pollDevice, 30000);
