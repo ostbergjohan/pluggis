@@ -314,6 +314,11 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 
 ## Flashkort
 
+- **Snabbquiz och lucktext:** Claude gör frågor av läxans innehåll och material – flerval med fyra alternativ
+  eller en mening med en lucka (`___`) att fylla i. Eleven gör dem från fliken **Kort och quiz** eller läxans sida i
+  chatten, föräldern med *⚡ Gör quiz* i admin, och coachen med `create_quiz`. De är kortlekar som alla andra
+  (samma repetition och poäng); i röstförhöret läser coachen upp alternativen A–D. Prompten finns i `prompts/quiz.md`.
+
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),
   eller så fotar eleven glosor/anteckningar (långt tryck på röda knappen).
 - Förhör sker med rösten: coachen läser framsidan (som också visas på skärmen), eleven svarar,
