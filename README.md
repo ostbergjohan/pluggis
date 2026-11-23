@@ -219,7 +219,7 @@ Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och p
 
 `/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
 🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
-material (foto, skärmdump, Word, PDF), öva flashkort själv (fliken **Kort**: visa svar, rätt/fel, uppläsning – ger poäng), och se poängen.
+material (foto, skärmdump, Word, PDF), öva själv (fliken **Öva**: flashkort, snabbquiz, lucktext och Förklara för Pluggis – ger poäng), och se poängen.
 
 - Eleven öppnar `/chat.html` och skriver in sin kod – eller får länken med koden (`/chat.html#k=KOD`) via
   *Kopiera länk* / *Dela* under Inställningar → Elever. Öppna i Safari → Dela → *Lägg till på hemskärmen*.
@@ -315,13 +315,13 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 ## Flashkort
 
 - **Snabbquiz och lucktext:** Claude gör frågor av läxans innehåll och material – flerval med fyra alternativ
-  eller en mening med en lucka (`___`) att fylla i. Eleven gör dem från fliken **Kort och quiz** eller läxans sida i
+  eller en mening med en lucka (`___`) att fylla i. Eleven gör dem från fliken **Öva** eller läxans sida i
   chatten, föräldern med *⚡ Gör quiz* i admin, och coachen med `create_quiz`. De är kortlekar som alla andra
   (samma repetition och poäng); i röstförhöret läser coachen upp alternativen A–D. Prompten finns i `prompts/quiz.md`.
 - **Förklara för Pluggis:** eleven får ett begrepp ur sitt material ("Hur kan växter äta ljus?") och förklarar med egna
   ord – skrivet eller med tangentbordets mikrofon. Pluggis spelar en nyfiken yngre kompis och ställer högst två
   följdfrågor mot det som saknas, och visar sedan vilka nyckelpunkter som kom med (✓) och vad som kan läggas till (○).
-  +5 poäng för att ha förklarat (en gång per begrepp och dag). Finns under **Kort och quiz** och på läxans sida.
+  +5 poäng för att ha förklarat (en gång per begrepp och dag). Finns under **Öva** och på läxans sida.
   Prompten finns i `prompts/explain.md`.
 
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),

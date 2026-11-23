@@ -697,7 +697,7 @@ views.laxor = async () => {
 
 // ---- Flashkort, snabbquiz och lucktext ----
 views.kort = async () => {
-  const page = h('div', { class: 'page' }, h('h2', {}, 'Kort och quiz'));
+  const page = h('div', { class: 'page' }, h('h2', {}, 'Öva'));
   const [decks, hw] = await Promise.all([api('/api/flashcards/decks'), api('/api/homework?openOnly=false').catch(() => [])]);
   const hwById = new Map(hw.map(x => [x.id, x]));
   // Skapa quiz till en kommande läxa/prov
@@ -814,7 +814,7 @@ function explainSummary(t, homeworkId) {
     t.missing.map(p => h('div', { class: 'ex-point miss' }, '○ ', p)),
     h('div', { class: 'quiz-btns', style: 'margin-top:12px' },
       h('button', { class: 'quiz-btn', onclick: (e) => explainFor(homeworkId, e.target) }, '🧠', h('span', {}, 'En till')),
-      h('button', { class: 'quiz-btn', onclick: () => show('kort') }, '🃏', h('span', {}, 'Till quiz och kort'))));
+      h('button', { class: 'quiz-btn', onclick: () => show('kort') }, '🎯', h('span', {}, 'Till Öva'))));
 }
 
 const norm = (t) => (t || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
