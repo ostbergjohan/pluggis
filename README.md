@@ -40,13 +40,18 @@ Elevchatten i en iPhone (testdata).
   </tr>
   <tr>
     <td align="center"><img src="docs/screenshots/prov.png" width="220" alt="Provets sida med material"><br><sub>Provets sida med material</sub></td>
-    <td align="center"><img src="docs/screenshots/ova.png" width="220" alt="Öva – kort, quiz och Förklara"><br><sub>Öva – kort, quiz och Förklara</sub></td>
+    <td align="center"><img src="docs/screenshots/ova.png" width="220" alt="Öva – kort, quiz, Förklara och testprov"><br><sub>Öva – kort, quiz, Förklara och testprov</sub></td>
     <td align="center"><img src="docs/screenshots/snabbquiz-ratt.png" width="220" alt="Snabbquiz"><br><sub>Snabbquiz</sub></td>
   </tr>
   <tr>
     <td align="center"><img src="docs/screenshots/lucktext.png" width="220" alt="Lucktext"><br><sub>Lucktext</sub></td>
     <td align="center"><img src="docs/screenshots/forklara-klart.png" width="220" alt="Förklara för Pluggis"><br><sub>Förklara för Pluggis</sub></td>
     <td align="center"><img src="docs/screenshots/poang.png" width="220" alt="Poäng och veckopeng"><br><sub>Poäng och veckopeng</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/testprov-start.png" width="220" alt="Testprov"><br><sub>Testprov</sub></td>
+    <td align="center"><img src="docs/screenshots/testprov-fraga.png" width="220" alt="En fråga i testprovet"><br><sub>En fråga i taget</sub></td>
+    <td align="center"><img src="docs/screenshots/testprov-resultat.png" width="220" alt="Resultat av testprovet"><br><sub>Resultat och vad som ska kollas igen</sub></td>
   </tr>
 </table>
 

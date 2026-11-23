@@ -64,6 +64,16 @@ async function api(route) {
   if (url.pathname.match(/\/api\/flashcards\/decks\/6\/next/)) return json(route, clozeCard);
   if (url.pathname.match(/\/api\/flashcards\/decks\/\d+\/next/)) return json(route, nextCard);
   if (url.pathname.match(/\/grade$/)) return json(route, { id: 1 });
+  if (url.pathname === '/api/exam/start') return json(route, { id: '99999999-2222-3333-4444-555555555555', title: 'Testprov: Fotosyntes och cellandning', maxPoints: 13, note: null,
+    questions: [{ n: 1, type: 'choice', question: 'Vad behöver växter för att göra socker?', choices: ['Jord, salt och syre', 'Ljus, vatten och koldioxid', 'Mörker och kväve', 'Socker och vatten'] },
+      ...Array.from({ length: 9 }, (_, k) => ({ n: k + 2, type: k === 2 ? 'open' : 'choice', question: 'Fråga ' + (k + 2), choices: k === 2 ? null : ['a', 'b', 'c', 'd'] })),
+      { n: 11, type: 'open', question: 'Varför behöver vi växter för att kunna andas?', choices: null }] });
+  if (url.pathname.includes('/api/exam/')) return json(route, { id: 'x', title: 'Testprov: Fotosyntes och cellandning', points: 10, maxPoints: 13, percent: 77,
+    review: ['Klorofyll', 'Cellandning'], reviewDeckId: 77, items: [
+      { n: 1, type: 'choice', question: 'Vad behöver växter för att göra socker?', yourAnswer: 'Ljus, vatten och koldioxid', answer: 'Ljus, vatten och koldioxid', points: 1, max: 1 },
+      { n: 2, type: 'cloze', question: 'Det gröna färgämnet ___ fångar solljuset.', yourAnswer: 'glukos', answer: 'klorofyll', points: 0, max: 1, topic: 'Klorofyll' },
+      { n: 3, type: 'open', question: 'Varför behöver vi växter för att kunna andas?', yourAnswer: 'för att de gör syre', answer: 'Vid fotosyntesen bildas syre som vi andas in', points: 2, max: 2, feedback: 'Precis – växterna bildar syre vid fotosyntesen.' },
+      { n: 4, type: 'open', question: 'Vad händer vid cellandningen?', yourAnswer: 'cellerna andas', answer: 'Socker och syre blir energi, koldioxid och vatten', points: 1, max: 2, feedback: 'Bra början! Det som saknas är att socker och syre ger energi.', topic: 'Cellandning' }] });
   if (url.pathname === '/api/explain/start') return json(route, { id: '11111111-2222-3333-4444-555555555555', concept: 'Fotosyntesen',
     reply: 'Jag fattar inte hur växter kan äta ljus. Kan du förklara fotosyntesen för mig?', done: false, covered: [], missing: [] });
   if (url.pathname.includes('/api/explain/')) {
@@ -136,6 +146,16 @@ async function api(route) {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await shot('10-forklara-klart.png');
   await tab('poang'); await shot('11-poang.png');
+  await tab('kort');
+  await page.click('.quiz-btn:has-text("Testprov")'); await page.waitForTimeout(400);
+  await shot('12-testprov-start.png');
+  await page.click('text=Starta provet'); await page.waitForTimeout(200);
+  await page.click('.choice:has-text("Ljus, vatten och koldioxid")'); await page.waitForTimeout(200);
+  await shot('13-testprov-fraga.png');
+  for (let k = 0; k < 10; k++) { await page.click('button:has-text("Nästa")'); await page.waitForTimeout(80); }
+  page.on('dialog', d => d.accept());
+  await page.click('text=Lämna in'); await page.waitForTimeout(700);
+  await shot('14-testprov-resultat.png');
   console.log(errs.length ? 'ERRORS ' + errs.join(' | ') : 'OK');
   await browser.close();
 })();

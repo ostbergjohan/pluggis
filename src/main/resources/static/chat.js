@@ -733,7 +733,7 @@ function quizMaker(list) {
   const sel = h('select', { class: 'quiz-sel' }, list.map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ' · ' + rel(x.dueDate) : ''}`)));
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
   return h('div', { class: 'box quiz-maker' },
-    h('div', { class: 'quiz-title' }, 'Gör ett nytt quiz'), sel,
+    h('div', { class: 'quiz-title' }, 'Ny övning'), sel,
     h('div', { class: 'quiz-btns four' },
       h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
