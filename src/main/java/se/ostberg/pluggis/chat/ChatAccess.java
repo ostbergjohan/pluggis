@@ -38,6 +38,8 @@ public class ChatAccess {
             Pattern.compile("GET /api/flashcards/decks/\\d+/cards"),
             Pattern.compile("POST /api/games/order"),
             Pattern.compile("POST /api/games/done"),
+            Pattern.compile("POST /api/practice/start"),
+            Pattern.compile("POST /api/practice/[0-9a-f-]{36}/end"),
             Pattern.compile("POST /api/flashcards/cards/\\d+/grade"),
             Pattern.compile("POST /api/flashcards/quiz"),
             Pattern.compile("POST /api/explain/start"),

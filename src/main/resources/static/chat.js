@@ -815,6 +815,72 @@ async function makeQuiz(homeworkId, mode, btn) {
   }
 }
 
+// ---- Tid i Öva räknas som plugg ----
+/**
+ * När en övning börjar frågar appen servern om ett id (servern minns starttiden). Aktiv tid räknas varje sekund
+ * när appen syns och eleven tryckt/skrivit de senaste två minuterna. När eleven lämnar övningen skickas tiden;
+ * från 1 minut blir den ett pass (minutpoäng från 3 min, och streak). Finns ett moment i dagens plan för läxan
+ * frågar appen om det ska bockas av.
+ */
+const Practice = {
+  id: null, what: null, homeworkId: null, active: 0, last: Date.now(), timer: null,
+  async begin(what, homeworkId) {
+    this.end(false);
+    this.what = what; this.homeworkId = homeworkId || null; this.active = 0; this.last = Date.now();
+    this.timer = setInterval(() => {
+      if (document.visibilityState === 'visible' && Date.now() - this.last < 120000) this.active++;
+    }, 1000);
+    try {
+      const r = await api('/api/practice/start', { method: 'POST', body: { what, homeworkId: this.homeworkId } });
+      if (this.timer) this.id = r.id;
+    } catch { /* tiden räknas bara inte */ }
+  },
+  end(ask = true) {
+    if (!this.timer) return;
+    clearInterval(this.timer); this.timer = null;
+    const id = this.id, active = this.active;
+    this.id = null;
+    if (!id) return;
+    api(`/api/practice/${id}/end?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { activeSeconds: active } })
+      .then(r => {
+        if (r.counted && r.minutes >= 1) { toast(`⏱ ${r.minutes} min övning räknad`); refreshPoints(); }
+        if (ask && r.planItem) offerTick(r.planItem);
+      }).catch(() => { /* tyst */ });
+  },
+  /** När appen stängs: skicka tiden ändå (utan fråga). */
+  flush() {
+    if (!this.timer || !this.id) return;
+    clearInterval(this.timer); this.timer = null;
+    try {
+      fetch(`/api/practice/${this.id}/end?deviceId=${enc(S.deviceId)}`, { method: 'POST', keepalive: true,
+        headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ activeSeconds: this.active }) });
+    } catch { /* tyst */ }
+    this.id = null;
+  },
+};
+['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => { Practice.last = Date.now(); }, { passive: true, capture: true }));
+window.addEventListener('pagehide', () => Practice.flush());
+
+/** "Bocka av 'Öva glosor 1–15'?" – ett tryck efter en övning. */
+function offerTick(item) {
+  const sheet = $('#sheet');
+  const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
+  sheet.replaceChildren(h('div', { class: 'panel' },
+    h('h2', {}, 'Bra jobbat! 💪'),
+    h('p', {}, 'Ska du bocka av det här i dagens plan?'),
+    h('div', { class: 'box', style: 'padding:12px 14px;font-weight:600' }, item.task),
+    h('div', { class: 'actions' },
+      h('button', { onclick: close }, 'Inte än'),
+      h('button', { class: 'go', onclick: async () => {
+        close();
+        try {
+          await api(`/api/plan/items/${item.id}/done?deviceId=${enc(S.deviceId)}`, { method: 'POST' });
+          toast('Avbockat!' + pts(' +3 poäng')); refreshPoints();
+        } catch (e) { toast(e.message, true); }
+      } }, '✓ Bocka av'))));
+  sheet.hidden = false;
+}
+
 // ---- Matcha par ----
 const shuffle = (a) => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
 const clock = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -839,6 +905,7 @@ async function startMatch(homeworkId, btn) {
 }
 
 function playMatch(pairs, title, homeworkId) {
+  Practice.begin(`Matcha par: ${title}`, homeworkId);
   const key = `pluggis.match.${homeworkId}`;
   const best = Number(store.get(key, '0')) || 0;
   let picked = null, left = pairs.length, misses = 0;
@@ -908,6 +975,7 @@ async function startOrder(homeworkId, btn) {
     return;
   }
   if (g.note) toast(g.note);
+  Practice.begin('Rätt ordning', homeworkId);
   let k = 0, totalMiss = 0;
   play();
 
@@ -971,6 +1039,7 @@ async function startExam(homeworkId, btn) {
     return;
   }
   if (ex.note) toast(ex.note);
+  Practice.begin(ex.title, homeworkId);
   const answers = {};
   let i = -1;
   const mins = Math.max(5, Math.round(ex.questions.length * 1.2));
@@ -1092,6 +1161,7 @@ async function explainFor(homeworkId, btn) {
     h('p', { class: 'meta', style: 'color:var(--muted);margin:6px 0 10px' }, 'Pluggis kan inte det här – lär ut det! Med egna ord räcker, det behöver inte vara perfekt.'),
     log, box));
   if (r.note) toast(r.note);
+  Practice.begin(`Förklara: ${r.concept}`, homeworkId);
   bubble('pluggis', r.reply);
   input.focus();
 
@@ -1133,6 +1203,7 @@ const norm = (t) => (t || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{
 
 /** Öva en lek: vanliga kort (visa svar → rätt/fel) eller flerval/lucktext (tryck på ett alternativ). */
 function practiceDeck(d) {
+  Practice.begin(d.deck.name, d.deck.homeworkId);
   let onlyDue = d.dueNow > 0;
   const score = { done: 0, right: 0, total: d.dueNow || null };
   const front = h('div', { class: 'fc-front' });
@@ -1503,6 +1574,7 @@ async function refreshPoints() {
 
 // ---- Flikar ----
 async function show(tab) {
+  Practice.end();
   if (tab !== 'laxor') { S.openHomework = null; }
   if (typeof stopReading === 'function' && readingBtn) stopReading();
   S.tab = tab;

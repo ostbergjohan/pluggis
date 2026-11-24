@@ -72,9 +72,9 @@ Byt `<server>` mot datorns adress – på Linux syns den med `hostname -I` (t.ex
 
 | Vad | Adress | För |
 |---|---|---|
-| **Föräldravyn (admin)** | `http://<server>:8080/` | Dig: läxor, plan, elever, inställningar, kostnad. Ange token under Inställningar första gången. |
-| **Elevchatten** | `http://<server>:8080/chat.html` | Eleven. Logga in med elevens kod på 5 tecken. |
-| **Elevens personliga länk** | `http://<server>:8080/chat.html#k=KOD` | Loggar in direkt. Kopiera/dela den under admin → Inställningar → Elever. |
+| **Föräldravyn (admin)** | `http://<server>:8080/admin` | Dig: läxor, plan, elever, inställningar, kostnad. Ange token under Inställningar första gången. |
+| **Elevchatten** | `http://<server>:8080/` | Eleven. Logga in med elevens kod på 5 tecken. (`/chat.html` fungerar också.) |
+| **Elevens personliga länk** | `http://<server>:8080/#k=KOD` | Loggar in direkt. Kopiera/dela den under admin → Inställningar → Elever. |
 
 ### Lägg till som app – iPhone
 
@@ -110,7 +110,7 @@ set -a; . ./.env; set +a
 mvn spring-boot:run
 ```
 
-Öppna sedan **http://localhost:8080** och ange token under *Inställningar*.
+Öppna sedan föräldravyn på **http://localhost:8080/admin** och ange token under *Inställningar*. Elevchatten ligger på **http://localhost:8080/**.
 
 Data hamnar i en H2-fil under `./data`. Kör med Postgres via `SPRING_PROFILES_ACTIVE=postgres`.
 
@@ -254,11 +254,11 @@ Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och p
 
 ### Elevchatt i mobilen
 
-`/chat.html` är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
+Elevchatten (`/`, eller `/chat.html`) är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller
 🎤), snabbknappar för att börja plugga/förhör/avsluta, se dagens plan och bocka av, se läxorna och ladda upp
 material (foto, skärmdump, Word, PDF), öva själv (fliken **Öva**: flashkort, snabbquiz, lucktext och Förklara för Pluggis – ger poäng), och se poängen.
 
-- Eleven öppnar `/chat.html` och skriver in sin kod – eller får länken med koden (`/chat.html#k=KOD`) via
+- Eleven öppnar `/` och skriver in sin kod – eller får länken med koden (`/#k=KOD`) via
   *Kopiera länk* / *Dela* under Inställningar → Elever. Öppna i Safari → Dela → *Lägg till på hemskärmen*.
 - Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning, kortlekar (öva, inte ändra) och poäng – inte inställningar,
   poängbonus, utbetalningar, kalender, loggar eller syskonens data.
@@ -370,6 +370,10 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 - **🔢 Rätt ordning:** Claude gör 2–3 ordningar ur materialet (processteg, händelser, kedjor); eleven trycker på stegen
   i rätt ordning och får sedan en mening om varför. Prompten finns i `prompts/order.md`.
 - Båda ger +3 poäng (en gång per övning och dag).
+- **Tiden i Öva räknas som plugg:** appen mäter aktiv tid (bara när den syns och eleven tryckt eller skrivit de senaste
+  två minuterna) och servern räknar aldrig mer än den tid som faktiskt gått. Från 1 minut sparas det som ett pass –
+  pluggminuter i statistiken, minutpoäng (från 3 min) och streak, men ingen "höll hela passet"-bonus. Pågår ett vanligt
+  pass räknas tiden redan där. Finns ett moment i dagens plan för samma läxa frågar appen efteråt om det ska bockas av.
 
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),
   eller så fotar eleven glosor/anteckningar (långt tryck på röda knappen).

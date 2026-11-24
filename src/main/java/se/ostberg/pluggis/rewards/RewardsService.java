@@ -86,6 +86,20 @@ public class RewardsService {
                 e.correct() ? "Rätt på ett kort" : "Bra försök", ref);
     }
 
+    /** Övningstid i Öva: minutpoäng och streak som ett pass, men ingen bonus för att ha "hållit passet". */
+    @EventListener
+    @Transactional
+    public void onPractice(StudySessionService.PracticeRecorded e) {
+        StudySession s = e.session();
+        long minutes = Duration.between(s.getStartedAt(), s.getFinishedAt()).toMinutes();
+        int minutePoints = RewardRules.sessionMinutePoints(minutes, s.getPlannedMinutes());
+        if (minutePoints == 0) {
+            return;
+        }
+        award(e.deviceId(), PointEvent.Kind.SESSION_MINUTES, minutePoints, minutes + " minuters övning", "session:" + s.getId());
+        awardStreakIfFirstToday(e.deviceId());
+    }
+
     @EventListener
     @Transactional
     public void onSessionFinished(StudySessionService.SessionFinished e) {

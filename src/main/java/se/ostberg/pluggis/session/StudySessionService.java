@@ -31,6 +31,10 @@ public class StudySessionService {
     public record SessionTimeUp(String deviceId, StudySession session) {
     }
 
+    /** Övningstid i Öva sparad som ett avslutat pass (ger minutpoäng och räknas i streak, men ingen "höll passet"). */
+    public record PracticeRecorded(String deviceId, StudySession session) {
+    }
+
     public record SessionFinished(String deviceId, StudySession session) {
     }
 
@@ -60,6 +64,21 @@ public class StudySessionService {
     }
 
     @Transactional
+    /**
+     * Sparar övningstid. Pågår ett vanligt pass räknas tiden redan där – då sparas inget extra.
+     * Returnerar passet, eller tomt om inget sparades.
+     */
+    @Transactional
+    public Optional<StudySession> recordPractice(String deviceId, String task, java.time.Duration time) {
+        if (deviceId == null || time.toSeconds() < 60 || active(deviceId).isPresent()) {
+            return Optional.empty();
+        }
+        Instant end = clock.instant();
+        StudySession s = repo.save(StudySession.practice(deviceId, task, end.minus(time), end));
+        events.publishEvent(new PracticeRecorded(deviceId, s));
+        return Optional.of(s);
+    }
+
     public Optional<StudySession> finish(String deviceId, String summary) {
         Optional<StudySession> active = active(deviceId);
         active.ifPresent(s -> {

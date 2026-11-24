@@ -1,7 +1,7 @@
 {
   "name": "Pluggis",
   "short_name": "Pluggis",
-  "start_url": "/chat.html",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f6f5f2",

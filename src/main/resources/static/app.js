@@ -1524,7 +1524,7 @@ function studentsPanel() {
     let list;
     try { list = await api('/api/students'); } catch (e) { panel.replaceChildren(h('h2', {}, 'Elever'), h('div', { class: 'empty' }, e.message)); return; }
     state.students = list;
-    const chatUrl = `${location.origin}/chat.html`;
+    const chatUrl = `${location.origin}/`;
     const rows = list.map(s => {
       const name = h('input', { value: s.name || '', placeholder: 'Namn' });
       const device = h('input', { value: s.deviceId || '', placeholder: 'Enhets-id' });

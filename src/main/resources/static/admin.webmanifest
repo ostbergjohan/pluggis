@@ -1,7 +1,7 @@
 {
   "name": "Pluggis admin",
   "short_name": "Pluggis admin",
-  "start_url": "/",
+  "start_url": "/admin",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f6f5f2",

@@ -53,6 +53,14 @@ public class StudySession {
         this.endsAt = now.plus(Duration.ofMinutes(plannedMinutes));
     }
 
+    /** Ett avslutat "pass" av övningstid i Öva (startad och avslutad i efterhand). */
+    public static StudySession practice(String deviceId, String task, Instant start, Instant end) {
+        int minutes = (int) Math.max(1, Duration.between(start, end).toMinutes());
+        StudySession s = new StudySession(deviceId, task, minutes, start);
+        s.finish("Övning i appen", end);
+        return s;
+    }
+
     public void finish(String summary, Instant now) {
         this.status = Status.FINISHED;
         this.summary = summary;

@@ -26,6 +26,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 
 /**
  * Startar hela Pluggis (databas, schemaläggning, WebSocket, alla tjänster) och går igenom
@@ -362,13 +364,34 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void practiceTimeIsCappedToRealElapsedTime() throws Exception {
+        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString()).get(0);
+        String code = first.path("code").asText();
+        String id = json(mvc.perform(post("/api/practice/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"what\":\"Glosor\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asText();
+        // Påstår 50 minuter direkt efter start → servern räknar bara den tid som gått (några millisekunder)
+        JsonNode r = json(mvc.perform(post("/api/practice/" + id + "/end?deviceId=" + first.path("deviceId").asText()).header(TOKEN, code)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"activeSeconds\":3000}")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertThat(r.path("minutes").asInt()).isZero();
+        assertThat(r.path("counted").asBoolean()).isFalse();
+        // Samma id två gånger går inte
+        mvc.perform(post("/api/practice/" + id + "/end").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"activeSeconds\":10}")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }
 
     @Test
     void servesWebUi() throws Exception {
-        mvc.perform(get("/index.html")).andExpect(status().isOk());
+        mvc.perform(get("/admin")).andExpect(status().isOk()).andExpect(forwardedUrl("/admin.html"));
+        mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("/chat.html"));
+        mvc.perform(get("/chat.html")).andExpect(status().isOk());
+        mvc.perform(get("/admin.html")).andExpect(status().isOk());
+        mvc.perform(get("/index.html")).andExpect(status().is3xxRedirection()).andExpect(redirectedUrl("/admin"));
         mvc.perform(get("/app.js")).andExpect(status().isOk());
     }
 

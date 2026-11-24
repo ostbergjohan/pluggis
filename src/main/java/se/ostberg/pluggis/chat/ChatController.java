@@ -62,7 +62,7 @@ public class ChatController {
     public Map<String, Object> link() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("enabled", access.token().isPresent());
-        access.token().ifPresent(t -> m.put("path", "/chat.html#t=" + t));
+        access.token().ifPresent(t -> m.put("path", "/#t=" + t));
         m.put("deviceId", access.deviceId(DEFAULT_DEVICE));
         return m;
     }

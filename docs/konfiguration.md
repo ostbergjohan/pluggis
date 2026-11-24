@@ -40,7 +40,7 @@ Lösenordet till allt utom elevchatten: föräldravyn, iOS-genvägen och curl.
 - **Skapa:** `openssl rand -hex 24` (eller valfri lång slumpad sträng).
 - **Lägg:** `PLUGGIS_DEVICE_TOKEN=...` i `.env`.
 - **Används i:**
-  - Föräldravyn: Inställningar → Token (sparas i webbläsaren, en gång per dator eller telefon).
+  - Föräldravyn (`/admin`): Inställningar → Token (sparas i webbläsaren, en gång per dator eller telefon).
   - iOS-genvägen och curl: headern `X-Pluggis-Token`.
 - **Saknas den** är API:t öppet för alla på nätet. Loggen varnar då: *"pluggis.device-token är inte satt – API:t är öppet"*.
 - **Byta:** ändra i `.env`, kör `docker compose up -d` och uppdatera token i föräldravyn och i genvägen.
@@ -97,7 +97,7 @@ Bra att veta:
 
 Skapas av Pluggis och behöver inte ligga i `.env`.
 
-- **Var:** varje elev har en fast kod på 5 tecken under **admin → Inställningar → Elever**. Koden är elevens inloggning i mobilchatten (`/chat.html#k=KOD`).
+- **Var:** varje elev har en fast kod på 5 tecken under **admin → Inställningar → Elever**. Koden är elevens inloggning i mobilchatten (`/#k=KOD`, eller `/chat.html#k=KOD`).
 - **Behörighet:** med koden når eleven bara sin egen chatt, plan, läxor, kort och poäng.
 - **Byta:** *Ny kod* gör den gamla ogiltig direkt.
 
