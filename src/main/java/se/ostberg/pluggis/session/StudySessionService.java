@@ -63,7 +63,6 @@ public class StudySessionService {
         return session;
     }
 
-    @Transactional
     /**
      * Sparar övningstid. Pågår ett vanligt pass räknas tiden redan där – då sparas inget extra.
      * Returnerar passet, eller tomt om inget sparades.
@@ -79,6 +78,7 @@ public class StudySessionService {
         return Optional.of(s);
     }
 
+    @Transactional
     public Optional<StudySession> finish(String deviceId, String summary) {
         Optional<StudySession> active = active(deviceId);
         active.ifPresent(s -> {
