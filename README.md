@@ -360,6 +360,11 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
   Claude (0–2 poäng, generöst). Resultatsidan visar poäng, rätt svar och "Det här ska du kolla igen", och de missade
   frågorna blir en lek "🔁 Repetera: …". +10 poäng för att ha gjort provet. Planen lägger in "Testprov i Pluggis"
   1–2 dagar före provet, med en 📝 Starta-knapp i chatten. Prompten finns i `prompts/exam.md`.
+- **🧩 Matcha par:** begrepp och förklaring (eller glosa och översättning) ur läxans kortlekar – tryck på ett och sedan
+  det som hör ihop. Tid och rekord per läxa (sparas i telefonen). Spelas helt i appen, utan Claude.
+- **🔢 Rätt ordning:** Claude gör 2–3 ordningar ur materialet (processteg, händelser, kedjor); eleven trycker på stegen
+  i rätt ordning och får sedan en mening om varför. Prompten finns i `prompts/order.md`.
+- Båda ger +3 poäng (en gång per övning och dag).
 
 - Coachen skapar lekar med `create_flashcards` (från ämne eller elevens eget material),
   eller så fotar eleven glosor/anteckningar (långt tryck på röda knappen).

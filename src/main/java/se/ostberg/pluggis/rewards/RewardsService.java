@@ -161,6 +161,23 @@ public class RewardsService {
         award(deviceId, PointEvent.Kind.BONUS, RewardRules.EXPLAINED, "Förklarade " + concept + " för Pluggis", ref);
     }
 
+    /** Klarat Matcha par eller Rätt ordning (en gång per övning och dag). */
+    @Transactional
+    public void onGame(String deviceId, String kind, String what) {
+        if (deviceId == null || what == null || what.isBlank()) {
+            return;
+        }
+        String ref = "game:" + kind + ":" + what.toLowerCase(java.util.Locale.ROOT).trim();
+        if (ref.length() > 180) {
+            ref = ref.substring(0, 180);
+        }
+        if (points.countByDeviceIdAndRefKeyAndAwardedOn(deviceId, ref, today()) > 0) {
+            return;
+        }
+        String label = "match".equals(kind) ? "Matcha par: " : "Rätt ordning: ";
+        award(deviceId, PointEvent.Kind.BONUS, RewardRules.GAME_DONE, label + what, ref);
+    }
+
     /** Eleven har lämnat in ett testprov (en gång per läxa/prov och dag). */
     @Transactional
     public void onMockExam(String deviceId, Long homeworkId, String title) {

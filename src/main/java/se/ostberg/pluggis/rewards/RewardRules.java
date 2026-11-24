@@ -31,6 +31,8 @@ public final class RewardRules {
     public static final int EXPLAINED = 5;
     /** Gjort ett helt testprov – ansträngningen räknas, inte resultatet. */
     public static final int MOCK_EXAM = 10;
+    /** Klarat en snabb övning: Matcha par eller Rätt ordning. */
+    public static final int GAME_DONE = 3;
 
     public static final int STREAK_POINTS_PER_DAY = 3;
     public static final int STREAK_MAX_DAYS_COUNTED = 7;

@@ -793,11 +793,13 @@ function quizMaker(list) {
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
   return h('div', { class: 'box quiz-maker' },
     h('div', { class: 'quiz-title' }, 'Ny övning'), sel,
-    h('div', { class: 'quiz-btns four' },
+    h('div', { class: 'quiz-btns six' },
       h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
       h('button', { class: 'quiz-btn', onclick: (e) => explainFor(Number(sel.value), e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),
-      h('button', { class: 'quiz-btn', onclick: (e) => startExam(Number(sel.value), e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => startExam(Number(sel.value), e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startMatch(Number(sel.value), e.target) }, '🧩', h('span', {}, 'Matcha par'), h('small', {}, 'slå ditt rekord')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startOrder(Number(sel.value), e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser'))));
 }
 
 async function makeQuiz(homeworkId, mode, btn) {
@@ -810,6 +812,150 @@ async function makeQuiz(homeworkId, mode, btn) {
   } catch (e) {
     toast(e.message || 'Det gick inte att göra frågor just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}
+
+// ---- Matcha par ----
+const shuffle = (a) => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+const clock = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+/** Par av läxans kortlekar (korta svar först). Spelas helt i telefonen – ingen Claude. */
+async function startMatch(homeworkId, btn) {
+  let cards = [];
+  try {
+    const decks = (await api('/api/flashcards/decks')).filter(d => d.deck.homeworkId === homeworkId);
+    for (const d of decks) cards.push(...await api(`/api/flashcards/decks/${d.deck.id}/cards`));
+  } catch (e) { toast(e.message, true); return; }
+  const usable = cards.filter(c => c.back && c.back.length <= 70 && c.front.length <= 90)
+    .map(c => ({ id: c.id, left: c.kind === 'CLOZE' ? c.front.replace('___', '…') : c.front, right: c.back }));
+  const seen = new Set();
+  const pool = shuffle(usable).filter(p => { const k = p.right.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  if (pool.length < 3) {
+    toast('Gör flashkort, ett snabbquiz eller en lucktext till läxan först – Matcha par spelas med korten', true);
+    return;
+  }
+  const hw = (await api('/api/homework?openOnly=false').catch(() => [])).find(x => x.id === homeworkId);
+  playMatch(pool.slice(0, 6), hw ? hw.title : 'Matcha par', homeworkId);
+}
+
+function playMatch(pairs, title, homeworkId) {
+  const key = `pluggis.match.${homeworkId}`;
+  const best = Number(store.get(key, '0')) || 0;
+  let picked = null, left = pairs.length, misses = 0;
+  const started = Date.now();
+  const timer = h('span', { class: 'match-time' }, '0:00');
+  const tick = setInterval(() => { if (!document.body.contains(timer)) return clearInterval(tick); timer.textContent = clock(Date.now() - started); }, 500);
+  const tile = (pair, side) => {
+    const b = h('button', { class: 'match-tile ' + side }, side === 'l' ? pair.left : pair.right);
+    b.addEventListener('click', () => choose(b, pair, side));
+    return b;
+  };
+  const lefts = shuffle(pairs).map(p => tile(p, 'l'));
+  const rights = shuffle(pairs).map(p => tile(p, 'r'));
+  const status = h('div', { class: 'meta', style: 'text-align:center;margin-top:10px' }, 'Tryck på ett begrepp och sedan på det som hör ihop med det.');
+  $('#view').replaceChildren(h('div', { class: 'page' },
+    h('div', { style: 'display:flex;align-items:center;gap:8px' },
+      h('button', { class: 'small-btn', onclick: () => { clearInterval(tick); show('kort'); } }, '‹ Öva'),
+      h('h2', { style: 'margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, `🧩 ${title}`), timer),
+    best ? h('div', { class: 'meta', style: 'margin:6px 0 0' }, `Ditt rekord: ${clock(best)}`) : null,
+    h('div', { class: 'match-grid' }, h('div', { class: 'match-col' }, lefts), h('div', { class: 'match-col' }, rights)),
+    status));
+
+  function choose(b, pair, side) {
+    if (b.classList.contains('done')) return;
+    if (!picked || picked.side === side) {
+      if (picked) picked.b.classList.remove('sel');
+      picked = { b, pair, side }; b.classList.add('sel');
+      return;
+    }
+    const other = picked; picked = null; other.b.classList.remove('sel');
+    if (other.pair === pair) {
+      [b, other.b].forEach(x => { x.classList.add('done'); x.disabled = true; });
+      if (--left === 0) finish();
+    } else {
+      misses++;
+      [b, other.b].forEach(x => { x.classList.add('miss'); setTimeout(() => x.classList.remove('miss'), 450); });
+    }
+  }
+
+  async function finish() {
+    clearInterval(tick);
+    const ms = Date.now() - started;
+    const record = !best || ms < best;
+    if (record) store.set(key, String(ms));
+    try { await api(`/api/games/done?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { kind: 'match', what: title } }); refreshPoints(); } catch { /* poäng är bonus */ }
+    status.replaceChildren(h('div', { class: 'box exam-score' },
+      h('div', { class: 'exam-big' }, clock(ms)),
+      h('div', {}, record ? (best ? 'Nytt rekord! 🏆' : 'Första rekordet satt! 🏆') : `Rekordet är ${clock(best)} – en gång till?`),
+      h('div', { class: 'meta' }, `${pairs.length} par · ${misses} ${misses === 1 ? 'miss' : 'missar'}`),
+      h('div', { class: 'quiz-btns', style: 'margin-top:12px' },
+        h('button', { class: 'quiz-btn', onclick: () => startMatch(homeworkId) }, '🔁', h('span', {}, 'En gång till')),
+        h('button', { class: 'quiz-btn', onclick: () => show('kort') }, '🎯', h('span', {}, 'Till Öva')))));
+  }
+}
+
+// ---- Rätt ordning ----
+async function startOrder(homeworkId, btn) {
+  btn = btn && btn.closest('button');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis letar ordningar…</span><small>tar några sekunder</small>'; }
+  let g;
+  try {
+    g = await api('/api/games/order', { method: 'POST', body: { homeworkId } });
+  } catch (e) {
+    toast(e.message || 'Det gick inte just nu', true);
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    return;
+  }
+  if (g.note) toast(g.note);
+  let k = 0, totalMiss = 0;
+  play();
+
+  function play() {
+    const seq = g.sequences[k];
+    const placed = h('div', { class: 'order-placed' });
+    const pool = h('div', { class: 'order-pool' });
+    let next = 0, misses = 0;
+    const why = h('div', { class: 'meta order-why', hidden: true }, seq.why || '');
+    const after = h('div');
+    for (const step of shuffle(seq.steps)) {
+      const b = h('button', { class: 'order-step' }, step);
+      b.addEventListener('click', () => {
+        if (step === seq.steps[next]) {
+          next++;
+          b.remove();
+          placed.append(h('div', { class: 'order-done' }, h('span', { class: 'order-n' }, String(next)), step));
+          if (next === seq.steps.length) done();
+        } else {
+          misses++; totalMiss++;
+          b.classList.add('miss'); setTimeout(() => b.classList.remove('miss'), 450);
+        }
+      });
+      pool.append(b);
+    }
+    for (let i = 0; i < seq.steps.length; i++) placed.append(h('div', { class: 'order-slot' }, h('span', { class: 'order-n' }, String(i + 1))));
+    $('#view').replaceChildren(h('div', { class: 'page' },
+      h('div', { style: 'display:flex;align-items:center;gap:8px' },
+        h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Öva'),
+        h('h2', { style: 'margin:0;flex:1' }, `🔢 ${seq.title}`),
+        h('span', { class: 'meta' }, `${k + 1} av ${g.sequences.length}`)),
+      h('p', { class: 'meta', style: 'margin:6px 0 10px' }, `${seq.prompt}. Tryck på det som kommer först, sedan nästa …`),
+      placed, h('div', { class: 'meta', style: 'margin:12px 0 6px' }, 'Kvar:'), pool, why, after));
+
+    function done() {
+      // Ta bort de tomma platserna
+      placed.querySelectorAll('.order-slot').forEach(x => x.remove());
+      why.hidden = !seq.why;
+      const last = k === g.sequences.length - 1;
+      after.replaceChildren(h('div', { class: 'meta', style: 'text-align:center;margin:10px 0' },
+        misses ? `Klart! ${misses} ${misses === 1 ? 'miss' : 'missar'} på vägen.` : 'Helt rätt på första försöket! 🎉'),
+        h('button', { class: 'big', onclick: async () => {
+          if (!last) { k++; play(); return; }
+          try { await api(`/api/games/done?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { kind: 'order', what: g.sequences.map(s => s.title).join(', ') } }); refreshPoints(); } catch { /* bonus */ }
+          toast(totalMiss ? `Alla ordningar klara! ${pts('+3 poäng')}` : `Alla rätt utan miss! 🎉 ${pts('+3 poäng')}`);
+          show('kort');
+        } }, last ? 'Klar ✓' : 'Nästa ›'));
+    }
   }
 }
 
@@ -1199,11 +1345,13 @@ async function homeworkDetail(id) {
   }
   page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
   if (x.kind !== 'OTHER') {
-    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns four' },
+    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns six' },
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'quiz', e.target) }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
       h('button', { class: 'quiz-btn', onclick: (e) => explainFor(x.id, e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),
-      h('button', { class: 'quiz-btn', onclick: (e) => startExam(x.id, e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => startExam(x.id, e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startMatch(x.id, e.target) }, '🧩', h('span', {}, 'Matcha par'), h('small', {}, 'slå ditt rekord')),
+      h('button', { class: 'quiz-btn', onclick: (e) => startOrder(x.id, e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser'))));
   }
   return page;
 }

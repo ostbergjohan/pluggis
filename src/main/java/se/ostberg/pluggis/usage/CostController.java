@@ -35,7 +35,8 @@ public class CostController {
             Map.entry("explain-start", "Förklara för Pluggis"),
             Map.entry("explain-answer", "Förklara för Pluggis, svar"),
             Map.entry("exam", "Testprov"),
-            Map.entry("exam-grade", "Testprov, rättning"));
+            Map.entry("exam-grade", "Testprov, rättning"),
+            Map.entry("order", "Rätt ordning"));
 
     private final UsageDayRepository repo;
     private final CostProperties costs;

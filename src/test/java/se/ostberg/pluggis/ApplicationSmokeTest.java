@@ -337,6 +337,31 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void studentCanPlayGamesAndGetsPointsOncePerDay() throws Exception {
+        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString()).get(0);
+        String code = first.path("code").asText();
+        String dev = first.path("deviceId").asText();
+        mvc.perform(post("/api/games/order").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isServiceUnavailable()); // Claude nås inte i testet
+        long deck = json(mvc.perform(post("/api/flashcards/decks").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Matchlek\",\"cards\":[{\"front\":\"perro\",\"back\":\"hund\"}]}"))
+                .andReturn().getResponse().getContentAsString()).path("id").asLong();
+        assertThat(mvc.perform(get("/api/flashcards/decks/" + deck + "/cards").header(TOKEN, code)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString()).contains("perro");
+        int before = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
+                .path("weekPoints").asInt();
+        for (int i = 0; i < 2; i++) {
+            mvc.perform(post("/api/games/done?deviceId=" + dev).header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"kind\":\"match\",\"what\":\"Glosor kap 5\"}")).andExpect(status().isOk());
+        }
+        int after = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
+                .path("weekPoints").asInt();
+        assertThat(after - before).isEqualTo(3);
+        mvc.perform(post("/api/games/done").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"kind\":\"fusk\",\"what\":\"x\"}")).andExpect(status().isBadRequest());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }
