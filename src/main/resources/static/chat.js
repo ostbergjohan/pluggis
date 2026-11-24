@@ -924,7 +924,7 @@ async function startOrder(homeworkId, btn) {
         if (step === seq.steps[next]) {
           next++;
           b.remove();
-          placed.append(h('div', { class: 'order-done' }, h('span', { class: 'order-n' }, String(next)), step));
+          placed.querySelector('.order-slot').replaceWith(h('div', { class: 'order-done' }, h('span', { class: 'order-n' }, String(next)), step));
           if (next === seq.steps.length) done();
         } else {
           misses++; totalMiss++;
@@ -943,8 +943,6 @@ async function startOrder(homeworkId, btn) {
       placed, h('div', { class: 'meta', style: 'margin:12px 0 6px' }, 'Kvar:'), pool, why, after));
 
     function done() {
-      // Ta bort de tomma platserna
-      placed.querySelectorAll('.order-slot').forEach(x => x.remove());
       why.hidden = !seq.why;
       const last = k === g.sequences.length - 1;
       after.replaceChildren(h('div', { class: 'meta', style: 'text-align:center;margin:10px 0' },

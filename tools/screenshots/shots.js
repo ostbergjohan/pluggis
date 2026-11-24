@@ -60,6 +60,15 @@ async function api(route) {
   if (url.pathname.match(/^\/api\/homework\/\d+\/material$/)) return json(route, [
     { id: 31, homeworkId: 7, filename: 'utkik-s40.jpg', page: 40, summary: 'Fotosyntesen – ljus, vatten och koldioxid blir socker och syre', text: 'Fotosyntesen…', hasImage: false },
     { id: 32, homeworkId: 7, filename: 'utkik-s42.jpg', page: 42, summary: 'Cellandning – socker och syre ger energi', text: 'Cellandning…', hasImage: false }]);
+  if (url.pathname === '/api/flashcards/decks/4/cards') return json(route, [
+    { id: 1, front: 'Klorofyll', back: 'Grönt ämne som fångar ljus' }, { id: 2, front: 'Glukos', back: 'Sockret växten bildar' },
+    { id: 3, front: 'Koldioxid', back: 'Gas som växten tar upp' }, { id: 4, front: 'Cellandning', back: 'Socker + syre ger energi' },
+    { id: 5, front: 'Klyvöppning', back: 'Litet hål i bladet' }, { id: 6, front: 'Fotosyntes', back: 'Ljus blir socker och syre' }]);
+  if (url.pathname.match(/\/api\/flashcards\/decks\/\d+\/cards/)) return json(route, []);
+  if (url.pathname === '/api/games/order') return json(route, { note: null, sequences: [{ title: 'Från ljus till socker', prompt: 'Sätt fotosyntesens steg i rätt ordning',
+    steps: ['Bladet fångar solljus', 'Rötterna tar upp vatten', 'Koldioxid kommer in genom bladen', 'Socker bildas', 'Syre släpps ut'],
+    why: 'Ljuset ger energin som behövs för att göra socker av vatten och koldioxid – syret blir över.' }] });
+  if (url.pathname.startsWith('/api/games/done')) return json(route, { ok: true });
   if (url.pathname === '/api/flashcards/decks') return json(route, DECKS);
   if (url.pathname.match(/\/api\/flashcards\/decks\/6\/next/)) return json(route, clozeCard);
   if (url.pathname.match(/\/api\/flashcards\/decks\/\d+\/next/)) return json(route, nextCard);
@@ -146,7 +155,20 @@ async function api(route) {
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await shot('10-forklara-klart.png');
   await tab('poang'); await shot('11-poang.png');
+  // Matcha par: välj provet och para ihop två par
   await tab('kort');
+  await page.selectOption('.quiz-sel', '7'); await page.click('.quiz-btn:has-text("Matcha par")'); await page.waitForTimeout(500);
+  await page.click('.match-tile.l:has-text("Klorofyll")'); await page.click('.match-tile.r:has-text("Grönt ämne")');
+  await page.click('.match-tile.l:has-text("Glukos")'); await page.click('.match-tile.r:has-text("Sockret")');
+  await page.click('.match-tile.l:has-text("Cellandning")'); await page.waitForTimeout(300);
+  await shot('15-matcha.png');
+  // Rätt ordning: två steg på plats
+  await tab('kort');
+  await page.selectOption('.quiz-sel', '7'); await page.click('.quiz-btn:has-text("Rätt ordning")'); await page.waitForTimeout(500);
+  await page.click('.order-step:has-text("Bladet fångar solljus")'); await page.click('.order-step:has-text("Rötterna tar upp vatten")');
+  await page.waitForTimeout(300);
+  await shot('16-ordning.png');
+  await tab('kort'); await shot('5-ova.png');
   await page.click('.quiz-btn:has-text("Testprov")'); await page.waitForTimeout(400);
   await shot('12-testprov-start.png');
   await page.click('text=Starta provet'); await page.waitForTimeout(200);
