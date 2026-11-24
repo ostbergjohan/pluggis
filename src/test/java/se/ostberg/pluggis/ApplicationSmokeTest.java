@@ -667,7 +667,7 @@ class ApplicationSmokeTest {
         String link = mvc.perform(post("/api/chat/link").header(TOKEN, "test-token"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String path = json(link).path("path").asText();
-        assertThat(path).startsWith("/chat.html#t=");
+        assertThat(path).startsWith("/#t=");
         String kid = path.substring(path.indexOf("t=") + 2);
 
         String me = mvc.perform(get("/api/chat/me").header(TOKEN, kid))
