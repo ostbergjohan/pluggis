@@ -560,6 +560,10 @@ views.chatt = () => {
   }
   if (S.thinking) msgs.append(h('div', { class: 'msg bot thinking' }, h('span', { class: 'typing' }, h('i'), h('i'), h('i'))));
   setTimeout(() => { paintStatus(); scrollDown(); }, 0);
+  // Stor skärm (dator, iPad liggande): dagens plan bredvid chatten
+  if (WIDE.matches) {
+    return h('div', { class: 'chat-wide' }, wrap, todayAside());
+  }
   return wrap;
 
   function addCardTo(list, c) {
@@ -568,6 +572,61 @@ views.chatt = () => {
       : h('small', {}, `${c.result ? 'Rätt!' : 'Inte riktigt'}${c.box ? ` · fack ${c.box}` : ''}`)));
   }
 };
+
+/** Bred skärm (dator i webbläsaren): sidomeny i stället för flikrad, och dagens plan bredvid chatten. */
+const WIDE = window.matchMedia ? window.matchMedia('(min-width: 1100px)') : { matches: false };
+WIDE.addEventListener && WIDE.addEventListener('change', () => { if (S.tab === 'chatt') show('chatt'); });
+
+function todayAside() {
+  const aside = h('aside', { class: 'side' }, h('div', { class: 'side-title' }, 'Idag'), h('div', { class: 'empty' }, '…'));
+  (async () => {
+    try {
+      const [today, progress, hw] = await Promise.all([api('/api/plan/today'), api('/api/plan/progress').catch(() => []),
+        api('/api/homework?openOnly=false').catch(() => [])]);
+      const hwById = new Map(hw.map(x => [x.id, x]));
+      const parts = [h('div', { class: 'side-title' }, 'Idag')];
+      if (!today.length) parts.push(h('div', { class: 'empty' }, 'Inget planerat idag 🎉'));
+      const list = h('div', { class: 'box' });
+      // Ett block per läxa/prov, samma som i Plan (servern har redan sorterat)
+      const groups = [];
+      for (const t of today) {
+        const last = groups[groups.length - 1];
+        if (last && last.id === t.item.homeworkId) last.items.push(t); else groups.push({ id: t.item.homeworkId, items: [t] });
+      }
+      for (const g of groups) {
+        const x = hwById.get(g.id);
+        const b = { color: subjectColor(x && x.subject, x ? x.title : ''), items: g.items };
+        list.append(h('div', { class: 'block-head', style: `--c:${b.color}` }, h('span', { class: 'block-ico' }, subjectIcon(x && x.subject, x ? x.title : '')),
+          h('span', { class: 'block-title' }, x ? blockLabel(x) : (g.items[0].homeworkTitle || 'Övrigt')),
+          h('span', { class: 'block-min' }, `${g.items.reduce((n, t) => n + t.item.minutes, 0)} min`)));
+        for (const t of b.items) {
+          const it = t.item;
+          const tick = h('button', { class: 'tick', 'aria-label': 'Klar', disabled: it.done || null }, it.done ? '✓' : '');
+          const row = h('div', { class: 'row in-block' + (it.done ? ' done' : ''), style: `--c:${b.color}` }, tick,
+            h('div', { class: 'grow' }, h('div', { class: 'task' }, it.task), h('div', { class: 'meta' }, `${it.minutes} min`,
+              t.overdue ? ' · ligger efter' : '')));
+          tick.addEventListener('click', async () => {
+            if (it.done) return;
+            try {
+              await api(`/api/plan/items/${it.id}/done?deviceId=${enc(S.deviceId)}`, { method: 'POST' });
+              it.done = true; row.classList.add('done'); tick.textContent = '✓'; tick.disabled = true;
+              refreshPoints(); toast('Bra jobbat!' + pts(' +3 poäng'));
+            } catch (e) { toast(e.message, true); }
+          });
+          list.append(row);
+        }
+      }
+      if (today.length) parts.push(list);
+      if (progress.length) parts.push(h('div', { class: 'side-title' }, 'På väg mot'), ...progress.slice(0, 3).map(progressCard));
+      parts.push(h('button', { class: 'small-btn', style: 'margin-top:12px', onclick: () => show('plan') }, 'Hela planen ›'));
+      aside.replaceChildren(...parts);
+    } catch (e) {
+      console.warn('Dagens plan:', e);
+      aside.replaceChildren(h('div', { class: 'empty' }, 'Kunde inte hämta planen'));
+    }
+  })();
+  return aside;
+}
 
 /** Nedräkning och hur långt man kommit, för ett prov/en läxa. */
 function progressCard(p) {

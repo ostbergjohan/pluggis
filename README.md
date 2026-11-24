@@ -55,6 +55,11 @@ Elevchatten i en iPhone (testdata).
   </tr>
 </table>
 
+**På dator** (eller iPad liggande) används ytan bättre: flikarna blir en sidomeny, innehållet centreras och bredvid
+chatten visas dagens plan och "På väg mot".
+
+<img src="docs/screenshots/dator-chatt.png" width="720" alt="Elevchatten på dator med dagens plan bredvid">
+
 ## Adresser och appar på hemskärmen
 
 Pluggis körs på din dator/server och nås från telefoner på samma nätverk (hemma-wifi, eller via Tailscale/VPN utifrån).

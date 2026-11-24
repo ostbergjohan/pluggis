@@ -7,7 +7,8 @@ Tar skärmdumpar i iPhone-storlek (390×844, Retina) av den riktiga chattkoden m
 cd tools/screenshots
 npm install playwright          # en gång
 npx playwright install chromium # om du inte har Chrome
-node shots.js ../../src/main/resources/static /tmp/skarmdumpar
+node shots.js ../../src/main/resources/static /tmp/skarmdumpar          # iPhone
+node shots-desktop.js ../../src/main/resources/static /tmp/skarmdumpar  # dator
 ```
 
 Skriptet använder `/usr/bin/google-chrome`; ändra `executablePath` i `shots.js` om Chrome ligger någon annanstans
