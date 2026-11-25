@@ -101,7 +101,7 @@ public class MaterialService {
                 throw new IllegalStateException("Claude kunde inte läsa materialet just nu – försök igen om en stund", e);
             }
             log.warn("Kunde inte läsa material med Claude för läxa {}: {}", homeworkId, e.toString());
-            reading = new Reading(null, List.of(), List.of(), null, null, null, null, List.of());
+            reading = new Reading(null, List.of(), List.of(), null, null, null, null, List.of(), List.of());
             note = "Materialet sparades, men Claude kunde inte läsa av det just nu – planen ändrades inte.";
         }
 
