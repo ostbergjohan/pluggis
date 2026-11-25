@@ -62,6 +62,8 @@ static Button tabCoach, tabOva, tabHw, tabPlan, btnVolDown, btnVolUp;
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
 enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game };
 static Screen screen = Screen::Coach;
+enum class Game { None, Explain, Exam, Match, Order };
+static Game game = Game::None;
 static bool dirtyOva = false;
 
 // Ljudvolym (sparas i enheten) och batteri
@@ -1128,8 +1130,6 @@ static void makeQuiz(long homeworkId, const char* mode) {
 
 // ---------------------------------------------------------------- Förklara, Testprov, Matcha par, Rätt ordning
 // Samma övningar som i appen. Förklara och skrivfrågor i Testprovet besvaras med rösten (KB-Whisper).
-enum class Game { None, Explain, Exam, Match, Order };
-static Game game = Game::None;
 static long gameHw = 0;
 static String gameTitle, gameMsg, gameHeard;
 static bool gameDone = false;
