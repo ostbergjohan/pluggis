@@ -25,6 +25,13 @@
 #include "config.example.h"
 #endif
 
+#ifndef PLUGGIS_IDLE_MINUTES
+#define PLUGGIS_IDLE_MINUTES 5   // stäng av efter så många minuter utan aktivitet (0 = aldrig)
+#endif
+
+static uint32_t lastActivity = 0;
+static bool asleep = false, idleWarned = false;
+
 // ---------------------------------------------------------------- utseende
 static constexpr uint32_t BG = 0x101820;      // mörkblå bakgrund
 static constexpr uint32_t PANEL = 0x1C2733;
@@ -598,6 +605,8 @@ static void onText(const char* json, size_t len) {
     heardText = clean(doc["text"] | "");
     dirtyMain = true;
   } else if (type == "say" || type == "reminder") {
+    if (asleep) { asleep = false; M5.Display.setBrightness(200); dirtyAll = true; }
+    lastActivity = millis();
     thinking = false;
     sayText = clean(doc["text"] | "");
     if (mode == Mode::Card && cardAnswered) mode = Mode::Coach;
@@ -2216,6 +2225,7 @@ void setup() {
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
 
+  lastActivity = millis();
   connectWifi();
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
   String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
@@ -2223,6 +2233,55 @@ void setup() {
   ws.onEvent(onWs);
   ws.setReconnectInterval(3000);
   ws.enableHeartbeat(20000, 5000, 2);
+}
+
+// ---------------------------------------------------------------- stäng av när den inte används
+static void markActive() {
+  lastActivity = millis();
+  if (idleWarned) { idleWarned = false; M5.Display.setBrightness(200); dirtyAll = true; }
+}
+
+static void goToSleep() {
+  // Spara det som pågår innan strömmen går
+  if (screen == Screen::HwDetail) listenStop(true);
+  if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
+  stopPlayback();
+  sayStop();
+  Serial.println("[pluggis] inaktiv – stänger av");
+  M5.Display.setBrightness(0);
+  delay(200);
+  M5.Power.powerOff();
+  // Går det inte att stänga av (t.ex. på USB-ström): släck skärmen och vakna vid tryck
+  delay(1500);
+  asleep = true;
+  idleWarned = false;
+}
+
+static void checkIdle(bool touched) {
+  if (PLUGGIS_IDLE_MINUTES <= 0) return;
+  if (asleep) {
+    if (touched) { asleep = false; M5.Display.setBrightness(200); markActive(); dirtyAll = true; }
+    return;
+  }
+  bool busy = sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
+              makeBusy.length() || (gameMsg.length() && gameMsg.endsWith("..."));
+  if (touched || busy) { markActive(); return; }
+  uint32_t idle = millis() - lastActivity, limit = (uint32_t)PLUGGIS_IDLE_MINUTES * 60000;
+  if (!idleWarned && idle > limit - 30000) {
+    idleWarned = true;
+    M5.Display.setBrightness(60);
+    auto& d = *G;
+    d.fillRoundRect(W / 2 - 360, H / 2 - 80, 720, 160, 28, WARN);
+    d.setFont(F_BIG);
+    d.setTextColor(BG);
+    d.setTextDatum(middle_center);
+    d.drawString("Stänger av om 30 s", W / 2, H / 2 - 24);
+    d.setFont(F_MID);
+    d.drawString("Tryck för att fortsätta", W / 2, H / 2 + 30);
+    d.setTextDatum(top_left);
+    present();
+  }
+  if (idle > limit) goToSleep();
 }
 
 void loop() {
@@ -2234,6 +2293,11 @@ void loop() {
 
   // Pekskärmen
   auto t = M5.Touch.getDetail();
+  if (t.wasPressed() && (asleep || idleWarned)) {
+    checkIdle(true);
+    return;   // trycket väcker bara, gör inget annat
+  }
+  checkIdle(t.wasPressed() || t.isPressed());
   if (t.wasPressed() && t.y < TOP_H) {
     if (inside(tabCoach, t.x, t.y)) showScreen(Screen::Coach);
     else if (inside(tabOva, t.x, t.y)) showScreen(Screen::OvaList);

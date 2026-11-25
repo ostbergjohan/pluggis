@@ -12,5 +12,8 @@
 #define PLUGGIS_DEVICE_ID   "fred"
 #define PLUGGIS_TOKEN       "byt-mig"
 
+// Stäng av efter så många minuter utan aktivitet (0 = aldrig)
+#define PLUGGIS_IDLE_MINUTES 5
+
 // Ljudvolym 0–255
 #define PLUGGIS_VOLUME      180
