@@ -121,6 +121,30 @@ static uint8_t* incoming = nullptr;
 static size_t incomingLen = 0, incomingFill = 0;
 static constexpr int AUDIO_CHUNK = 8192;   // under bibliotekets gräns (15 kB per ram)
 
+// Ljudeffekter: en liten melodi spelas ton för ton från loop() (på en egen kanal, så den inte avbryter talet)
+struct Note { uint16_t f, ms; };
+static const Note MEL_OK[] = {{1047, 70}, {1319, 70}, {1568, 70}, {2093, 160}};
+static const Note MEL_BAD[] = {{466, 150}, {440, 150}, {415, 150}, {392, 380}};
+static const Note MEL_DONE[] = {{784, 110}, {1047, 110}, {1319, 110}, {1568, 180}, {1319, 90}, {1568, 360}};
+static const Note MEL_TICK[] = {{1500, 40}};
+static const Note* mel = nullptr;
+static int melN = 0, melI = 0;
+static uint32_t melNext = 0;
+static void playMelody(const Note* m, int n) { mel = m; melN = n; melI = 0; melNext = 0; }
+#define SFX_OK() playMelody(MEL_OK, 4)
+#define SFX_BAD() playMelody(MEL_BAD, 4)
+#define SFX_DONE() playMelody(MEL_DONE, 6)
+static void pumpMelody() {
+  if (!mel || melI >= melN || millis() < melNext) return;
+  M5.Speaker.tone(mel[melI].f, mel[melI].ms, 7, false);
+  melNext = millis() + mel[melI].ms + 15;
+  if (++melI >= melN) mel = nullptr;
+}
+
+// Uppläsning av frågor (Pluggis röst via servern, hämtas i bakgrundstråden)
+static void sayAloud(const String& text);
+static void sayStop();
+
 static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true;
 
 // ---------------------------------------------------------------- text
@@ -313,7 +337,7 @@ static void setVolume(int v) {
   volume = v < 0 ? 0 : v > 255 ? 255 : v;
   M5.Speaker.setVolume(volume);
   prefs.putInt("volume", volume);
-  if (!M5.Speaker.isPlaying()) M5.Speaker.tone(1000, 60);
+  if (!M5.Speaker.isPlaying()) playMelody(MEL_TICK, 1);
   dirtyTop = true;
 }
 
@@ -491,6 +515,7 @@ static void answerByVoice(bool send);
 
 static void startRecording() {
   if (recording || !recBuf) return;
+  sayStop();
   stopPlayback();
   M5.Speaker.end();
   M5.Mic.begin();
@@ -816,7 +841,7 @@ static void nextCard() {
   voiceVerdict = -1;
   options.clear();
   correctIdx = -1;
-  if (answered >= ROUND) { noMoreCards = true; return; }
+  if (answered >= ROUND) { noMoreCards = true; SFX_DONE(); return; }
   for (int attempt = 0; attempt < 2; attempt++) {
     JsonDocument doc;
     int code = api("GET", "/api/flashcards/decks/" + String(cur.id) + "/next?announce=false&practiceAnyway=" +
@@ -850,6 +875,7 @@ static void nextCard() {
         }
       }
       noMoreCards = false;
+      if (!isLanguageDeck()) sayAloud(qFront.indexOf("___") >= 0 ? String(qFront) : qFront);
       return;
     }
     if (code == 404 && !practiceAnyway) { practiceAnyway = true; continue; }
@@ -892,6 +918,7 @@ static void showScreen(Screen s, bool force = false) {
   if (screen == Screen::HwDetail) listenStop(true);
   if (recording) stopRecording(false);
   if (s != Screen::Coach) stopPlayback();
+  sayStop();
   screen = s;
   if (s == Screen::OvaList || s == Screen::HwList || s == Screen::Plan) {
     decksLoaded = false;
@@ -1096,7 +1123,7 @@ static void answerByVoice(bool send) {
   spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
   voiceVerdict = said.length() ? judge(said, qBack) : -1;
   revealed = true;
-  if (voiceVerdict == 1) M5.Speaker.tone(1320, 120);
+  if (voiceVerdict == 1) SFX_OK();
   dirtyOva = true;
 }
 
@@ -1258,6 +1285,12 @@ static void startGame(int which, long hw, const String& title) {
     for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
   }
   if (!gameMsg.length()) practiceBegin();
+  examSpoken = -1;
+  if (!gameMsg.length()) {
+    if (game == Game::Explain) sayAloud(exReply);
+    else if (game == Game::Order) sayAloud(seqs[0].title + ". " + seqs[0].prompt);
+    else if (game == Game::Exam) examSpeak();
+  }
   dirtyAll = true;
 }
 
@@ -1272,11 +1305,25 @@ static void gameVoice(const String& said) {
     gameMsg = "";
     if (code == 200) explainApply(doc);
     else exReply = "Det gick inte att skicka just nu. Försök igen.";
-    if (gameDone) gameDoneReport("explain");
+    if (gameDone) { SFX_DONE(); gameDoneReport("explain"); }
+    sayAloud(exReply);
   } else if (game == Game::Exam && examI < (int)examQs.size()) {
     examAns[examI] = said;
   }
   dirtyOva = true;
+}
+
+static int examSpoken = -1;
+static void examSpeak() {
+  if (game != Game::Exam || gameDone || examI >= (int)examQs.size() || examSpoken == examI) return;
+  examSpoken = examI;
+  auto& q = examQs[examI];
+  String t = q.question;
+  if (q.choices.size() >= 2) {
+    const char* letters[] = {"A", "B", "C", "D"};
+    for (size_t i = 0; i < q.choices.size() && i < 4; i++) t += String(". ") + letters[i] + ": " + q.choices[i];
+  }
+  sayAloud(t);
 }
 
 static void examSubmit() {
@@ -1291,6 +1338,7 @@ static void examSubmit() {
   gameMsg = "";
   gameDone = true;
   if (code != 200) { gameMsg = "Det gick inte att rätta just nu (" + String(code) + ")."; return; }
+  SFX_DONE();
   examPoints = doc["points"] | 0;
   examMax = doc["maxPoints"] | 0;
   examPct = doc["percent"] | 0;
@@ -1413,6 +1461,9 @@ static void gameExit() {
 
 static void gameTouch(int x, int y) {
   lastTouchAt = millis();
+  bool onText = y > TOP_H + 40 && y < TOP_H + 260 && !gameMsg.length() && !gameDone;
+  if (onText && game == Game::Exam) { examSpoken = -1; examSpeak(); return; }
+  if (onText && game == Game::Explain) { sayAloud(exReply); return; }
   if (gameMsg.length()) { if (!gameMsg.endsWith("...")) gameExit(); return; }
   if (game == Game::Explain) {
     if (gameDone) { gameExit(); return; }
@@ -1447,11 +1498,11 @@ static void gameTouch(int x, int y) {
         if (matched[j] || selL < 0) return;
         if (j == selL) {
           matched[j] = true;
-          M5.Speaker.tone(1320, 80);
-          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) gameDoneReport("match");
+          SFX_OK();
+          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) { SFX_DONE(); gameDoneReport("match"); }
         } else {
           gWrongA = selL; gWrongB = i; gWrongUntil = millis() + 600;
-          M5.Speaker.tone(330, 120);
+          SFX_BAD();
         }
         selL = -1;
         dirtyOva = true;
@@ -1466,6 +1517,7 @@ static void gameTouch(int x, int y) {
       shownSteps.clear();
       for (size_t i = 0; i < seqs[seqI].steps.size(); i++) shownSteps.push_back(i);
       for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
+      sayAloud(seqs[seqI].title + ". " + seqs[seqI].prompt);
       dirtyOva = true;
       return;
     }
@@ -1474,10 +1526,10 @@ static void gameTouch(int x, int y) {
       if (shownSteps[k] == placed) {
         placed++;
         shownSteps.erase(shownSteps.begin() + k);
-        M5.Speaker.tone(1320, 60);
+        if (placed >= (int)sq.steps.size()) { SFX_DONE(); sayAloud("Rätt ordning! " + sq.why); } else SFX_OK();
       } else {
         gWrongA = k; gWrongUntil = millis() + 600;
-        M5.Speaker.tone(330, 120);
+        SFX_BAD();
       }
       dirtyOva = true;
       return;
@@ -1487,6 +1539,7 @@ static void gameTouch(int x, int y) {
 
 static void ovaTouch(int x, int y) {
   lastTouchAt = millis();
+  if (screen == Screen::OvaCard && !noMoreCards && chosen < 0 && y > TOP_H + 40 && y < TOP_H + 260) { sayAloud(revealed ? qFront + ". " + qBack : qFront); return; }
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
@@ -1514,7 +1567,7 @@ static void ovaTouch(int x, int y) {
       if (inside(optBtn[i], x, y)) {
         chosen = i;
         bool ok = (int)i == correctIdx;
-        M5.Speaker.tone(ok ? 1320 : 330, 120);
+        if (ok) SFX_OK(); else SFX_BAD();
         dirtyOva = true;
         redraw();
         grade(ok);
@@ -1789,22 +1842,66 @@ static void pumpListening() {
   }
 }
 
+// En fråga att läsa upp (vid sidan av läxans uppläsning)
+static String sayWant;
+static int sayGen = 0, sayWantGen = -1, sayBufGen = -1;
+static uint8_t* sayBuf = nullptr;
+static size_t sayLen = 0;
+
 static void fetchTask(void*) {
   for (;;) {
     int idx = -1, gen = -1;
+    bool isSay = false;
     String text;
     xSemaphoreTake(fetchLock, portMAX_DELAY);
     if (fetchWantIdx >= 0 && fetchedIdx < 0) { idx = fetchWantIdx; gen = fetchWantGen; text = fetchWantText; fetchWantIdx = -1; }
+    else if (sayWant.length()) { isSay = true; gen = sayWantGen; text = sayWant; sayWant = ""; }
     xSemaphoreGive(fetchLock);
-    if (idx < 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+    if (idx < 0 && !isSay) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
     uint8_t* buf;
     size_t len;
     int code = apiBinary("/api/speech/preview?small=true", "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
     xSemaphoreTake(fetchLock, portMAX_DELAY);
-    if (gen == fetchGen) { fetchedBuf = buf; fetchedLen = len; fetchedIdx = idx; fetchedGen = gen; fetchedCode = code; }
+    if (isSay) {
+      if (gen == sayGen && buf) { if (sayBuf) free(sayBuf); sayBuf = buf; sayLen = len; sayBufGen = gen; }
+      else if (buf) free(buf);
+    } else if (gen == fetchGen) { fetchedBuf = buf; fetchedLen = len; fetchedIdx = idx; fetchedGen = gen; fetchedCode = code; }
     else if (buf) free(buf);
     xSemaphoreGive(fetchLock);
   }
+}
+
+static void sayAloud(const String& text) {
+  if (!text.length() || !fetchLock) return;
+  String t = text;
+  t.replace("___", ", lucka, ");
+  if (t.length() > 290) t = t.substring(0, 290);
+  stopPlayback();
+  xSemaphoreTake(fetchLock, portMAX_DELAY);
+  sayGen++;
+  sayWant = t;
+  sayWantGen = sayGen;
+  if (sayBuf) { free(sayBuf); sayBuf = nullptr; }
+  xSemaphoreGive(fetchLock);
+}
+
+static void sayStop() {
+  if (!fetchLock) return;
+  xSemaphoreTake(fetchLock, portMAX_DELAY);
+  sayGen++;
+  sayWant = "";
+  if (sayBuf) { free(sayBuf); sayBuf = nullptr; }
+  xSemaphoreGive(fetchLock);
+}
+
+static void pumpSay() {
+  if (!fetchLock || recording) return;
+  xSemaphoreTake(fetchLock, portMAX_DELAY);
+  uint8_t* buf = sayBuf && sayBufGen == sayGen ? sayBuf : nullptr;
+  size_t len = sayLen;
+  if (buf) sayBuf = nullptr;
+  xSemaphoreGive(fetchLock);
+  if (buf) { stopPlayback(); Clip c{buf, len, -1}; playQueue.push_back(c); }
 }
 
 static void fetchReset() {
@@ -2030,7 +2127,7 @@ static void hwPlanTouch(int x, int y) {
       if (r.done) return;
       if (api("POST", "/api/plan/items/" + String(r.id) + "/done", "", nullptr) == 200) {
         r.done = true;
-        M5.Speaker.tone(1320, 100);
+        SFX_OK();
       }
       dirtyOva = true;
       return;
@@ -2164,6 +2261,9 @@ void loop() {
 
   pumpPlayback();
   pumpListening();
+  pumpSay();
+  pumpMelody();
+  examSpeak();
   if (wsUp && !meLoaded) {
     meLoaded = true;
     JsonDocument me;
