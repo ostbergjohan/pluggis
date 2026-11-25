@@ -2,9 +2,14 @@
 
 Firmware för skrivbordsskärmen (PlatformIO/Arduino). Pratar med servern enligt [docs/protokoll.md](../../docs/protokoll.md).
 
-**Version 1:** coachens svar, "tänker", timern för passet, flashkort och poäng på skärmen; knapparna
-*Börja/Hjälp*, *Avsluta* och *Håll in och prata* (rösten skickas som wav 16 kHz, svaret spelas upp mening för mening).
-Inte än: kameran (fota med telefonen) och Dual Button.
+**Flikar högst upp:**
+- **Pluggis** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
+- **Öva** – kortlekarna: flerval och lucktext att trycka på, vanliga kort med *Visa svar* → *Kunde / Kunde inte*. Ger poäng och övningstid.
+- **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
+- **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av.
+- Volym − / + (sparas) och batterinivå uppe till höger.
+
+Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hello). Inte än: kameran (fota med telefonen) och Dual Button.
 
 ## Flasha
 
