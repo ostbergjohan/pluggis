@@ -144,6 +144,8 @@ static void pumpMelody() {
 // Uppläsning av frågor (Pluggis röst via servern, hämtas i bakgrundstråden)
 static void sayAloud(const String& text);
 static void sayStop();
+static int examSpoken = -1;
+static void examSpeak();
 
 static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true;
 
@@ -1313,7 +1315,6 @@ static void gameVoice(const String& said) {
   dirtyOva = true;
 }
 
-static int examSpoken = -1;
 static void examSpeak() {
   if (game != Game::Exam || gameDone || examI >= (int)examQs.size() || examSpoken == examI) return;
   examSpoken = examI;
