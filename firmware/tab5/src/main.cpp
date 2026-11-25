@@ -30,6 +30,9 @@
 #endif
 
 static uint32_t lastActivity = 0;
+static bool pendingPractice = false;   // coachen bad om en övning (startas från loop())
+static String pendingKind;
+static long pendingHw = 0;
 static bool asleep = false, idleWarned = false;
 
 // ---------------------------------------------------------------- utseende
@@ -130,10 +133,10 @@ static constexpr int AUDIO_CHUNK = 8192;   // under bibliotekets gräns (15 kB p
 
 // Ljudeffekter: en liten melodi spelas ton för ton från loop() (på en egen kanal, så den inte avbryter talet)
 struct Note { uint16_t f, ms; };
-static const Note MEL_OK[] = {{1047, 70}, {1319, 70}, {1568, 70}, {2093, 160}};
+static const Note MEL_OK[] = {{523, 90}, {659, 90}, {784, 90}, {1047, 170}};   // mjukare, en oktav ner
 static const Note MEL_BAD[] = {{466, 150}, {440, 150}, {415, 150}, {392, 380}};
-static const Note MEL_DONE[] = {{784, 110}, {1047, 110}, {1319, 110}, {1568, 180}, {1319, 90}, {1568, 360}};
-static const Note MEL_TICK[] = {{1500, 40}};
+static const Note MEL_DONE[] = {{392, 120}, {523, 120}, {659, 120}, {784, 200}, {659, 100}, {784, 380}};
+static const Note MEL_TICK[] = {{880, 40}};
 static const Note* mel = nullptr;
 static int melN = 0, melI = 0;
 static uint32_t melNext = 0;
@@ -563,6 +566,7 @@ static void stopRecording(bool send) {
   M5.Mic.end();
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
+  M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
   if (screen != Screen::Coach) { answerByVoice(send); return; }
   drawButton(btnTalk);
   present();
@@ -672,6 +676,11 @@ static void onText(const char* json, size_t len) {
     }
     dirtyTop = dirtyMain = true;
     if (screen != Screen::Coach) dirtyOva = true;
+  } else if (type == "open_practice") {
+    // Coachen öppnar en övning: gå till Öva och starta den där
+    pendingKind = doc["kind"] | "quiz";
+    pendingHw = doc["homeworkId"] | 0L;
+    pendingPractice = true;
   } else if (type == "take_photo") {
     thinking = false;
     sayText = "Kameran på skärmen kommer snart. Fota med telefonen i Pluggis-appen så länge.";
@@ -2308,6 +2317,7 @@ void setup() {
   M5.Mic.end();
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
+  M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
 
   lastActivity = millis();
   connectWifi();
@@ -2419,6 +2429,19 @@ void loop() {
   pumpListening();
   pumpSay();
   pumpMelody();
+  if (pendingPractice) {
+    pendingPractice = false;
+    markActive();
+    showScreen(Screen::OvaList, true);   // laddar läxor och kortlekar
+    int idx = -1;
+    for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == pendingHw) idx = i;
+    if (idx >= 0) {
+      makeIdx = idx;
+      if (pendingKind == "quiz" || pendingKind == "cloze") makeQuiz(pendingHw, pendingKind.c_str());
+      else startGame(pendingKind == "explain" ? 2 : pendingKind == "exam" ? 3 : pendingKind == "match" ? 4 : 5, pendingHw, makeList[idx].label);
+    }
+    dirtyAll = true;
+  }
   examSpeak();
   if (wsUp && !meLoaded) {
     meLoaded = true;

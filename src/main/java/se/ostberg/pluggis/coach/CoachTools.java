@@ -36,6 +36,11 @@ public class CoachTools {
     private final PlanningService planning;
     private final ArrayNode definitions;
 
+    /** För open_practice: öppna övningen på elevens skärm (chatten/Tab5). */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @org.springframework.context.annotation.Lazy
+    private se.ostberg.pluggis.device.DeviceRegistry registry;
+
     public CoachTools(ObjectMapper mapper, StudySessionService sessions, HomeworkService homework,
                       FlashcardService flashcards, FlashcardGenerator generator, RewardsService rewards,
                       PlanningService planning) {
@@ -117,6 +122,26 @@ public class CoachTools {
                             text(input, "source_text", null), text(input, "subject", null),
                             input.path("count").asInt(8), input.hasNonNull("homework_id") ? input.path("homework_id").asLong() : null);
                     yield Map.of("ok", true, "deck_id", r.deck().getId(), "name", r.deck().getName(), "cards", r.cardCount());
+                }
+                case "open_practice" -> {
+                    String kind = text(input, "kind", "quiz").toLowerCase(java.util.Locale.ROOT);
+                    if (!java.util.List.of("quiz", "cloze", "explain", "exam", "match", "order").contains(kind)) {
+                        kind = "quiz";
+                    }
+                    Long hid = input.hasNonNull("homework_id") ? input.path("homework_id").asLong() : null;
+                    if (hid != null && homework.get(hid).isEmpty()) {
+                        yield Map.of("ok", false, "error", "Hittade ingen läxa med det id:t");
+                    }
+                    if (registry == null) {
+                        yield Map.of("ok", false, "error", "Kan inte öppna övningen just nu");
+                    }
+                    java.util.Map<String, Object> msg = new java.util.LinkedHashMap<>();
+                    msg.put("type", "open_practice");
+                    msg.put("kind", kind);
+                    msg.put("homeworkId", hid);
+                    registry.send(deviceId, msg);
+                    yield Map.of("ok", true, "opened", kind,
+                            "say", "Övningen öppnas nu i fliken Öva och körs där – säg kort att den startar, förhör inte i chatten.");
                 }
                 case "next_card" -> flashcards.next(input.path("deck_id").asLong(),
                                 input.path("practice_anyway").asBoolean(false), deviceId)
@@ -216,6 +241,14 @@ public class CoachTools {
         prop(quiz, "topic", "string", "Område, t.ex. 'Fotosyntesen'");
         prop(quiz, "source_text", "string", "Elevens eget material, om du har det");
         prop(quiz, "count", "integer", "Antal frågor, 5–15");
+
+        ObjectNode open = tool(tools, "open_practice",
+                "Öppnar en övning i fliken Öva på elevens skärm och startar den där (inte i chatten). Använd när eleven "
+                        + "vill göra ett quiz eller en övning – fråga först vilken sort om eleven inte sagt det.");
+        prop(open, "kind", "string", "quiz (snabbquiz, flerval), cloze (lucktext), explain (Förklara för Pluggis), "
+                + "exam (testprov), match (Matcha par) eller order (Rätt ordning)");
+        prop(open, "homework_id", "integer", "Läxans/provets id");
+        required(open, "kind");
 
         ObjectNode next = tool(tools, "next_card",
                 "Hämtar nästa kort att förhöra och visar framsidan på skärmen. "

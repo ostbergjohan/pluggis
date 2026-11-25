@@ -484,6 +484,7 @@ function onServer(m) {
       paintStatus();
       break;
     case 'take_photo': openUpload(); break;
+    case 'open_practice': openPractice(m.kind, m.homeworkId); break;
     default: break;
   }
 }
@@ -838,6 +839,17 @@ function quizMaker(list) {
       h('button', { class: 'quiz-btn', onclick: (e) => startExam(Number(sel.value), e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov')),
       h('button', { class: 'quiz-btn', onclick: (e) => startMatch(Number(sel.value), e.target) }, '🧩', h('span', {}, 'Matcha par'), h('small', {}, 'slå ditt rekord')),
       h('button', { class: 'quiz-btn', onclick: (e) => startOrder(Number(sel.value), e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser'))));
+}
+
+/** Coachen öppnar en övning (eleven bad om ett quiz i chatten): gå till Öva och starta den där. */
+async function openPractice(kind, homeworkId) {
+  await show('kort');
+  if (!homeworkId) { toast('Välj läxa och övning här'); return; }
+  const start = { quiz: () => makeQuiz(homeworkId, 'quiz'), cloze: () => makeQuiz(homeworkId, 'cloze'),
+    explain: () => explainFor(homeworkId), exam: () => startExam(homeworkId),
+    match: () => startMatch(homeworkId), order: () => startOrder(homeworkId) }[kind] || (() => makeQuiz(homeworkId, 'quiz'));
+  toast(kind === 'match' ? 'Startar …' : 'Pluggis gör övningen …');
+  start();
 }
 
 async function makeQuiz(homeworkId, mode, btn) {
