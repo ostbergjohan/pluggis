@@ -151,6 +151,8 @@ static void pumpMelody() {
 // Uppläsning av frågor (Pluggis röst via servern, hämtas i bakgrundstråden)
 static void sayAloud(const String& text, const char* lang = "");
 static void sayCardSide(const String& text);
+static const char* langFrom(String t);
+static bool looksSwedish(const String& in);
 static void sayStop();
 static int examSpoken = -1;
 static void examSpeak();
@@ -1059,8 +1061,7 @@ static bool isLanguageDeck() {
 }
 
 /** Språket i en språk-kortlek: "es", "de", "fr", "en" – annars "". */
-static const char* deckLang() {
-  String t = cur.subject + " " + cur.name;
+static const char* langFrom(String t) {
   t.toLowerCase();
   if (t.indexOf("spansk") >= 0 || t.indexOf("españ") >= 0 || t.indexOf("espan") >= 0) return "es";
   if (t.indexOf("tysk") >= 0 || t.indexOf("deutsch") >= 0) return "de";
@@ -1068,6 +1069,7 @@ static const char* deckLang() {
   if (t.indexOf("engelsk") >= 0 || t.indexOf("english") >= 0) return "en";
   return "";
 }
+static const char* deckLang() { return langFrom(cur.subject + " " + cur.name); }
 
 /** Ser texten svensk ut? (å/ä/ö eller vanliga svenska småord) */
 static bool looksSwedish(const String& in) {
@@ -1364,6 +1366,8 @@ static void examSpeak() {
   examSpoken = examI;
   auto& q = examQs[examI];
   String t = q.question;
+  const char* l = langFrom(gameTitle);
+  if (*l) { sayAloud(t, looksSwedish(t) ? "" : l); return; }
   if (q.choices.size() >= 2) {
     const char* letters[] = {"A", "B", "C", "D"};
     for (size_t i = 0; i < q.choices.size() && i < 4; i++) t += String(". ") + letters[i] + ": " + q.choices[i];
@@ -1663,7 +1667,7 @@ static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
 static SemaphoreHandle_t fetchLock = nullptr;
 static volatile int fetchGen = 0;          // ökas vid paus/hopp – gamla hämtningar kastas
 static int fetchWantIdx = -1, fetchWantGen = -1;
-static String fetchWantText;
+static String fetchWantText, fetchWantLang;
 static void fetchReset();
 static uint8_t* fetchedBuf = nullptr;
 static size_t fetchedLen = 0;
@@ -1874,6 +1878,10 @@ static void pumpListening() {
     fetchWantIdx = fetchPos;
     fetchWantGen = fetchGen;
     fetchWantText = sents[fetchPos].text;
+    {
+      const char* l = langFrom(hwCur.subject + " " + hwCur.title);
+      fetchWantLang = *l && !looksSwedish(fetchWantText) ? l : "";
+    }
   }
   xSemaphoreGive(fetchLock);
   if (ready) {
@@ -1904,14 +1912,14 @@ static void fetchTask(void*) {
     bool isSay = false;
     String text, lang;
     xSemaphoreTake(fetchLock, portMAX_DELAY);
-    if (fetchWantIdx >= 0 && fetchedIdx < 0) { idx = fetchWantIdx; gen = fetchWantGen; text = fetchWantText; fetchWantIdx = -1; }
+    if (fetchWantIdx >= 0 && fetchedIdx < 0) { idx = fetchWantIdx; gen = fetchWantGen; text = fetchWantText; lang = fetchWantLang; fetchWantIdx = -1; }
     else if (sayWant.length()) { isSay = true; gen = sayWantGen; text = sayWant; lang = sayWantLang; sayWant = ""; }
     xSemaphoreGive(fetchLock);
     if (idx < 0 && !isSay) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
     uint8_t* buf;
     size_t len;
     String path = "/api/speech/preview?small=true";
-    if (isSay && lang.length()) path += "&lang=" + lang;
+    if (lang.length()) path += "&lang=" + lang;
     int code = apiBinary(path, "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
     xSemaphoreTake(fetchLock, portMAX_DELAY);
     if (isSay) {

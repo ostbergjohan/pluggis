@@ -210,6 +210,10 @@ Byt med `PLUGGIS_COACH_MODEL` m.fl. (se `.env.example`). Coachens fasta regler o
 cachas (prompt caching); bara "läget just nu" och samtalet skickas fullt varje gång.
 Svaret strömmas och delas upp i meningar som läses upp en i taget.
 
+**Språk:** glosor, kort och läxmaterial i spanska, tyska, franska och engelska läses upp med Azures röst för språket
+(Elvira, Katja, Denise, Sonia) – meningar som ser svenska ut fortfarande med svensk röst. Kräver Azure-nyckeln nedan;
+utan den används telefonens röst för språket i appen.
+
 **Azures svenska röster (valfritt, gratis):** sätt `AZURE_SPEECH_KEY` och `AZURE_SPEECH_REGION` i `.env`
 (en Speech-resurs med prisnivå *Free F0* – 0,5 miljoner tecken/månad, kan inte debiteras). Då finns
 Sofie, Hillevi och Mattias under Inställningar → Röst, med Sofie som standard. Bara coachens svarstext

@@ -233,22 +233,46 @@ function sentences(text) {
   }
   return out;
 }
-async function fetchVoice(text) {
-  const res = await fetch('/api/speech/preview', { method: 'POST',
+// ---- Språk: glosor och material på spanska, tyska, franska och engelska läses med rätt röst ----
+/** Språket för ett ämne/en kortlek: 'es', 'de', 'fr', 'en' – annars ''. */
+function langOf(...texts) {
+  const t = texts.filter(Boolean).join(' ').toLowerCase();
+  if (/spansk|españ|espan/.test(t)) return 'es';
+  if (/tysk|deutsch/.test(t)) return 'de';
+  if (/fransk|français/.test(t)) return 'fr';
+  if (/engelsk|english/.test(t)) return 'en';
+  return '';
+}
+/** Ser texten svensk ut (å/ä/ö eller vanliga svenska småord)? */
+function looksSwedish(text) {
+  const t = ` ${(text || '').toLowerCase()} `;
+  return /[åäö]/.test(t) || / (och|att|jag|är|en|ett|det|med|för|inte|som|har|vi|du|han|hon|min|vad) /.test(t);
+}
+/** Röstens språk för en mening: språkämnets språk om meningen inte ser svensk ut. */
+function voiceLang(text, lang) { return lang && !looksSwedish(text) ? lang : ''; }
+const PHONE_LANG = { es: 'es-ES', de: 'de-DE', fr: 'fr-FR', en: 'en-GB' };
+
+async function fetchVoice(text, lang = '') {
+  const url = '/api/speech/preview' + (lang ? `?lang=${lang}` : '');
+  let res = await fetch(url, { method: 'POST',
     headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!res.ok && lang) {   // ingen språkröst på servern (Azure saknas) – svensk röst hellre än tystnad
+    res = await fetch('/api/speech/preview', { method: 'POST',
+      headers: { 'X-Pluggis-Token': S.token, 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  }
   if (!res.ok) throw new Error(String(res.status));
   return res.arrayBuffer();
 }
-async function speakServer(text) {
+async function speakServer(text, lang = '') {
   const run = ++speechRun;
   stopServerAudio();
   const list = sentences(text);
-  let next = list.length ? fetchVoice(list[0]) : null;
+  let next = list.length ? fetchVoice(list[0], voiceLang(list[0], lang)) : null;
   for (let i = 0; i < list.length; i++) {
     let buf;
     try { buf = await next; } catch { if (run === speechRun) toast('Kunde inte hämta Pluggis röst', true); return; }
     if (run !== speechRun) return;               // ett nytt svar har kommit – sluta läsa det gamla
-    next = i + 1 < list.length ? fetchVoice(list[i + 1]) : null;
+    next = i + 1 < list.length ? fetchVoice(list[i + 1], voiceLang(list[i + 1], lang)) : null;
     const ok = await playBuffer(buf);
     if (run !== speechRun) return;
     if (!ok && !playerUnlocked) {
@@ -1221,7 +1245,8 @@ function practiceDeck(d) {
   const controls = h('div', { class: 'fc-controls' });
   const status = h('div', { class: 'meta fc-status' });
   const bar = h('div', { class: 'quiz-progress' }, h('div'));
-  const say = h('button', { class: 'small-btn', onclick: () => readAloud(spoken(), say) }, '🔊 Läs upp');
+  const deckLang = langOf(d.deck.subject, d.deck.name);
+  const say = h('button', { class: 'small-btn', onclick: () => readAloud(spoken(), say, deckLang) }, '🔊 Läs upp');
   let current = null;
   const spoken = () => {
     if (!current) return front.textContent;
@@ -1449,7 +1474,7 @@ function stopReading() {
   if (window.speechSynthesis) speechSynthesis.cancel();
   if (readingBtn) { readingBtn.textContent = readingBtn.dataset.label || '🔊 Läs upp'; readingBtn = null; }
 }
-async function readAloud(text, btn) {
+async function readAloud(text, btn, lang = '') {
   if (readingBtn === btn) { stopReading(); return; }   // tryck igen = sluta
   stopReading();
   readingBtn = btn;
@@ -1461,11 +1486,18 @@ async function readAloud(text, btn) {
   if (usePluggis) {
     if (!playerUnlocked) { try { player.src = SILENCE; player.play().then(() => { playerUnlocked = true; }).catch(() => {}); } catch { /* */ } }
     const run = speechRun + 1;
-    await speakServer(text);
+    await speakServer(text, lang);
     if (speechRun === run && readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; }
   } else if (window.speechSynthesis) {
     const u = new SpeechSynthesisUtterance(forSpeech(text));
-    u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+    const l = voiceLang(text, lang);
+    if (l) {   // telefonens röst för språket (iPhone/Android har spanska, tyska, franska …)
+      u.lang = PHONE_LANG[l];
+      const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l));
+      if (v) u.voice = v;
+    } else {
+      u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+    }
     u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
     speechSynthesis.speak(u);
   }
@@ -1485,6 +1517,7 @@ function listenPlayer(x, material) {
     .filter(c => c.sents.length);
   if (!chapters.length) return null;
   const listened = new Set(x.listenedIds || []);
+  const hwLang = langOf(x.subject, x.title);   // språkläxa: utländska meningar läses med språkets röst
   let ci = Math.max(0, chapters.findIndex(c => c.id === x.listenMaterialId));
   let si = chapters[ci].id === x.listenMaterialId ? (x.listenSentence || 0) : 0;
   if (si >= chapters[ci].sents.length) si = 0;
@@ -1539,8 +1572,8 @@ function listenPlayer(x, material) {
     const usePluggis = S.serverVoice && S.voice !== 'telefon';
     if (usePluggis) {
       try {
-        const buf = await (prefetch && prefetch.text === text ? prefetch.p : fetchVoice(text));
-        prefetch = nextText ? { text: nextText, p: fetchVoice(nextText).catch(() => null) } : null;
+        const buf = await (prefetch && prefetch.text === text ? prefetch.p : fetchVoice(text, voiceLang(text, hwLang)));
+        prefetch = nextText ? { text: nextText, p: fetchVoice(nextText, voiceLang(nextText, hwLang)).catch(() => null) } : null;
         if (myRun !== run || !buf) return !!buf;
         const ok = await playBuffer(buf);
         if (ok || playerUnlocked) return true;
@@ -1549,7 +1582,9 @@ function listenPlayer(x, material) {
     if (!window.speechSynthesis || myRun !== run) return false;
     return new Promise(resolve => {
       const u = new SpeechSynthesisUtterance(forSpeech(text));
-      u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+      const l = voiceLang(text, hwLang);
+      if (l) { u.lang = PHONE_LANG[l]; const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l)); if (v) u.voice = v; }
+      else { u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v; }
       u.onend = () => resolve(true); u.onerror = () => resolve(false);
       speechSynthesis.speak(u);
     });
