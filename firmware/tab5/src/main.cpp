@@ -689,6 +689,7 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
 struct DeckInfo {
   long id;
   String name;
+  String subject;
   int cards, due;
   long homeworkId;
 };
@@ -756,6 +757,7 @@ static void loadDecks() {
     DeckInfo d;
     d.id = x["deck"]["id"] | 0L;
     d.name = clean(x["deck"]["name"] | "Kortlek");
+    d.subject = clean(x["deck"]["subject"] | "");
     d.cards = x["cards"] | 0;
     d.due = x["dueNow"] | 0;
     d.homeworkId = x["deck"]["homeworkId"] | 0L;
@@ -824,7 +826,7 @@ static void nextCard() {
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
       // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
-      if (options.empty() && qBack.length() && qBack.length() <= 70) {
+      if (options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
         std::vector<String> pool;
         for (auto& b : deckBacks)
           if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
@@ -977,8 +979,13 @@ static void drawOva() {
     }
     if (chosen >= 0) drawWrapped("Tryck för nästa", 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
   } else if (!revealed) {
-    drawTextButton(btnReveal, PANEL, "Visa svar");
-    drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
+    if (isLanguageDeck()) {
+      Button full = {btnReveal.x, btnReveal.y, btnSay.x + btnSay.w - btnReveal.x, btnReveal.h, "Visa svar", ACCENT};
+      drawTextButton(full, ACCENT, "Visa svar");
+    } else {
+      drawTextButton(btnReveal, PANEL, "Visa svar");
+      drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
+    }
   } else {
     if (spokenAnswer.length()) {
       String v = voiceVerdict == 1 ? "Låter rätt!  " : voiceVerdict == 0 ? "Jämför med svaret.  " : "";
@@ -989,6 +996,15 @@ static void drawOva() {
   }
 }
 
+
+/** Språk (glosor): rösten (svensk KB-Whisper) hör inte spanska ord bra – där trycker man i stället. */
+static bool isLanguageDeck() {
+  String t = cur.subject + " " + cur.name;
+  t.toLowerCase();
+  const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol"};
+  for (auto w : words) if (t.indexOf(w) >= 0) return true;
+  return false;
+}
 
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
 static String normalize(const String& in) {
@@ -1074,6 +1090,7 @@ static void makeQuiz(long homeworkId, const char* mode) {
   DeckInfo d;
   d.id = deck["id"] | 0L;
   d.name = clean(deck["name"] | "Snabbquiz");
+  d.subject = clean(deck["subject"] | "");
   d.cards = 10;
   d.due = 10;
   d.homeworkId = homeworkId;
@@ -1111,7 +1128,8 @@ static void ovaTouch(int x, int y) {
       }
     }
   } else if (!revealed) {
-    if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
+    if (isLanguageDeck()) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; } }
+    else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
     else if (inside(btnSay, x, y)) startRecording();
   } else {
     bool knew = inside(btnKnew, x, y), didnt = inside(btnDidnt, x, y);
