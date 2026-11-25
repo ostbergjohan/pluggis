@@ -47,7 +47,7 @@ static LovyanGFX* G = &M5.Display;
 static void present() {
   if (G == &frame) frame.pushSprite(0, 0);
 }
-static constexpr int TOP_H = 76;
+static constexpr int TOP_H = 96;
 static constexpr int BTN_H = 130;
 static constexpr int TIMER_H = 64;
 
@@ -60,7 +60,7 @@ static Button btnStart, btnEnd, btnTalk;
 static Button tabCoach, tabOva, tabHw, tabPlan, btnVolDown, btnVolUp;
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
-enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan };
+enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game };
 static Screen screen = Screen::Coach;
 static bool dirtyOva = false;
 
@@ -92,6 +92,8 @@ static bool cardAnswered = false, cardCorrect = false;
 static int cardBox = 0;
 
 static int weekPoints = -1;
+static bool pointsOn = false;    // poäng av/på för eleven (admin) – hämtas från /api/chat/me
+static bool meLoaded = false;
 static String pointsBanner;
 static uint32_t pointsBannerUntil = 0;
 
@@ -210,12 +212,12 @@ static void layout() {
   btnStart = {gap, by, sideW, BTN_H, "Börja", PANEL};
   btnTalk = {gap * 2 + sideW, by, talkW, BTN_H, "Håll in och prata", ACCENT};
   btnEnd = {gap * 3 + sideW + talkW, by, sideW, BTN_H, "Avsluta", PANEL};
-  tabCoach = {16, 10, 160, 56, "Pluggis", PANEL};
-  tabOva = {186, 10, 110, 56, "Öva", PANEL};
-  tabHw = {306, 10, 140, 56, "Läxor", PANEL};
-  tabPlan = {456, 10, 120, 56, "Plan", PANEL};
-  btnVolDown = {W - 560, 10, 64, 56, "-", PANEL};
-  btnVolUp = {W - 560 + 64 + 12 + 90 + 12, 10, 64, 56, "+", PANEL};
+  tabCoach = {12, 10, 186, 76, "Pluggis", PANEL};
+  tabOva = {208, 10, 142, 76, "Öva", PANEL};
+  tabHw = {360, 10, 166, 76, "Läxor", PANEL};
+  tabPlan = {536, 10, 142, 76, "Plan", PANEL};
+  btnVolDown = {W - 520, 14, 68, 68, "-", PANEL};
+  btnVolUp = {W - 520 + 68 + 12 + 90 + 12, 14, 68, 68, "+", PANEL};
 }
 
 static bool inside(const Button& b, int x, int y) {
@@ -235,7 +237,7 @@ static void drawButton(const Button& b, bool pressed = false, const char* label 
 static void drawTab(const Button& b, bool active) {
   auto& d = *G;
   d.fillRoundRect(b.x, b.y, b.w, b.h, 22, active ? ACCENT : PANEL);
-  d.setFont(F_MID);
+  d.setFont(F_BIG);
   d.setTextColor(INK);
   d.setTextDatum(middle_center);
   d.drawString(b.label, b.x + b.w / 2, b.y + b.h / 2);
@@ -288,18 +290,18 @@ static void drawTop() {
   d.drawString("+", btnVolUp.x + btnVolUp.w / 2, btnVolUp.y + btnVolUp.h / 2);
   d.setTextDatum(top_left);
   int sx = vx + btnVolDown.w + 12;
-  drawSpeaker(sx, 18, volume ? INK : MUTED);
+  drawSpeaker(sx, 28, volume ? INK : MUTED);
   int bars = (volume + 50) / 51;   // 0–5
   for (int i = 0; i < 5; i++) {
     int bh = 8 + i * 6;
-    d.fillRect(sx + 34 + i * 10, 18 + 40 - bh, 7, bh, i < bars ? ACCENT : PANEL);
+    d.fillRect(sx + 34 + i * 10, 28 + 40 - bh, 7, bh, i < bars ? ACCENT : PANEL);
   }
-  drawBattery(btnVolUp.x + btnVolUp.w + 28, 24);
-  if (weekPoints >= 0) {
+  drawBattery(btnVolUp.x + btnVolUp.w + 28, 34);
+  if (weekPoints >= 0 && pointsOn) {
     d.setFont(F_MID);
     d.setTextColor(WARN);
     d.setTextDatum(top_right);
-    d.drawString(String(weekPoints) + " p", W - 28, 20);
+    d.drawString(String(weekPoints) + " p", W - 28, 30);
     d.setTextDatum(top_left);
   }
   d.drawFastHLine(0, TOP_H - 1, W, PANEL);
@@ -621,7 +623,7 @@ static void onText(const char* json, size_t len) {
   } else if (type == "points") {
     int delta = doc["delta"] | 0;
     if (doc["weekTotal"].is<int>()) weekPoints = doc["weekTotal"].as<int>();
-    if (delta > 0) {
+    if (delta > 0 && pointsOn) {
       pointsBanner = "+" + String(delta);
       pointsBannerUntil = millis() + 3500;
     }
@@ -701,7 +703,9 @@ struct MakeHw {
 };
 static std::vector<MakeHw> makeList;
 static int makeIdx = 0;
-static Button btnMkPrev, btnMkNext, btnMkQuiz, btnMkCloze;
+static Button btnMkPrev, btnMkNext, btnMk[6];
+static const char* MK_LABELS[6] = {"Snabbquiz", "Lucktext", "Förklara", "Testprov", "Matcha par", "Rätt ordning"};
+static std::vector<long> allDeckIds, allDeckHw;   // alla kortlekar och deras läxa – för Matcha par
 static String makeBusy;
 static Button deckTiles[6];
 static bool decksLoaded = false;
@@ -717,6 +721,7 @@ static int answered = 0, rightCount = 0;
 static std::vector<String> deckBacks;   // svaren på lekens kort – blir felaktiga alternativ
 static String spokenAnswer;
 static bool isLanguageDeck();
+static String jsonEscape(const String& t);
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
 static Button btnSay;
 static constexpr int ROUND = 10;
@@ -776,6 +781,9 @@ static void loadDecks() {
     }
   }
   if (makeIdx >= (int)makeList.size()) makeIdx = 0;
+  allDeckIds.clear();
+  allDeckHw.clear();
+  for (auto& d : decks) { allDeckIds.push_back(d.id); allDeckHw.push_back(d.homeworkId); }
   if (decks.size() > 6) decks.resize(6);
   if (decks.empty() && makeList.empty()) ovaMessage = "Inga kortlekar än. Be Pluggis göra kort eller quiz av en läxa.";
   decksLoaded = true;
@@ -877,7 +885,8 @@ static void listenStop(bool save);
 
 static void showScreen(Screen s, bool force = false) {
   if (s == screen && !force) return;
-  if (screen == Screen::OvaCard) practiceEnd();
+  if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
+  if (screen == Screen::Game) game = Game::None;
   if (screen == Screen::HwDetail) listenStop(true);
   if (recording) stopRecording(false);
   if (s != Screen::Coach) stopPlayback();
@@ -894,12 +903,12 @@ static void showScreen(Screen s, bool force = false) {
 }
 
 static void layoutOva() {
-  int top = TOP_H + 230, gap = 20;
-  int ry = TOP_H + 92, rh = 96;
-  btnMkPrev = {gap, ry, 110, rh, "<", PANEL};
-  btnMkQuiz = {W - gap - 2 * 230 - gap, ry, 230, rh, "Snabbquiz", ACCENT};
-  btnMkCloze = {W - gap - 230, ry, 230, rh, "Lucktext", ACCENT};
-  btnMkNext = {btnMkQuiz.x - gap - 110, ry, 110, rh, ">", PANEL};
+  int top = TOP_H + 300, gap = 20;
+  int ry = TOP_H + 70, rh = 80;
+  btnMkPrev = {gap, ry, 100, rh, "<", PANEL};
+  btnMkNext = {W - gap - 100, ry, 100, rh, ">", PANEL};
+  int bw = (W - 7 * gap) / 6;
+  for (int i = 0; i < 6; i++) btnMk[i] = {gap + i * (bw + gap), ry + rh + 16, bw, 92, MK_LABELS[i], ACCENT};
   int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
   for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
@@ -917,10 +926,12 @@ static void drawTextButton(const Button& b, uint32_t color, const String& text) 
 }
 
 static void drawHwPlan();
+static void drawGame();
 
 static void drawOva() {
   auto& d = *G;
   d.fillRect(0, TOP_H, W, H - TOP_H, BG);
+  if (screen == Screen::Game) { drawGame(); return; }
   if (screen != Screen::OvaList && screen != Screen::OvaCard) { drawHwPlan(); return; }
   if (screen == Screen::OvaList) {
     d.setFont(F_BIG);
@@ -935,8 +946,7 @@ static void drawOva() {
       if (makeList.size() > 1) { drawTextButton(btnMkPrev, PANEL, "<"); drawTextButton(btnMkNext, PANEL, ">"); }
       int lx = btnMkPrev.x + btnMkPrev.w + 16;
       drawWrapped(makeList[makeIdx].label, lx, btnMkPrev.y + 8, btnMkNext.x - 16 - lx, btnMkPrev.h - 16, INK, F_MID, true);
-      drawTextButton(btnMkQuiz, ACCENT, "Snabbquiz");
-      drawTextButton(btnMkCloze, ACCENT, "Lucktext");
+      for (int i = 0; i < 6; i++) drawTextButton(btnMk[i], i < 2 ? ACCENT : 0x2D5BA8, MK_LABELS[i]);
     }
     if (decks.empty()) return;
     d.setFont(F_SMALL);
@@ -1040,14 +1050,13 @@ static int judge(const String& said, const String& answer) {
 }
 
 /** Inspelningen på ett kort: skicka till servern (KB-Whisper), visa vad som hördes och rätt svar. */
-static void answerByVoice(bool send) {
-  uint32_t ms = millis() - recStarted;
-  if (!send || screen != Screen::OvaCard || ms < 400 || recSamples < REC_RATE / 4) { dirtyOva = true; return; }
+static void gameVoice(const String& said);
+static void gameBusy(const String& what);
+
+/** Skickar inspelningen till servern (lokal KB-Whisper) och ger tillbaka texten. */
+static String transcribeRecording() {
   uint32_t bytes = recSamples * 2;
   writeWavHeader((uint8_t*)recBuf, bytes);
-  spokenAnswer = "...";
-  dirtyOva = true;
-  redraw();
   String said;
   if (WiFi.status() == WL_CONNECTED) {
     WiFiClient client;
@@ -1065,6 +1074,23 @@ static void answerByVoice(bool send) {
       http.end();
     }
   }
+  return said;
+}
+
+static void answerByVoice(bool send) {
+  uint32_t ms = millis() - recStarted;
+  bool ok = send && ms >= 400 && recSamples >= REC_RATE / 4;
+  if (screen == Screen::Game) {
+    if (!ok) { dirtyOva = true; return; }
+    gameBusy("Lyssnar på vad du sa ...");
+    gameVoice(transcribeRecording());
+    return;
+  }
+  if (!ok || screen != Screen::OvaCard) { dirtyOva = true; return; }
+  spokenAnswer = "...";
+  dirtyOva = true;
+  redraw();
+  String said = transcribeRecording();
   spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
   voiceVerdict = said.length() ? judge(said, qBack) : -1;
   revealed = true;
@@ -1099,15 +1125,382 @@ static void makeQuiz(long homeworkId, const char* mode) {
   openDeck(d);
 }
 
+
+// ---------------------------------------------------------------- Förklara, Testprov, Matcha par, Rätt ordning
+// Samma övningar som i appen. Förklara och skrivfrågor i Testprovet besvaras med rösten (KB-Whisper).
+enum class Game { None, Explain, Exam, Match, Order };
+static Game game = Game::None;
+static long gameHw = 0;
+static String gameTitle, gameMsg, gameHeard;
+static bool gameDone = false;
+static Button gBtn[10], gSay, gNext;
+static uint32_t gWrongUntil = 0;
+static int gWrongA = -1, gWrongB = -1;
+
+// Förklara
+static String exId, exConcept, exReply;
+static std::vector<String> exCovered, exMissing;
+// Testprov
+struct ExamQ { int n; String type, question; std::vector<String> choices; };
+static String examId;
+static std::vector<ExamQ> examQs;
+static std::vector<String> examAns;
+static int examI = 0, examPoints = 0, examMax = 0, examPct = 0;
+static std::vector<String> examReview;
+// Matcha par
+struct Pair { String a, b; };
+static std::vector<Pair> pairs;
+static std::vector<int> rightOrder;
+static std::vector<bool> matched;
+static int selL = -1;
+static uint32_t matchStart = 0;
+// Rätt ordning
+struct Seq { String title, prompt, why; std::vector<String> steps; };
+static std::vector<Seq> seqs;
+static int seqI = 0, placed = 0;
+static std::vector<int> shownSteps;
+
+static void gameBusy(const String& what) {
+  gameMsg = what;
+  dirtyOva = true;
+  redraw();
+}
+
+static void layoutGame() {
+  int gap = 20;
+  gSay = {gap, H - 112 - gap, W - 2 * gap, 112, "", ACCENT};
+  gNext = gSay;
+}
+
+static void gameDoneReport(const char* kind) {
+  api("POST", "/api/games/done", String("{\"kind\":\"") + kind + "\",\"what\":\"" + jsonEscape(gameTitle) + "\"}", nullptr);
+}
+
+static void explainApply(JsonDocument& doc) {
+  exId = (const char*)(doc["id"] | exId.c_str());
+  if (doc["concept"].is<const char*>()) exConcept = clean(doc["concept"]);
+  exReply = clean(doc["reply"] | "");
+  gameDone = doc["done"] | false;
+  exCovered.clear();
+  exMissing.clear();
+  for (JsonVariant v : doc["covered"].as<JsonArray>()) exCovered.push_back(clean(v.as<const char*>()));
+  for (JsonVariant v : doc["missing"].as<JsonArray>()) exMissing.push_back(clean(v.as<const char*>()));
+}
+
+static void startGame(int which, long hw, const String& title) {
+  game = which == 2 ? Game::Explain : which == 3 ? Game::Exam : which == 4 ? Game::Match : Game::Order;
+  gameHw = hw;
+  gameTitle = title;
+  gameDone = false;
+  gameHeard = "";
+  screen = Screen::Game;
+  dirtyAll = true;
+  cur.name = String(MK_LABELS[which]) + ": " + title;
+  cur.homeworkId = hw;
+  JsonDocument doc;
+  if (game == Game::Explain) {
+    gameBusy("Pluggis väljer ett begrepp ur materialet ...");
+    int code = api("POST", "/api/explain/start", "{\"homeworkId\":" + String(hw) + "}", &doc, 120000);
+    gameMsg = code == 200 ? "" : "Det gick inte att starta just nu (" + String(code) + ").";
+    if (code == 200) explainApply(doc);
+  } else if (game == Game::Exam) {
+    gameBusy("Pluggis gör ett testprov av materialet ...\n\nDet kan ta en minut.");
+    int code = api("POST", "/api/exam/start", "{\"homeworkId\":" + String(hw) + ",\"count\":10}", &doc, 180000);
+    gameMsg = code == 200 ? "" : "Det gick inte att göra ett testprov just nu (" + String(code) + ").";
+    examQs.clear();
+    examAns.clear();
+    examI = 0;
+    examId = (const char*)(doc["id"] | "");
+    for (JsonObject q : doc["questions"].as<JsonArray>()) {
+      ExamQ e{q["n"] | 0, q["type"] | "choice", clean(q["question"] | ""), {}};
+      for (JsonVariant c : q["choices"].as<JsonArray>()) e.choices.push_back(clean(c.as<const char*>()));
+      examQs.push_back(e);
+      examAns.push_back("");
+    }
+    if (code == 200 && examQs.empty()) gameMsg = "Testprovet blev tomt – prova igen.";
+  } else if (game == Game::Match) {
+    gameBusy("Hämtar kort ...");
+    pairs.clear();
+    for (size_t i = 0; i < allDeckIds.size() && pairs.size() < 12; i++) {
+      if (allDeckHw[i] != hw) continue;
+      JsonDocument cards;
+      if (api("GET", "/api/flashcards/decks/" + String(allDeckIds[i]) + "/cards", "", &cards) != 200) continue;
+      for (JsonObject c : cards.as<JsonArray>()) {
+        String a = clean(c["front"] | ""), b = clean(c["back"] | "");
+        if (a.length() && b.length() && a.length() <= 70 && b.length() <= 70 && a.indexOf("___") < 0) pairs.push_back({a, b});
+      }
+    }
+    for (int i = pairs.size() - 1; i > 0; i--) std::swap(pairs[i], pairs[esp_random() % (i + 1)]);
+    if (pairs.size() > 5) pairs.resize(5);
+    gameMsg = pairs.size() < 3 ? "Det behövs minst tre kort till läxan. Gör ett snabbquiz först." : "";
+    rightOrder.clear();
+    for (size_t i = 0; i < pairs.size(); i++) rightOrder.push_back(i);
+    for (int i = rightOrder.size() - 1; i > 0; i--) std::swap(rightOrder[i], rightOrder[esp_random() % (i + 1)]);
+    matched.assign(pairs.size(), false);
+    selL = -1;
+    matchStart = millis();
+  } else {
+    gameBusy("Pluggis gör ordningar ur materialet ...");
+    int code = api("POST", "/api/games/order", "{\"homeworkId\":" + String(hw) + "}", &doc, 120000);
+    seqs.clear();
+    for (JsonObject q : doc["sequences"].as<JsonArray>()) {
+      Seq sq{clean(q["title"] | ""), clean(q["prompt"] | ""), clean(q["why"] | ""), {}};
+      for (JsonVariant st : q["steps"].as<JsonArray>()) sq.steps.push_back(clean(st.as<const char*>()));
+      if (sq.steps.size() >= 2) seqs.push_back(sq);
+    }
+    gameMsg = code != 200 ? "Det gick inte just nu (" + String(code) + ")." : seqs.empty() ? "Hittade inget att ordna i materialet." : "";
+    seqI = 0;
+  }
+  if (game == Game::Order && !seqs.empty()) {
+    placed = 0;
+    shownSteps.clear();
+    for (size_t i = 0; i < seqs[0].steps.size(); i++) shownSteps.push_back(i);
+    for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
+  }
+  if (!gameMsg.length()) practiceBegin();
+  dirtyAll = true;
+}
+
+static void gameVoice(const String& said) {
+  gameMsg = "";
+  gameHeard = said;
+  if (!said.length()) { gameHeard = "(hörde inget – försök igen)"; dirtyOva = true; return; }
+  if (game == Game::Explain) {
+    gameBusy("Pluggis tänker ...");
+    JsonDocument doc;
+    int code = api("POST", "/api/explain/" + exId + "/answer", "{\"text\":\"" + jsonEscape(said) + "\"}", &doc, 60000);
+    gameMsg = "";
+    if (code == 200) explainApply(doc);
+    else exReply = "Det gick inte att skicka just nu. Försök igen.";
+    if (gameDone) gameDoneReport("explain");
+  } else if (game == Game::Exam && examI < (int)examQs.size()) {
+    examAns[examI] = said;
+  }
+  dirtyOva = true;
+}
+
+static void examSubmit() {
+  gameBusy("Pluggis rättar provet ...");
+  JsonDocument body;
+  JsonObject a = body["answers"].to<JsonObject>();
+  for (size_t i = 0; i < examQs.size(); i++) a[String(examQs[i].n)] = examAns[i];
+  String json;
+  serializeJson(body, json);
+  JsonDocument doc;
+  int code = api("POST", "/api/exam/" + examId + "/submit", json, &doc, 120000);
+  gameMsg = "";
+  gameDone = true;
+  if (code != 200) { gameMsg = "Det gick inte att rätta just nu (" + String(code) + ")."; return; }
+  examPoints = doc["points"] | 0;
+  examMax = doc["maxPoints"] | 0;
+  examPct = doc["percent"] | 0;
+  examReview.clear();
+  for (JsonVariant v : doc["review"].as<JsonArray>()) examReview.push_back(clean(v.as<const char*>()));
+}
+
+static void drawGame() {
+  auto& d = *G;
+  d.setFont(F_SMALL);
+  d.setTextColor(MUTED);
+  d.drawString(gameTitle, 28, TOP_H + 14);
+  if (gameMsg.length()) { drawWrapped(gameMsg + (gameMsg.endsWith("...") || gameMsg.indexOf("...\n") >= 0 ? "" : "\n\nTryck för att gå tillbaka."), 48, TOP_H + 90, W - 96, 400, ACCENT, F_BIG, true); return; }
+  int top = TOP_H + 56;
+  bool talk = false;
+  String talkLabel = "Håll in och svara";
+
+  if (game == Game::Explain) {
+    d.setFont(F_MID);
+    d.setTextColor(ACCENT);
+    d.drawString("Förklara: " + exConcept, 28, top);
+    int y = top + 52;
+    if (gameHeard.length()) { drawWrapped("Du: " + gameHeard, 28, y, W - 56, 64, MUTED, F_SMALL); y += 68; }
+    if (!gameDone) {
+      drawWrapped(exReply, 28, y, W - 56, gSay.y - y - 20, INK, F_BIG);
+      talk = true;
+      talkLabel = "Håll in och förklara";
+    } else {
+      drawWrapped(exReply, 28, y, W - 56, 110, INK, F_MID);
+      y += 120;
+      for (auto& c : exCovered) { if (y > H - 60) break; drawWrapped("OK  " + c, 48, y, W - 96, 40, GOOD, F_SMALL); y += 40; }
+      for (auto& m : exMissing) { if (y > H - 60) break; drawWrapped("+  " + m, 48, y, W - 96, 40, WARN, F_SMALL); y += 40; }
+      drawWrapped("Tryck för att gå tillbaka.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
+    }
+  } else if (game == Game::Exam) {
+    if (gameDone) {
+      drawWrapped("Testprov klart!\n" + String(examPoints) + " av " + String(examMax) + " poäng (" + String(examPct) + " %)", 48, top + 10, W - 96, 150, GOOD, F_BIG, true);
+      int y = top + 180;
+      if (!examReview.empty()) { drawWrapped("Det här ska du kolla igen:", 48, y, W - 96, 40, INK, F_MID); y += 50; }
+      for (auto& r : examReview) { if (y > H - 80) break; drawWrapped("-  " + r, 68, y, W - 136, 40, WARN, F_SMALL); y += 40; }
+      drawWrapped("Rätta svar finns i Pluggis-appen. Tryck för att gå tillbaka.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
+      return;
+    }
+    auto& q = examQs[examI];
+    d.setFont(F_SMALL);
+    d.setTextColor(MUTED);
+    d.setTextDatum(top_right);
+    d.drawString("Fråga " + String(examI + 1) + " av " + String(examQs.size()), W - 28, TOP_H + 14);
+    d.setTextDatum(top_left);
+    bool hasChoices = q.choices.size() >= 2;
+    int gap = 20, oh = 104, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
+    drawWrapped(q.question, 48, top, W - 96, (hasChoices ? oy : gSay.y - 80) - top - 10, INK, F_BIG, true);
+    if (hasChoices) {
+      for (size_t i = 0; i < q.choices.size() && i < 4; i++) {
+        gBtn[i] = {gap + (int)(i % 2) * (ow + gap), oy + (int)(i / 2) * (oh + gap), ow, oh, "", PANEL};
+        drawTextButton(gBtn[i], examAns[examI] == q.choices[i] ? ACCENT : PANEL, q.choices[i]);
+      }
+    } else {
+      if (examAns[examI].length()) drawWrapped("Ditt svar: " + examAns[examI], 48, gSay.y - 76, W - 96, 60, GOOD, F_SMALL, true);
+      int half = (W - 3 * gap) / 2;
+      gBtn[0] = {gap, gSay.y, half, gSay.h, "", ACCENT};
+      gBtn[1] = {2 * gap + half, gSay.y, half, gSay.h, "", PANEL};
+      drawTextButton(gBtn[0], recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
+      drawTextButton(gBtn[1], PANEL, examAns[examI].length() ? (examI + 1 < (int)examQs.size() ? "Nästa" : "Lämna in") : "Hoppa över");
+    }
+    return;
+  } else if (game == Game::Match) {
+    int n = pairs.size(), gap = 14, colW = (W - 3 * 20) / 2;
+    int rowH = (H - top - 20 - (n - 1) * gap) / n;
+    bool all = std::all_of(matched.begin(), matched.end(), [](bool b) { return b; });
+    for (int i = 0; i < n; i++) {
+      gBtn[i] = {20, top + i * (rowH + gap), colW, rowH, "", PANEL};
+      int j = rightOrder[i];
+      gBtn[5 + i] = {40 + colW, top + i * (rowH + gap), colW, rowH, "", PANEL};
+      bool wrongNow = millis() < gWrongUntil;
+      uint32_t cl = matched[i] ? 0x1E5A3C : (selL == i ? ACCENT : (wrongNow && gWrongA == i) ? BAD : PANEL);
+      uint32_t cr = matched[j] ? 0x1E5A3C : (wrongNow && gWrongB == i) ? BAD : PANEL;
+      drawTextButton(gBtn[i], cl, pairs[i].a);
+      drawTextButton(gBtn[5 + i], cr, pairs[j].b);
+    }
+    if (all) {
+      d.fillRoundRect(W / 2 - 300, H / 2 - 70, 600, 140, 28, GOOD);
+      drawWrapped("Klart på " + String((millis() - matchStart) / 1000) + " s!", W / 2 - 280, H / 2 - 50, 560, 100, BG, F_BIG, true);
+    }
+    return;
+  } else if (game == Game::Order) {
+    auto& sq = seqs[seqI];
+    d.setFont(F_MID);
+    d.setTextColor(ACCENT);
+    d.drawString(sq.title + "  (" + String(seqI + 1) + " av " + String(seqs.size()) + ")", 28, top);
+    drawWrapped(sq.prompt, 28, top + 46, W - 56, 50, MUTED, F_SMALL);
+    int y = top + 100;
+    // de som är på plats
+    for (int k = std::max(0, placed - 3); k < placed; k++) { drawWrapped(String(k + 1) + ". " + sq.steps[k], 48, y, W - 96, 38, GOOD, F_SMALL); y += 38; }
+    if (placed >= (int)sq.steps.size()) {
+      drawWrapped("Rätt ordning!\n" + sq.why, 48, y + 10, W - 96, H - y - 80, INK, F_MID, true);
+      drawWrapped("Tryck för att fortsätta.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
+      return;
+    }
+    int gap = 16, cols = 2, bw = (W - 3 * 20) / 2;
+    int rows = (shownSteps.size() + 1) / 2;
+    int bh = std::min(100, (H - y - 30 - (rows - 1) * gap) / std::max(1, rows));
+    for (size_t k = 0; k < shownSteps.size() && k < 10; k++) {
+      gBtn[k] = {20 + (int)(k % cols) * (bw + 20), y + 10 + (int)(k / cols) * (bh + gap), bw, bh, "", PANEL};
+      bool wrongNow = millis() < gWrongUntil && gWrongA == (int)k;
+      drawTextButton(gBtn[k], wrongNow ? BAD : PANEL, sq.steps[shownSteps[k]]);
+    }
+    return;
+  }
+  if (talk) drawTextButton(gSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : talkLabel);
+}
+
+static void gameExit() {
+  if (recording) stopRecording(false);
+  practiceEnd();
+  game = Game::None;
+  screen = Screen::Coach;
+  showScreen(Screen::OvaList);
+}
+
+static void gameTouch(int x, int y) {
+  lastTouchAt = millis();
+  if (gameMsg.length()) { if (!gameMsg.endsWith("...")) gameExit(); return; }
+  if (game == Game::Explain) {
+    if (gameDone) { gameExit(); return; }
+    if (inside(gSay, x, y)) startRecording();
+  } else if (game == Game::Exam) {
+    if (gameDone) { gameExit(); return; }
+    auto& q = examQs[examI];
+    if (q.choices.size() >= 2) {
+      for (size_t i = 0; i < q.choices.size() && i < 4; i++) {
+        if (!inside(gBtn[i], x, y)) continue;
+        examAns[examI] = q.choices[i];
+        dirtyOva = true;
+        redraw();
+        delay(250);
+        if (++examI >= (int)examQs.size()) { examI = examQs.size() - 1; examSubmit(); }
+        dirtyOva = true;
+        return;
+      }
+    } else if (inside(gBtn[0], x, y)) {
+      startRecording();
+    } else if (inside(gBtn[1], x, y)) {
+      if (++examI >= (int)examQs.size()) { examI = examQs.size() - 1; examSubmit(); }
+      dirtyOva = true;
+    }
+  } else if (game == Game::Match) {
+    if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) { gameExit(); return; }
+    int n = pairs.size();
+    for (int i = 0; i < n; i++) {
+      if (inside(gBtn[i], x, y) && !matched[i]) { selL = i; dirtyOva = true; return; }
+      if (inside(gBtn[5 + i], x, y)) {
+        int j = rightOrder[i];
+        if (matched[j] || selL < 0) return;
+        if (j == selL) {
+          matched[j] = true;
+          M5.Speaker.tone(1320, 80);
+          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) gameDoneReport("match");
+        } else {
+          gWrongA = selL; gWrongB = i; gWrongUntil = millis() + 600;
+          M5.Speaker.tone(330, 120);
+        }
+        selL = -1;
+        dirtyOva = true;
+        return;
+      }
+    }
+  } else if (game == Game::Order) {
+    auto& sq = seqs[seqI];
+    if (placed >= (int)sq.steps.size()) {
+      if (++seqI >= (int)seqs.size()) { gameDoneReport("order"); gameExit(); return; }
+      placed = 0;
+      shownSteps.clear();
+      for (size_t i = 0; i < seqs[seqI].steps.size(); i++) shownSteps.push_back(i);
+      for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
+      dirtyOva = true;
+      return;
+    }
+    for (size_t k = 0; k < shownSteps.size() && k < 10; k++) {
+      if (!inside(gBtn[k], x, y)) continue;
+      if (shownSteps[k] == placed) {
+        placed++;
+        shownSteps.erase(shownSteps.begin() + k);
+        M5.Speaker.tone(1320, 60);
+      } else {
+        gWrongA = k; gWrongUntil = millis() + 600;
+        M5.Speaker.tone(330, 120);
+      }
+      dirtyOva = true;
+      return;
+    }
+  }
+}
+
 static void ovaTouch(int x, int y) {
   lastTouchAt = millis();
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
       bool onLabel = y >= btnMkPrev.y && y < btnMkPrev.y + btnMkPrev.h && x > btnMkPrev.x + btnMkPrev.w && x < btnMkNext.x;
+      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
       if (makeList.size() > 1 && (inside(btnMkNext, x, y) || onLabel)) { makeIdx = (makeIdx + 1) % makeList.size(); dirtyOva = true; return; }
-      bool quiz = inside(btnMkQuiz, x, y), cloze = inside(btnMkCloze, x, y);
-      if (quiz || cloze) { makeQuiz(makeList[makeIdx].id, quiz ? "quiz" : "cloze"); return; }
+      for (int i = 0; i < 6; i++) {
+        if (!inside(btnMk[i], x, y)) continue;
+        long hw = makeList[makeIdx].id;
+        if (i == 0) makeQuiz(hw, "quiz");
+        else if (i == 1) makeQuiz(hw, "cloze");
+        else startGame(i, hw, makeList[makeIdx].label);
+        return;
+      }
     }
     for (size_t i = 0; i < decks.size(); i++) if (inside(deckTiles[i], x, y)) { openDeck(decks[i]); return; }
     if (ovaMessage.length()) { decksLoaded = false; dirtyOva = true; redraw(); loadDecks(); dirtyOva = true; }
@@ -1705,6 +2098,7 @@ void setup() {
   layout();
   layoutOva();
   layoutHwPlan();
+  layoutGame();
   fetchLock = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
   dirtyAll = true;
@@ -1742,6 +2136,8 @@ void loop() {
     else if (inside(tabPlan, t.x, t.y)) showScreen(Screen::Plan);
     else if (inside(btnVolDown, t.x, t.y)) setVolume(volume - 32);
     else if (inside(btnVolUp, t.x, t.y)) setVolume(volume + 32);
+  } else if (t.wasPressed() && screen == Screen::Game) {
+    gameTouch(t.x, t.y);
   } else if (t.wasPressed() && (screen == Screen::OvaList || screen == Screen::OvaCard)) {
     ovaTouch(t.x, t.y);
   } else if (t.wasPressed() && screen != Screen::Coach) {
@@ -1768,6 +2164,12 @@ void loop() {
 
   pumpPlayback();
   pumpListening();
+  if (wsUp && !meLoaded) {
+    meLoaded = true;
+    JsonDocument me;
+    if (api("GET", "/api/chat/me", "", &me) == 200) pointsOn = me["pointsEnabled"] | false;
+    dirtyTop = true;
+  }
   tickPractice();
 
   static uint32_t lastBattery = 0;
@@ -1784,6 +2186,10 @@ void loop() {
   if (millis() - lastTick > 400) {
     lastTick = millis();
     if (thinking && mode == Mode::Coach) dirtyDots = true;
+    static bool wasWrong = false;
+    bool wrongNow = millis() < gWrongUntil;
+    if (wasWrong && !wrongNow && screen == Screen::Game) dirtyOva = true;
+    wasWrong = wrongNow;
     if (sessionActive) dirtyTimer = true;
     if (pointsBanner.length() && millis() > pointsBannerUntil) { pointsBanner = ""; dirtyMain = true; }
   }
