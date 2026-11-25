@@ -757,7 +757,13 @@ static std::vector<MakeHw> makeList;
 static int makeIdx = 0;
 static Button btnMkPrev, btnMkNext, btnMk[6];
 static const char* MK_LABELS[6] = {"Snabbquiz", "Lucktext", "Förklara", "Testprov", "Matcha par", "Rätt ordning"};
-static std::vector<long> allDeckIds, allDeckHw;   // alla kortlekar och deras läxa – för Matcha par
+static std::vector<long> allDeckIds, allDeckHw;
+// Fokus: delområden i vald läxa ("Siffror 1–100", "Veckodagar" …) – välj ett eller Allt
+static std::vector<String> mkTopics;
+static long mkTopicsFor = -1;
+static int mkFocus = 0;   // 0 = Allt
+static Button btnChip[7];
+static String currentFocus() { return mkFocus > 0 && mkFocus <= (int)mkTopics.size() ? mkTopics[mkFocus - 1] : String(); }   // alla kortlekar och deras läxa – för Matcha par
 static String makeBusy;
 static Button deckTiles[6];
 static bool decksLoaded = false;
@@ -970,12 +976,12 @@ static void showScreen(Screen s, bool force = false) {
 }
 
 static void layoutOva() {
-  int top = TOP_H + 300, gap = 20;
+  int top = TOP_H + 368, gap = 20;
   int ry = TOP_H + 70, rh = 80;
   btnMkPrev = {gap, ry, 100, rh, "<", PANEL};
   btnMkNext = {W - gap - 100, ry, 100, rh, ">", PANEL};
   int bw = (W - 7 * gap) / 6;
-  for (int i = 0; i < 6; i++) btnMk[i] = {gap + i * (bw + gap), ry + rh + 16, bw, 92, MK_LABELS[i], ACCENT};
+  for (int i = 0; i < 6; i++) btnMk[i] = {gap + i * (bw + gap), ry + rh + 16 + 68, bw, 92, MK_LABELS[i], ACCENT};
   int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
   for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
@@ -1013,6 +1019,29 @@ static void drawOva() {
       if (makeList.size() > 1) { drawTextButton(btnMkPrev, PANEL, "<"); drawTextButton(btnMkNext, PANEL, ">"); }
       int lx = btnMkPrev.x + btnMkPrev.w + 16;
       drawWrapped(makeList[makeIdx].label, lx, btnMkPrev.y + 8, btnMkNext.x - 16 - lx, btnMkPrev.h - 16, INK, F_MID, true);
+      int cy = btnMkPrev.y + btnMkPrev.h + 12, cx = 20;
+      d.setFont(F_SMALL);
+      if (mkTopicsFor != makeList[makeIdx].id) {
+        d.setTextColor(MUTED);
+        d.drawString("Letar delområden ...", cx, cy + 16);
+      } else if (!mkTopics.empty()) {
+        d.setTextColor(MUTED);
+        d.drawString("Öva på:", cx, cy + 16);
+        cx += d.textWidth("Öva på:") + 14;
+        for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
+          String t = i == 0 ? String("Allt") : mkTopics[i - 1];
+          d.setFont(F_SMALL);
+          int w = d.textWidth(t) + 36;
+          if (cx + w > W - 20) { btnChip[i] = {0, 0, 0, 0, "", PANEL}; continue; }
+          btnChip[i] = {cx, cy, w, 56, "", PANEL};
+          d.fillRoundRect(cx, cy, w, 56, 28, i == mkFocus ? ACCENT : PANEL);
+          d.setTextColor(INK);
+          d.setTextDatum(middle_center);
+          d.drawString(t, cx + w / 2, cy + 28);
+          d.setTextDatum(top_left);
+          cx += w + 10;
+        }
+      }
       for (int i = 0; i < 6; i++) drawTextButton(btnMk[i], i < 2 ? ACCENT : 0x2D5BA8, MK_LABELS[i]);
     }
     if (decks.empty()) return;
@@ -1225,7 +1254,9 @@ static void makeQuiz(long homeworkId, const char* mode) {
   dirtyOva = true;
   redraw();
   JsonDocument doc;
-  int code = api("POST", "/api/flashcards/quiz", "{\"homeworkId\":" + String(homeworkId) + ",\"mode\":\"" + mode + "\",\"count\":10}", &doc, 120000);
+  String focus = mkTopicsFor == homeworkId ? currentFocus() : String();
+  int code = api("POST", "/api/flashcards/quiz", "{\"homeworkId\":" + String(homeworkId) + ",\"mode\":\"" + mode +
+                 "\",\"count\":10" + (focus.length() ? ",\"focus\":\"" + jsonEscape(focus) + "\"" : String()) + "}", &doc, 120000);
   makeBusy = "";
   if (code != 200) {
     ovaMessage = String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.";
@@ -1312,17 +1343,20 @@ static void startGame(int which, long hw, const String& title) {
   gameHeard = "";
   screen = Screen::Game;
   dirtyAll = true;
-  cur.name = String(MK_LABELS[which]) + ": " + title;
+  String focus = mkTopicsFor == hw ? currentFocus() : String();
+  String focusJson = focus.length() ? ",\"focus\":\"" + jsonEscape(focus) + "\"" : String();
+  if (focus.length()) gameTitle = focus + " · " + title;
+  cur.name = String(MK_LABELS[which]) + ": " + (focus.length() ? focus + " · " : "") + title;
   cur.homeworkId = hw;
   JsonDocument doc;
   if (game == Game::Explain) {
     gameBusy("Pluggis väljer ett begrepp ur materialet ...");
-    int code = api("POST", "/api/explain/start", "{\"homeworkId\":" + String(hw) + "}", &doc, 120000);
+    int code = api("POST", "/api/explain/start", "{\"homeworkId\":" + String(hw) + focusJson + "}", &doc, 120000);
     gameMsg = code == 200 ? "" : "Det gick inte att starta just nu (" + String(code) + ").";
     if (code == 200) explainApply(doc);
   } else if (game == Game::Exam) {
     gameBusy("Pluggis gör ett testprov av materialet ...\n\nDet kan ta en minut.");
-    int code = api("POST", "/api/exam/start", "{\"homeworkId\":" + String(hw) + ",\"count\":10}", &doc, 180000);
+    int code = api("POST", "/api/exam/start", "{\"homeworkId\":" + String(hw) + ",\"count\":10" + focusJson + "}", &doc, 180000);
     gameMsg = code == 200 ? "" : "Det gick inte att göra ett testprov just nu (" + String(code) + ").";
     examQs.clear();
     examAns.clear();
@@ -1348,6 +1382,26 @@ static void startGame(int which, long hw, const String& title) {
       }
     }
     for (int i = pairs.size() - 1; i > 0; i--) std::swap(pairs[i], pairs[esp_random() % (i + 1)]);
+    // Fokus: kort som nämner delområdets ord först
+    if (focus.length()) {
+      std::vector<String> fw;
+      String f = focus;
+      f.toLowerCase();
+      int st = 0;
+      while (st <= (int)f.length()) {
+        int sp = f.indexOf(' ', st);
+        String w = f.substring(st, sp < 0 ? f.length() : sp);
+        if (w.length() > 3) fw.push_back(w);
+        if (sp < 0) break;
+        st = sp + 1;
+      }
+      std::stable_partition(pairs.begin(), pairs.end(), [&](const Pair& p) {
+        String t = p.a + " " + p.b;
+        t.toLowerCase();
+        for (auto& w : fw) if (t.indexOf(w) >= 0) return true;
+        return false;
+      });
+    }
     // Variation: kort som var med de senaste gångerna hamnar sist
     static std::vector<String> recentMatch;
     std::stable_partition(pairs.begin(), pairs.end(), [](const Pair& p) {
@@ -1365,7 +1419,7 @@ static void startGame(int which, long hw, const String& title) {
     matchStart = millis();
   } else {
     gameBusy("Pluggis gör ordningar ur materialet ...");
-    int code = api("POST", "/api/games/order", "{\"homeworkId\":" + String(hw) + "}", &doc, 120000);
+    int code = api("POST", "/api/games/order", "{\"homeworkId\":" + String(hw) + focusJson + "}", &doc, 120000);
     seqs.clear();
     for (JsonObject q : doc["sequences"].as<JsonArray>()) {
       Seq sq{clean(q["title"] | ""), clean(q["prompt"] | ""), clean(q["why"] | ""), {}};
@@ -1644,10 +1698,13 @@ static void ovaTouch(int x, int y) {
   }
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
-      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
+      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
       bool onLabel = y >= btnMkPrev.y && y < btnMkPrev.y + btnMkPrev.h && x > btnMkPrev.x + btnMkPrev.w && x < btnMkNext.x;
-      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
-      if (makeList.size() > 1 && (inside(btnMkNext, x, y) || onLabel)) { makeIdx = (makeIdx + 1) % makeList.size(); dirtyOva = true; return; }
+      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
+      if (makeList.size() > 1 && (inside(btnMkNext, x, y) || onLabel)) { makeIdx = (makeIdx + 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
+      for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
+        if (btnChip[i].w && inside(btnChip[i], x, y)) { mkFocus = i; dirtyOva = true; return; }
+      }
       for (int i = 0; i < 6; i++) {
         if (!inside(btnMk[i], x, y)) continue;
         long hw = makeList[makeIdx].id;
@@ -2429,6 +2486,17 @@ void loop() {
   pumpListening();
   pumpSay();
   pumpMelody();
+  if (screen == Screen::OvaList && decksLoaded && !makeBusy.length() && !makeList.empty() && mkTopicsFor != makeList[makeIdx].id) {
+    long id = makeList[makeIdx].id;
+    redraw();
+    JsonDocument t;
+    mkTopics.clear();
+    if (api("GET", "/api/homework/" + String(id) + "/topics", "", &t, 60000) == 200)
+      for (JsonVariant v : t["topics"].as<JsonArray>()) mkTopics.push_back(clean(v.as<const char*>()));
+    mkTopicsFor = id;
+    mkFocus = 0;
+    dirtyOva = true;
+  }
   if (pendingPractice) {
     pendingPractice = false;
     markActive();

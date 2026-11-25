@@ -826,12 +826,41 @@ views.kort = async () => {
   return page;
 };
 
+// ---- Fokus: öva på ett delområde (t.ex. "Siffror 1–100") i stället för hela läxan ----
+const focusState = { chosen: {}, topics: {} };
+function focusOf(homeworkId) { return focusState.chosen[homeworkId] || ''; }
+
+/** Knappraden "Öva på: Allt · Siffror · Veckodagar …" för vald läxa. getId() ger läxans id. */
+function focusRow(getId) {
+  const row = h('div', { class: 'focus-row' });
+  async function paint() {
+    const id = getId();
+    if (!id) { row.replaceChildren(); return; }
+    let topics = focusState.topics[id];
+    if (!topics) {
+      row.replaceChildren(h('span', { class: 'meta' }, 'Letar delområden …'));
+      try { topics = (await api(`/api/homework/${id}/topics`)).topics || []; } catch { topics = []; }
+      focusState.topics[id] = topics;
+      if (getId() !== id) return;
+    }
+    if (!topics.length) { row.replaceChildren(); return; }
+    const cur = focusOf(id);
+    row.replaceChildren(h('span', { class: 'focus-label' }, 'Öva på:'),
+      ...['', ...topics].map(t => h('button', { class: 'focus-chip' + (t === cur ? ' on' : ''),
+        onclick: () => { focusState.chosen[id] = t; paint(); } }, t || 'Allt')));
+  }
+  paint();
+  return { el: row, paint };
+}
+
 /** Välj läxa/prov och sort, så gör Claude frågorna av materialet. */
 function quizMaker(list) {
   const sel = h('select', { class: 'quiz-sel' }, list.map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ' · ' + rel(x.dueDate) : ''}`)));
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
+  const focus = focusRow(() => Number(sel.value));
+  sel.addEventListener('change', () => focus.paint());
   return h('div', { class: 'box quiz-maker' },
-    h('div', { class: 'quiz-title' }, 'Ny övning'), sel,
+    h('div', { class: 'quiz-title' }, 'Ny övning'), sel, focus.el,
     h('div', { class: 'quiz-btns six' },
       h('button', { class: 'quiz-btn', onclick: go('quiz') }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: go('cloze') }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
@@ -856,7 +885,7 @@ async function makeQuiz(homeworkId, mode, btn) {
   const label = btn ? btn.closest('button').innerHTML : '';
   if (btn) { btn = btn.closest('button'); btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis gör frågor…</span><small>tar några sekunder</small>'; }
   try {
-    const r = await api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId, mode, count: 10 } });
+    const r = await api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId, mode, count: 10, focus: focusOf(homeworkId) || null } });
     if (r.note) toast(r.note);
     practiceDeck({ deck: r.deck, dueNow: r.cardCount });
   } catch (e) {
@@ -947,7 +976,9 @@ async function startMatch(homeworkId, btn) {
   const usable = cards.filter(c => c.back && c.back.length <= 70 && c.front.length <= 90)
     .map(c => ({ id: c.id, left: c.kind === 'CLOZE' ? c.front.replace('___', '…') : c.front, right: c.back }));
   const seen = new Set();
-  const pool = shuffle(usable).filter(p => { const k = p.right.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  const fw = focusOf(homeworkId).toLowerCase().split(/[^a-zåäöéñü0-9]+/).filter(w => w.length > 3);
+  const about = (p) => fw.some(w => `${p.left} ${p.right}`.toLowerCase().includes(w));
+  const pool = shuffle(usable).sort((a, b) => about(b) - about(a)).filter(p => { const k = p.right.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
   if (pool.length < 3) {
     toast('Gör flashkort, ett snabbquiz eller en lucktext till läxan först – Matcha par spelas med korten', true);
     return;
@@ -1027,7 +1058,7 @@ async function startOrder(homeworkId, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis letar ordningar…</span><small>tar några sekunder</small>'; }
   let g;
   try {
-    g = await api('/api/games/order', { method: 'POST', body: { homeworkId } });
+    g = await api('/api/games/order', { method: 'POST', body: { homeworkId, focus: focusOf(homeworkId) || null } });
   } catch (e) {
     toast(e.message || 'Det gick inte just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
@@ -1091,7 +1122,7 @@ async function startExam(homeworkId, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis gör provet…</span><small>tar en halv minut</small>'; }
   let ex;
   try {
-    ex = await api('/api/exam/start', { method: 'POST', body: { homeworkId, count: 10 } });
+    ex = await api('/api/exam/start', { method: 'POST', body: { homeworkId, count: 10, focus: focusOf(homeworkId) || null } });
   } catch (e) {
     toast(e.message || 'Det gick inte just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
@@ -1198,7 +1229,7 @@ async function explainFor(homeworkId, btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis funderar…</span><small>tar några sekunder</small>'; }
   let r;
   try {
-    r = await api('/api/explain/start', { method: 'POST', body: { homeworkId } });
+    r = await api('/api/explain/start', { method: 'POST', body: { homeworkId, focus: focusOf(homeworkId) || null } });
   } catch (e) {
     toast(e.message || 'Det gick inte just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
@@ -1486,7 +1517,7 @@ async function homeworkDetail(id) {
   }
   page.append(h('button', { class: 'big', style: 'margin-top:16px', onclick: () => openUpload(x.id) }, '📷 Lägg till sidor eller filer'));
   if (x.kind !== 'OTHER') {
-    page.append(h('h3', {}, 'Öva'), h('div', { class: 'quiz-btns six' },
+    page.append(h('h3', {}, 'Öva'), focusRow(() => x.id).el, h('div', { class: 'quiz-btns six' },
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'quiz', e.target) }, '⚡', h('span', {}, 'Snabbquiz'), h('small', {}, 'fyra alternativ')),
       h('button', { class: 'quiz-btn', onclick: (e) => makeQuiz(x.id, 'cloze', e.target) }, '✏️', h('span', {}, 'Lucktext'), h('small', {}, 'fyll i ordet')),
       h('button', { class: 'quiz-btn', onclick: (e) => explainFor(x.id, e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),

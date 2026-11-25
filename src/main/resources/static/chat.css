@@ -359,3 +359,9 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .listen-mark { margin-top: 4px; }
 .listen-mark.on { color: var(--accent); font-weight: 600; }
 .listen-mark:empty { display: none; }
+
+.focus-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 4px; }
+.focus-row:empty { display: none; }
+.focus-label { color: var(--muted); font-size: 14px; margin-right: 2px; }
+.focus-chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 18px; padding: 7px 13px; font-size: 14px; }
+.focus-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }

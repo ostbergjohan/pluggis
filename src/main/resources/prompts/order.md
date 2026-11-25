@@ -22,3 +22,6 @@ det i "note". Går det inte: {"sequences": [], "note": "beskriv kort"}.
 
 Finns `avoid` i uppgiften: det fick eleven nyss – välj andra saker. Finns `variation`: följ den, så att övningen
 blir olika från gång till gång (men alltid ur materialet).
+
+Finns `focus` i uppgiften: eleven har valt att öva på just det delområdet. Håll dig ENBART till det (ur materialet);
+`variation` gäller då bara inom det delområdet.

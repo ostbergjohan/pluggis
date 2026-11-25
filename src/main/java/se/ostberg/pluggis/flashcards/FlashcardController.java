@@ -46,7 +46,8 @@ public class FlashcardController {
     }
 
     /** {@code mode}: quiz (flerval), cloze (lucktext) eller mix. */
-    public record QuizRequest(Long homeworkId, String mode, Integer count, String topic, String sourceText, String subject) {
+    public record QuizRequest(Long homeworkId, String mode, Integer count, String topic, String sourceText, String subject,
+                              String focus) {
     }
 
     public record GradeRequest(boolean correct) {
@@ -102,8 +103,11 @@ public class FlashcardController {
             }
         }
         try {
+            if (body.focus() != null && !body.focus().isBlank()) {
+                topic = body.focus().trim() + " (" + topic + ")";   // syns i kortlekens namn
+            }
             return ResponseEntity.ok(generator.quiz(body.mode(), topic, source.toString(), subject,
-                    body.count() == null ? 10 : body.count(), body.homeworkId()));
+                    body.count() == null ? 10 : body.count(), body.homeworkId(), body.focus()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.unprocessableEntity().body(java.util.Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {

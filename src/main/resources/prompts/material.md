@@ -8,6 +8,7 @@ Svara ENDAST med ett JSON-objekt:
   "summary": "Vad som ingår, kort och konkret (max 3 meningar), t.ex. 'Fotosyntesen och cellandning, Utkik kap 4 s. 40–72'",
   "sections": ["Avsnitt eller delar i ordning, med sidor om de syns, t.ex. '4.1 Fotosyntes s. 40–48'"],
   "key_terms": ["Viktiga begrepp, ord eller formler"],
+  "topics": ["3–8 delområden som eleven kan öva på var för sig, korta (2–4 ord), t.ex. 'Siffror 1–100', 'Veckodagar', 'Verbet ser', 'Fotosyntesen', 'Näringskedjor'"],
   "text": "Materialets viktigaste innehåll som ren text (max ca 4000 tecken) – det som ska pluggas",
   "pages": [{"file": 1, "text": "Texten på just den filen/sidan, ordagrant och i läsordning (max ca 3000 tecken), så att den kan läsas upp. Rubriker på egen rad. Hoppa över sidhuvud, sidnummer och bildtexter som inte behövs."}],
   "kind": "test om det handlar om ett prov/förhör, homework om det är en läxa/inlämning, annars null",

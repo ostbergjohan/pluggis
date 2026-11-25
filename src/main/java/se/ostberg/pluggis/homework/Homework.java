@@ -39,6 +39,10 @@ public class Homework {
     /** Föräldern har flyttat moment för hand – nattlig/automatisk omplanering låter planen vara. */
     private Boolean manualPlan;
     /** Var eleven var i uppläsningen av materialet: materialets id och meningens nummer. */
+    /** Delområden att öva på var för sig (t.ex. "Siffror 1–100"), en per rad. Tas fram ur materialet. */
+    @jakarta.persistence.Column(length = 2000)
+    private String topics;
+
     private Long listenMaterialId;
     private Integer listenSentence;
     /** Material som lyssnats klart, kommaseparerade id:n. */
@@ -233,6 +237,14 @@ public class Homework {
     public Long getDeckId() { return deckId; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getCompletedAt() { return completedAt; }
+
+    public List<String> getTopics() {
+        return topics == null ? List.of() : Arrays.stream(topics.split("\n")).map(String::trim).filter(s -> !s.isBlank()).toList();
+    }
+
+    public void setTopics(java.util.Collection<String> list) {
+        this.topics = list == null || list.isEmpty() ? null : String.join("\n", list);
+    }
 
     public List<String> getSteps() {
         return steps == null ? List.of() : Arrays.stream(steps.split("\n")).filter(s -> !s.isBlank()).toList();

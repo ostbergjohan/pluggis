@@ -94,6 +94,11 @@ public class ExplainService {
     private se.ostberg.pluggis.support.Variety variety;
 
     public Turn start(Long homeworkId) {
+        return start(homeworkId, null);
+    }
+
+    public Turn start(Long homeworkId, String focus) {
+        String vkey = focus == null || focus.isBlank() ? "explain" : "explain|" + focus.trim();
         prune();
         var h = homeworkId == null ? null : homework.get(homeworkId).orElseThrow(() -> new IllegalArgumentException("Hittar inte läxan"));
         Map<String, Object> task = new LinkedHashMap<>();
@@ -107,11 +112,14 @@ public class ExplainService {
             task.put("material", mat.length() > 15000 ? mat.substring(0, 15000) : mat);
         }
         if (variety != null) {
-            List<String> avoid = variety.recent("explain", homeworkId);
+            List<String> avoid = variety.recent(vkey, homeworkId);
             if (!avoid.isEmpty()) {
                 task.put("avoid", avoid);
             }
             task.put("variation", variety.focusHint());
+        }
+        if (focus != null && !focus.isBlank()) {
+            task.put("focus", focus.trim());
         }
         Start s = ask(task, Start.class, "explain-start");
         List<String> points = s.keyPoints() == null ? List.of()
@@ -124,7 +132,7 @@ public class ExplainService {
         r.turns.add(Map.of("role", "pluggis", "text", r.question));
         rounds.put(r.id, r);
         if (variety != null) {
-            variety.remember("explain", homeworkId, List.of(r.concept));
+            variety.remember(vkey, homeworkId, List.of(r.concept));
         }
         return new Turn(r.id, r.concept, r.question, false, List.of(), List.of(), s.note());
     }

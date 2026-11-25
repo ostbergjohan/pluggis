@@ -24,7 +24,7 @@ public class ExplainController {
         this.explain = explain;
     }
 
-    public record StartRequest(Long homeworkId) {
+    public record StartRequest(Long homeworkId, String focus) {
     }
 
     public record AnswerRequest(String text) {
@@ -32,7 +32,7 @@ public class ExplainController {
 
     @PostMapping("/start")
     public ResponseEntity<?> start(@RequestBody StartRequest body) {
-        return run(() -> ResponseEntity.ok(explain.start(body.homeworkId())));
+        return run(() -> ResponseEntity.ok(explain.start(body.homeworkId(), body.focus())));
     }
 
     @PostMapping("/{id}/answer")

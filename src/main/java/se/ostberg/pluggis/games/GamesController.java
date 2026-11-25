@@ -55,7 +55,7 @@ public class GamesController {
         this.mapper = mapper;
     }
 
-    public record OrderRequest(Long homeworkId) {
+    public record OrderRequest(Long homeworkId, String focus) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -90,8 +90,13 @@ public class GamesController {
             String mat = materials.allText(h.getId());
             task.put("material", mat.length() > 15000 ? mat.substring(0, 15000) : mat);
         }
+        boolean focused = body.focus() != null && !body.focus().isBlank();
+        String vkey = focused ? "order|" + body.focus().trim() : "order";
+        if (focused) {
+            task.put("focus", body.focus().trim());
+        }
         if (variety != null) {
-            List<String> avoid = variety.recent("order", body.homeworkId());
+            List<String> avoid = variety.recent(vkey, body.homeworkId());
             if (!avoid.isEmpty()) {
                 task.put("avoid", avoid);
             }
@@ -109,7 +114,7 @@ public class GamesController {
                         g.note() != null ? g.note() : "Hittade inget i materialet som har en tydlig ordning"));
             }
             if (variety != null) {
-                variety.remember("order", body.homeworkId(), ok.stream().map(Sequence::title).toList());
+                variety.remember(vkey, body.homeworkId(), ok.stream().map(Sequence::title).toList());
             }
             return ResponseEntity.ok(new OrderGame(ok, g.note()));
         } catch (Exception e) {

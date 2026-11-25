@@ -29,6 +29,7 @@ public class ChatAccess {
             Pattern.compile("GET /api/homework"),
             Pattern.compile("GET /api/homework/\\d+/material"),
             Pattern.compile("PUT /api/homework/\\d+/listen"),
+            Pattern.compile("GET /api/homework/\\d+/topics"),
             Pattern.compile("GET /api/homework/material/\\d+/image"),
             Pattern.compile("POST /api/homework/upload"),
             Pattern.compile("GET /api/devices/[^/]+/rewards"),

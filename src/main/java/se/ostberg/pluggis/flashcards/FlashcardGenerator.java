@@ -55,13 +55,6 @@ public class FlashcardGenerator {
         if (topic != null && !topic.isBlank()) {
             ask.append(" Område: ").append(topic).append('.');
         }
-        if (variety != null) {
-            ask.append("\n\n").append(variety.focusHint());
-            java.util.List<String> avoid = variety.recent("quiz", homeworkId);
-            if (!avoid.isEmpty()) {
-                ask.append("\nDe här frågorna fick eleven nyss – gör andra:\n- ").append(String.join("\n- ", avoid));
-            }
-        }
         if (sourceText != null && !sourceText.isBlank()) {
             ask.append("\n\nUtgå ENDAST från detta material:\n").append(sourceText);
         }
@@ -136,6 +129,13 @@ public class FlashcardGenerator {
     private se.ostberg.pluggis.support.Variety variety;
 
     public Result quiz(String mode, String topic, String sourceText, String subject, int count, Long homeworkId) {
+        return quiz(mode, topic, sourceText, subject, count, homeworkId, null);
+    }
+
+    /** {@code focus}: ett delområde eleven valt (t.ex. "Siffror 1–100") – bara frågor om det. */
+    public Result quiz(String mode, String topic, String sourceText, String subject, int count, Long homeworkId, String focus) {
+        boolean focused = focus != null && !focus.isBlank();
+        String varietyKey = focused ? "quiz|" + focus.trim() : "quiz";
         String m = mode == null ? "mix" : mode.trim().toLowerCase(java.util.Locale.ROOT);
         String kinds = switch (m) {
             case "cloze" -> "Bara lucktext (\"cloze\").";
@@ -148,6 +148,17 @@ public class FlashcardGenerator {
         }
         if (topic != null && !topic.isBlank()) {
             ask.append(" Område: ").append(topic).append('.');
+        }
+        if (focused) {
+            ask.append("\n\nFOKUS: eleven vill öva på \"").append(focus.trim())
+                    .append("\". Gör BARA frågor om det delområdet ur materialet.");
+        }
+        if (variety != null) {
+            ask.append("\n\n").append(variety.focusHint());
+            java.util.List<String> avoid = variety.recent(varietyKey, homeworkId);
+            if (!avoid.isEmpty()) {
+                ask.append("\nDe här frågorna fick eleven nyss – gör andra:\n- ").append(String.join("\n- ", avoid));
+            }
         }
         if (sourceText != null && !sourceText.isBlank()) {
             ask.append("\n\nUtgå ENDAST från detta material:\n").append(sourceText);
@@ -171,7 +182,7 @@ public class FlashcardGenerator {
         Deck deck = flashcards.createDeck(name, subj, homeworkId, Deck.Source.GENERATED, cards);
         java.util.List<Card> made = flashcards.cards(deck.getId());
         if (variety != null) {
-            variety.remember("quiz", homeworkId, made.stream().map(Card::getFront).limit(12).toList());
+            variety.remember(varietyKey, homeworkId, made.stream().map(Card::getFront).limit(12).toList());
         }
         return new Result(deck, made.size(), generated.note());
     }

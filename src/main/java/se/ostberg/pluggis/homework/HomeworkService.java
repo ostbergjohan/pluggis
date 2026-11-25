@@ -38,6 +38,14 @@ public class HomeworkService {
      * Returnerar antal.
      */
     @Transactional
+    public Optional<Homework> setTopics(long id, java.util.Collection<String> topics) {
+        return repo.findById(id).map(h -> {
+            h.setTopics(topics);
+            return repo.save(h);
+        });
+    }
+
+    @Transactional
     public int archivePast() {
         int n = 0;
         for (Homework h : repo.findByStatusOrderByDueDateAscCreatedAtAsc(Homework.Status.OPEN)) {

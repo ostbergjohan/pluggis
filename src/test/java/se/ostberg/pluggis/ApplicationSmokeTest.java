@@ -403,6 +403,18 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void topicsAreEmptyWithoutContentAndStudentsMayAskForThem() throws Exception {
+        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Tomt prov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        JsonNode t = json(mvc.perform(get("/api/homework/" + id + "/topics").header(TOKEN, code))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(t.path("topics").isArray()).isTrue();
+        assertThat(t.path("topics").size()).isZero();
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

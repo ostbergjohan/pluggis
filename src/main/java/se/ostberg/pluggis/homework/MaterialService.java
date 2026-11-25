@@ -38,7 +38,8 @@ public class MaterialService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Reading(String summary, List<String> sections, @JsonProperty("key_terms") List<String> keyTerms,
-                   String text, String kind, @JsonProperty("due_date") String dueDate, String note, List<Page> pages) {
+                   String text, String kind, @JsonProperty("due_date") String dueDate, String note, List<Page> pages,
+                   List<String> topics) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -153,6 +154,12 @@ public class MaterialService {
                     ? Homework.Kind.TEST : null;
             LocalDate due = h.getDueDate() == null ? date(reading.dueDate()) : null;
             h = homework.updateContent(homeworkId, description, steps, kind, due).orElse(h);
+        }
+        if (reading.topics() != null && !reading.topics().isEmpty()) {
+            // delområden att öva på: de gamla först, sedan nya – högst 8
+            List<String> topics = new ArrayList<>(new LinkedHashSet<>(concat(h.getTopics(),
+                    reading.topics().stream().filter(t -> t != null && !t.isBlank()).map(String::trim).toList())));
+            h = homework.setTopics(homeworkId, topics.size() > 8 ? topics.subList(0, 8) : topics).orElse(h);
         }
 
         Long deckId = null;

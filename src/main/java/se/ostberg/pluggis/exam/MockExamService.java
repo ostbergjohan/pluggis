@@ -128,6 +128,10 @@ public class MockExamService {
     private se.ostberg.pluggis.support.Variety variety;
 
     public Started start(Long homeworkId, int count) {
+        return start(homeworkId, count, null);
+    }
+
+    public Started start(Long homeworkId, int count, String focus) {
         prune();
         Homework h = homeworkId == null ? null
                 : homework.get(homeworkId).orElseThrow(() -> new IllegalArgumentException("Hittar inte provet"));
@@ -135,6 +139,9 @@ public class MockExamService {
         task.put("step", "create");
         if (variety != null) {
             task.put("variation", variety.focusHint());
+        }
+        if (focus != null && !focus.isBlank()) {
+            task.put("focus", focus.trim());
         }
         task.put("count", Math.max(5, Math.min(15, count <= 0 ? 10 : count)));
         if (h != null) {

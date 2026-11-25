@@ -21,6 +21,7 @@ public class Prompts {
     private final String explain;
     private final String exam;
     private final String order;
+    private final String topics;
 
     public Prompts() {
         this.coach = load("prompts/coach-system.md");
@@ -33,6 +34,11 @@ public class Prompts {
         this.explain = load("prompts/explain.md");
         this.exam = load("prompts/exam.md");
         this.order = load("prompts/order.md");
+        this.topics = load("prompts/topics.md");
+    }
+
+    public String topics() {
+        return topics;
     }
 
     public String order() {

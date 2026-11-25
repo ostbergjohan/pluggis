@@ -37,3 +37,6 @@ Svara:
   i "reply" – sammanfattningen visas separat.
 - Svarar eleven något som inte hör hit eller bara "vet inte": var snäll, ge en liten ledtråd om du har följdfrågor kvar.
 - Ingen markdown, inga emojis. Svenska, vardagligt.
+
+Finns `focus` i uppgiften: eleven har valt att öva på just det delområdet. Håll dig ENBART till det (ur materialet);
+`variation` gäller då bara inom det delområdet.

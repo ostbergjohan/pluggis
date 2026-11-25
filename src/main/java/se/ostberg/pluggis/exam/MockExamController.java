@@ -25,7 +25,7 @@ public class MockExamController {
         this.exams = exams;
     }
 
-    public record StartRequest(Long homeworkId, Integer count) {
+    public record StartRequest(Long homeworkId, Integer count, String focus) {
     }
 
     /** {@code answers}: frågans nummer → elevens svar (valt alternativ eller skriven text). */
@@ -35,7 +35,7 @@ public class MockExamController {
     @PostMapping("/start")
     public ResponseEntity<?> start(@RequestBody StartRequest body) {
         try {
-            return ResponseEntity.ok(exams.start(body.homeworkId(), body.count() == null ? 10 : body.count()));
+            return ResponseEntity.ok(exams.start(body.homeworkId(), body.count() == null ? 10 : body.count(), body.focus()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
