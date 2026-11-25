@@ -71,7 +71,7 @@ static Button tabCoach, tabOva, tabHw, tabPlan, btnVolDown, btnVolUp;
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
 enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game };
-static Screen screen = Screen::Coach;
+static Screen screen = Screen::OvaList;   // Tab5 startar på Öva
 enum class Game { None, Explain, Exam, Match, Order };
 static Game game = Game::None;
 static bool dirtyOva = false;
@@ -255,10 +255,10 @@ static void layout() {
   btnStart = {gap, by, sideW, BTN_H, "Börja", PANEL};
   btnTalk = {gap * 2 + sideW, by, talkW, BTN_H, "Håll in och prata", ACCENT};
   btnEnd = {gap * 3 + sideW + talkW, by, sideW, BTN_H, "Avsluta", PANEL};
-  tabCoach = {12, 10, 186, 76, "Pluggis", PANEL};
-  tabOva = {208, 10, 142, 76, "Öva", PANEL};
-  tabHw = {360, 10, 166, 76, "Läxor", PANEL};
-  tabPlan = {536, 10, 142, 76, "Plan", PANEL};
+  tabOva = {12, 10, 142, 76, "Öva", PANEL};
+  tabCoach = {164, 10, 150, 76, "Chat", PANEL};
+  tabHw = {324, 10, 166, 76, "Läxor", PANEL};
+  tabPlan = {500, 10, 142, 76, "Plan", PANEL};
   btnVolDown = {W - 520, 14, 68, 68, "-", PANEL};
   btnVolUp = {W - 520 + 68 + 12 + 90 + 12, 14, 68, 68, "+", PANEL};
 }
@@ -619,6 +619,7 @@ static void onText(const char* json, size_t len) {
     thinking = false;
     sayText = clean(doc["text"] | "");
     if (mode == Mode::Card && cardAnswered) mode = Mode::Coach;
+    if (type == "reminder" && (screen == Screen::OvaList || screen == Screen::HwList || screen == Screen::Plan)) showScreen(Screen::Coach);
     if (type == "reminder") {
       M5.Speaker.tone(880, 150);
       delay(180);
@@ -751,8 +752,21 @@ static std::vector<DeckInfo> decks;
 // "Ny övning": välj läxa/prov och gör ett snabbquiz eller en lucktext av materialet (som i appen)
 struct MakeHw {
   long id;
-  String label;
+  String label;      // "Prov: Glosförhör kap 3" (för titlar i övningarna)
+  String title, subject, due;
+  bool test = false, startNow = false;
 };
+static int listTop = 0;            // första synliga raden i läxlistan
+static constexpr int LIST_ROWS = 6;
+static Button listRow[LIST_ROWS], btnListUp, btnListDown, btnAgain;
+// Senast: det som gjordes sist, för "Kör igen"
+static String lastText, lastFocus;
+static int lastKind = -1;
+static long lastHw = 0;
+static void setLast(int kind, const String& result);
+static int daysUntil(const String& iso);
+static String dateLabel(const String& iso);
+static uint32_t subjectColor(const String& subject, const String& title);
 static std::vector<MakeHw> makeList;
 static int makeIdx = 0;
 static Button btnMkPrev, btnMkNext, btnMk[6];
@@ -808,42 +822,46 @@ static int api(const char* method, const String& path, const String& body, JsonD
 }
 
 static void loadDecks() {
-  decks.clear();
+  decks.clear();   // kortlekar sparas inte längre – varje övning görs ny
   ovaMessage = "";
-  JsonDocument doc;
-  int code = api("GET", "/api/flashcards/decks", "", &doc);
-  if (code != 200) {
-    ovaMessage = "Kunde inte hämta kortlekarna (" + String(code) + "). Är Pluggis igång?";
-    decksLoaded = true;
-    return;
-  }
-  for (JsonObject x : doc.as<JsonArray>()) {
-    DeckInfo d;
-    d.id = x["deck"]["id"] | 0L;
-    d.name = clean(x["deck"]["name"] | "Kortlek");
-    d.subject = clean(x["deck"]["subject"] | "");
-    d.cards = x["cards"] | 0;
-    d.due = x["dueNow"] | 0;
-    d.homeworkId = x["deck"]["homeworkId"] | 0L;
-    if (d.id && d.cards > 0) decks.push_back(d);
-  }
-  std::sort(decks.begin(), decks.end(), [](const DeckInfo& a, const DeckInfo& b) { return a.due > b.due; });
+  long selected = makeIdx < (int)makeList.size() ? makeList[makeIdx].id : 0;
   makeList.clear();
   JsonDocument hw;
   if (api("GET", "/api/homework", "", &hw) == 200) {
     for (JsonObject x : hw.as<JsonArray>()) {
       String kind = x["kind"] | "";
       if (kind == "OTHER") continue;
-      String label = String(kind == "TEST" ? "Prov: " : "Läxa: ") + clean(x["title"] | "");
-      makeList.push_back({x["id"] | 0L, label});
+      MakeHw m;
+      m.id = x["id"] | 0L;
+      m.title = clean(x["title"] | "");
+      m.subject = clean(x["subject"] | "");
+      m.due = x["dueDate"] | "";
+      m.test = kind == "TEST";
+      m.label = String(m.test ? "Prov: " : "Läxa: ") + m.title;
+      makeList.push_back(m);
     }
   }
-  if (makeIdx >= (int)makeList.size()) makeIdx = 0;
+  // Datum först (utan datum sist)
+  std::stable_sort(makeList.begin(), makeList.end(), [](const MakeHw& a, const MakeHw& b) {
+    String da = a.due.length() ? a.due : String("9999"), db = b.due.length() ? b.due : String("9999");
+    return da < db;
+  });
+  // "börja nu": längre fram (mer än en vecka) men har moment i planen de närmaste dagarna
+  JsonDocument plan;
+  if (api("GET", "/api/plan/upcoming?days=3", "", &plan) == 200) {
+    for (JsonObject it : plan.as<JsonArray>()) {
+      long hid = it["homeworkId"] | 0L;
+      for (auto& m : makeList) if (m.id == hid && m.due.length() && daysUntil(m.due) > 7) m.startNow = true;
+    }
+  }
+  makeIdx = 0;
+  for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == selected) makeIdx = i;
+  if (listTop > makeIdx || makeIdx >= listTop + LIST_ROWS) listTop = std::max(0, makeIdx - LIST_ROWS + 1);
   allDeckIds.clear();
   allDeckHw.clear();
   for (auto& d : decks) { allDeckIds.push_back(d.id); allDeckHw.push_back(d.homeworkId); }
   if (decks.size() > 6) decks.resize(6);
-  if (decks.empty() && makeList.empty()) ovaMessage = "Inga kortlekar än. Be Pluggis göra kort eller quiz av en läxa.";
+  if (makeList.empty()) ovaMessage = "Inga läxor eller prov att öva på just nu. Lägg till en i Pluggis-appen.";
   decksLoaded = true;
 }
 
@@ -872,7 +890,12 @@ static void nextCard() {
   voiceVerdict = -1;
   options.clear();
   correctIdx = -1;
-  if (answered >= ROUND) { noMoreCards = true; SFX_DONE(); return; }
+  if (answered >= ROUND) {
+    noMoreCards = true;
+    SFX_DONE();
+    setLast(cur.name.startsWith("Lucktext") || cur.name.indexOf("Lucktext") >= 0 ? 1 : 0, String(rightCount) + " av " + String(answered) + " rätt");
+    return;
+  }
   for (int attempt = 0; attempt < 2; attempt++) {
     JsonDocument doc;
     int code = api("GET", "/api/flashcards/decks/" + String(cur.id) + "/next?announce=false&practiceAnyway=" +
@@ -975,13 +998,19 @@ static void showScreen(Screen s, bool force = false) {
   dirtyAll = true;
 }
 
+static constexpr int LIST_W = 470;   // läxlistan till vänster
 static void layoutOva() {
   int top = TOP_H + 368, gap = 20;
   int ry = TOP_H + 70, rh = 80;
-  btnMkPrev = {gap, ry, 100, rh, "<", PANEL};
-  btnMkNext = {W - gap - 100, ry, 100, rh, ">", PANEL};
-  int bw = (W - 7 * gap) / 6;
-  for (int i = 0; i < 6; i++) btnMk[i] = {gap + i * (bw + gap), ry + rh + 16 + 68, bw, 92, MK_LABELS[i], ACCENT};
+  btnMkPrev = {0, 0, 0, 0, "<", PANEL};   // ersatta av listan
+  btnMkNext = {0, 0, 0, 0, ">", PANEL};
+  btnListUp = {gap, H - 58 - 64, 110, 56, "", PANEL};
+  btnListDown = {LIST_W + gap - 110, H - 58 - 64, 110, 56, "", PANEL};
+  btnAgain = {W - gap - 200, H - 52, 200, 46, "", PANEL};
+  int rx = LIST_W + 2 * gap, rw = W - rx - gap;
+  int tw = (rw - 2 * 14) / 3, th = 118, ty = H - 58 - 2 * th - 14;
+  for (int i = 0; i < 6; i++) btnMk[i] = {rx + (i % 3) * (tw + 14), ty + (i / 3) * (th + 14), tw, th, MK_LABELS[i], ACCENT};
+  (void)ry; (void)rh;
   int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
   for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
@@ -1007,56 +1036,106 @@ static void drawOva() {
   if (screen == Screen::Game) { drawGame(); return; }
   if (screen != Screen::OvaList && screen != Screen::OvaCard) { drawHwPlan(); return; }
   if (screen == Screen::OvaList) {
-    d.setFont(F_BIG);
-    d.setTextColor(INK);
-    d.drawString("Ny övning", 28, TOP_H + 24);
-    if (!decksLoaded) { drawWrapped("Hämtar ...", 28, TOP_H + 120, W - 56, 80, MUTED, F_MID); return; }
-    if (makeBusy.length()) { drawWrapped(makeBusy, 28, TOP_H + 120, W - 56, 300, ACCENT, F_BIG); return; }
-    if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 120, W - 56, 200, MUTED, F_MID); return; }
-    if (makeList.empty()) {
-      drawWrapped("Lägg till en läxa eller ett prov för att göra snabbquiz och lucktext.", 28, btnMkPrev.y + 20, W - 56, 60, MUTED, F_SMALL);
-    } else {
-      if (makeList.size() > 1) { drawTextButton(btnMkPrev, PANEL, "<"); drawTextButton(btnMkNext, PANEL, ">"); }
-      int lx = btnMkPrev.x + btnMkPrev.w + 16;
-      drawWrapped(makeList[makeIdx].label, lx, btnMkPrev.y + 8, btnMkNext.x - 16 - lx, btnMkPrev.h - 16, INK, F_MID, true);
-      int cy = btnMkPrev.y + btnMkPrev.h + 12, cx = 20;
-      d.setFont(F_SMALL);
-      if (mkTopicsFor != makeList[makeIdx].id) {
+    if (!decksLoaded) { drawWrapped("Hämtar läxor ...", 28, TOP_H + 60, W - 56, 80, MUTED, F_MID); return; }
+    if (makeBusy.length()) { drawWrapped(makeBusy, 28, TOP_H + 120, W - 56, 300, ACCENT, F_BIG, true); return; }
+    if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 60, W - 56, 200, MUTED, F_MID); return; }
+    // --- vänster: läxor och prov (Snart / Längre fram)
+    int y = TOP_H + 14;
+    bool soonHeader = false, laterHeader = false;
+    for (int k = 0; k < LIST_ROWS; k++) listRow[k] = {0, 0, 0, 0, "", PANEL};
+    for (int k = 0; k < LIST_ROWS && listTop + k < (int)makeList.size(); k++) {
+      auto& m = makeList[listTop + k];
+      int days = m.due.length() ? daysUntil(m.due) : 999;
+      bool soon = days <= 7;
+      if ((soon && !soonHeader) || (!soon && !laterHeader)) {
+        d.setFont(F_SMALL);
         d.setTextColor(MUTED);
-        d.drawString("Letar delområden ...", cx, cy + 16);
-      } else if (!mkTopics.empty()) {
-        d.setTextColor(MUTED);
-        d.drawString("Öva på:", cx, cy + 16);
-        cx += d.textWidth("Öva på:") + 14;
-        for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
-          String t = i == 0 ? String("Allt") : mkTopics[i - 1];
-          d.setFont(F_SMALL);
-          int w = d.textWidth(t) + 36;
-          if (cx + w > W - 20) { btnChip[i] = {0, 0, 0, 0, "", PANEL}; continue; }
-          btnChip[i] = {cx, cy, w, 56, "", PANEL};
-          d.fillRoundRect(cx, cy, w, 56, 28, i == mkFocus ? ACCENT : PANEL);
-          d.setTextColor(INK);
-          d.setTextDatum(middle_center);
-          d.drawString(t, cx + w / 2, cy + 28);
-          d.setTextDatum(top_left);
-          cx += w + 10;
-        }
+        d.drawString(soon ? "Snart" : "Längre fram", 28, y + 2);
+        y += 34;
+        if (soon) soonHeader = true; else { laterHeader = true; soonHeader = true; }
       }
-      for (int i = 0; i < 6; i++) drawTextButton(btnMk[i], i < 2 ? ACCENT : 0x2D5BA8, MK_LABELS[i]);
+      Button r = {20, y, LIST_W, 64, "", PANEL};
+      listRow[k] = r;
+      bool sel = listTop + k == makeIdx;
+      d.fillRoundRect(r.x, r.y, r.w, r.h, 14, sel ? 0x24364B : PANEL);
+      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, ACCENT); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, ACCENT); }
+      d.fillRoundRect(r.x, r.y, 10, r.h, 5, subjectColor(m.subject, m.title));
+      String when = !m.due.length() ? String() : m.startNow ? "börja nu" : days < 0 ? "försenad" : dateLabel(m.due);
+      d.setFont(F_SMALL);
+      int ww = when.length() ? d.textWidth(when) : 0;
+      d.setTextColor(m.startNow ? GOOD : days <= 2 ? WARN : MUTED);
+      d.setTextDatum(middle_right);
+      if (ww) d.drawString(when, r.x + r.w - 16, r.y + r.h / 2);
+      d.setTextDatum(middle_left);
+      d.setFont(F_MID);
+      String t = (m.test ? "Prov: " : "") + m.title;
+      int maxW = r.w - 40 - ww - 16;
+      while (t.length() > 4 && d.textWidth(t) > maxW) t = t.substring(0, t.length() - 4) + "...";
+      d.setTextColor(INK);
+      d.drawString(t, r.x + 26, r.y + r.h / 2);
+      d.setTextDatum(top_left);
+      y += 64 + 8;
     }
-    if (decks.empty()) return;
+    if ((int)makeList.size() > LIST_ROWS) {
+      bool up = listTop > 0, down = listTop + LIST_ROWS < (int)makeList.size();
+      drawTextButton(btnListUp, up ? PANEL : BG, up ? "Upp" : "");
+      drawTextButton(btnListDown, down ? PANEL : BG, down ? "Ner" : "");
+      d.setFont(F_SMALL);
+      d.setTextColor(MUTED);
+      d.setTextDatum(middle_center);
+      d.drawString(String(listTop + 1) + "-" + String(std::min((int)makeList.size(), listTop + LIST_ROWS)) + " av " + String(makeList.size()),
+                   20 + LIST_W / 2, btnListUp.y + btnListUp.h / 2);
+      d.setTextDatum(top_left);
+    }
+    // --- höger: vald läxa, delområden, övningarna
+    auto& m = makeList[makeIdx];
+    int rx = LIST_W + 40, rw = W - rx - 20;
+    drawWrapped((m.test ? "Prov: " : "Läxa: ") + m.title, rx, TOP_H + 14, rw, 48, INK, F_MID);
     d.setFont(F_SMALL);
     d.setTextColor(MUTED);
-    d.drawString("Dina kortlekar", 28, deckTiles[0].y - 34);
-    for (size_t i = 0; i < decks.size(); i++) {
-      auto& b = deckTiles[i];
-      d.fillRoundRect(b.x, b.y, b.w, b.h, 24, PANEL);
-      if (decks[i].due > 0) d.fillRoundRect(b.x, b.y, 14, b.h, 7, ACCENT);
-      drawWrapped(decks[i].name, b.x + 30, b.y + 20, b.w - 50, b.h - 80, INK, F_MID);
-      d.setFont(F_SMALL);
-      d.setTextColor(decks[i].due > 0 ? ACCENT : MUTED);
-      d.drawString(decks[i].due > 0 ? String(decks[i].due) + " att öva nu" : String(decks[i].cards) + " kort", b.x + 30, b.y + b.h - 44);
+    d.drawString((m.subject.length() ? m.subject : String("Ämne saknas")) + (m.due.length() ? " · " + dateLabel(m.due) : String()), rx, TOP_H + 60);
+    int cy = TOP_H + 100, cx = rx;
+    for (int i = 0; i < 7; i++) btnChip[i] = {0, 0, 0, 0, "", PANEL};
+    if (mkTopicsFor != m.id) {
+      d.setTextColor(MUTED);
+      d.drawString("Letar delområden ...", cx, cy + 14);
+    } else if (!mkTopics.empty()) {
+      d.setTextColor(MUTED);
+      d.drawString("Öva på:", cx, cy + 14);
+      cx += d.textWidth("Öva på:") + 12;
+      int rowStart = cx;
+      for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
+        String t = i == 0 ? String("Allt") : mkTopics[i - 1];
+        d.setFont(F_SMALL);
+        int w = d.textWidth(t) + 34;
+        if (cx + w > rx + rw) { cx = rowStart; cy += 62; }   // ny rad
+        if (cy > TOP_H + 100 + 62) break;                    // högst två rader
+        btnChip[i] = {cx, cy, w, 54, "", PANEL};
+        d.fillRoundRect(cx, cy, w, 54, 27, i == mkFocus ? ACCENT : PANEL);
+        d.setTextColor(INK);
+        d.setTextDatum(middle_center);
+        d.drawString(t, cx + w / 2, cy + 27);
+        d.setTextDatum(top_left);
+        cx += w + 10;
+      }
     }
+    static const char* SUBS[6] = {"fyra alternativ", "fyll i ordet", "lär ut till Pluggis", "som på riktigt", "slå rekordet", "steg i rad"};
+    for (int i = 0; i < 6; i++) {
+      auto& b = btnMk[i];
+      d.fillRoundRect(b.x, b.y, b.w, b.h, 22, i < 2 ? ACCENT : 0x2D5BA8);
+      d.setFont(F_MID);
+      d.setTextColor(INK);
+      d.drawString(MK_LABELS[i], b.x + 20, b.y + 26);
+      d.setFont(F_SMALL);
+      d.setTextColor(0xC9D6E8);
+      d.drawString(SUBS[i], b.x + 20, b.y + 72);
+    }
+    // --- längst ner: Senast
+    d.drawFastHLine(20, H - 58, W - 40, PANEL);
+    d.setFont(F_SMALL);
+    d.setTextColor(MUTED);
+    d.drawString(lastText.length() ? "Senast: " + lastText : String("Välj läxa till vänster och en övning."), 28, H - 44);
+    if (lastKind >= 0) drawTextButton(btnAgain, PANEL, "Kör igen");
     return;
   }
   // Ett kort
@@ -1271,6 +1350,9 @@ static void makeQuiz(long homeworkId, const char* mode) {
   d.cards = 10;
   d.due = 10;
   d.homeworkId = homeworkId;
+  d.name = String(strcmp(mode, "cloze") == 0 ? "Lucktext: " : "Snabbquiz: ") + d.name;
+  lastHw = homeworkId;
+  lastFocus = focus;
   if (!d.id) { loadDecks(); dirtyOva = true; return; }
   openDeck(d);
 }
@@ -1345,6 +1427,8 @@ static void startGame(int which, long hw, const String& title) {
   dirtyAll = true;
   String focus = mkTopicsFor == hw ? currentFocus() : String();
   String focusJson = focus.length() ? ",\"focus\":\"" + jsonEscape(focus) + "\"" : String();
+  lastHw = hw;
+  lastFocus = focus;
   if (focus.length()) gameTitle = focus + " · " + title;
   cur.name = String(MK_LABELS[which]) + ": " + (focus.length() ? focus + " · " : "") + title;
   cur.homeworkId = hw;
@@ -1370,15 +1454,19 @@ static void startGame(int which, long hw, const String& title) {
     }
     if (code == 200 && examQs.empty()) gameMsg = "Testprovet blev tomt – prova igen.";
   } else if (game == Game::Match) {
-    gameBusy("Hämtar kort ...");
+    gameBusy("Pluggis gör par av materialet ...");
     pairs.clear();
-    for (size_t i = 0; i < allDeckIds.size() && pairs.size() < 12; i++) {
-      if (allDeckHw[i] != hw) continue;
+    JsonDocument qd;
+    String body = "{\"homeworkId\":" + String(hw) + ",\"mode\":\"quiz\",\"count\":10" + focusJson + "}";
+    if (api("POST", "/api/flashcards/quiz", body, &qd, 120000) == 200) {
+      long deckId = qd["deck"]["id"] | 0L;
       JsonDocument cards;
-      if (api("GET", "/api/flashcards/decks/" + String(allDeckIds[i]) + "/cards", "", &cards) != 200) continue;
-      for (JsonObject c : cards.as<JsonArray>()) {
-        String a = clean(c["front"] | ""), b = clean(c["back"] | "");
-        if (a.length() && b.length() && a.length() <= 70 && b.length() <= 70 && a.indexOf("___") < 0) pairs.push_back({a, b});
+      if (deckId && api("GET", "/api/flashcards/decks/" + String(deckId) + "/cards", "", &cards) == 200) {
+        for (JsonObject c : cards.as<JsonArray>()) {
+          String a2 = clean(c["front"] | ""), b2 = clean(c["back"] | "");
+          a2.replace("___", "...");
+          if (a2.length() && b2.length() && a2.length() <= 80 && b2.length() <= 60) pairs.push_back({a2, b2});
+        }
       }
     }
     for (int i = pairs.size() - 1; i > 0; i--) std::swap(pairs[i], pairs[esp_random() % (i + 1)]);
@@ -1410,7 +1498,7 @@ static void startGame(int which, long hw, const String& title) {
     if (pairs.size() > 5) pairs.resize(5);
     for (auto& p : pairs) recentMatch.insert(recentMatch.begin(), p.a);
     if (recentMatch.size() > 15) recentMatch.resize(15);
-    gameMsg = pairs.size() < 3 ? "Det behövs minst tre kort till läxan. Gör ett snabbquiz först." : "";
+    gameMsg = pairs.size() < 3 ? "Pluggis hittade inte tillräckligt med par i materialet. Prova Snabbquiz." : "";
     rightOrder.clear();
     for (size_t i = 0; i < pairs.size(); i++) rightOrder.push_back(i);
     for (int i = rightOrder.size() - 1; i > 0; i--) std::swap(rightOrder[i], rightOrder[esp_random() % (i + 1)]);
@@ -1456,7 +1544,7 @@ static void gameVoice(const String& said) {
     gameMsg = "";
     if (code == 200) explainApply(doc);
     else exReply = "Det gick inte att skicka just nu. Försök igen.";
-    if (gameDone) { SFX_DONE(); gameDoneReport("explain"); }
+    if (gameDone) { SFX_DONE(); gameDoneReport("explain"); setLast(2, "klart"); }
     sayAloud(exReply);
   } else if (game == Game::Exam && examI < (int)examQs.size()) {
     examAns[examI] = said;
@@ -1492,6 +1580,7 @@ static void examSubmit() {
   if (code != 200) { gameMsg = "Det gick inte att rätta just nu (" + String(code) + ")."; return; }
   SFX_DONE();
   examPoints = doc["points"] | 0;
+  setLast(3, String((int)(doc["percent"] | 0)) + " %");
   examMax = doc["maxPoints"] | 0;
   examPct = doc["percent"] | 0;
   examReview.clear();
@@ -1651,7 +1740,11 @@ static void gameTouch(int x, int y) {
         if (j == selL) {
           matched[j] = true;
           SFX_OK();
-          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) { SFX_DONE(); gameDoneReport("match"); }
+          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) {
+            SFX_DONE();
+            gameDoneReport("match");
+            setLast(4, String((millis() - matchStart) / 1000) + " s");
+          }
         } else {
           gWrongA = selL; gWrongB = i; gWrongUntil = millis() + 600;
           SFX_BAD();
@@ -1664,7 +1757,7 @@ static void gameTouch(int x, int y) {
   } else if (game == Game::Order) {
     auto& sq = seqs[seqI];
     if (placed >= (int)sq.steps.size()) {
-      if (++seqI >= (int)seqs.size()) { gameDoneReport("order"); gameExit(); return; }
+      if (++seqI >= (int)seqs.size()) { gameDoneReport("order"); setLast(5, "klart"); gameExit(); return; }
       placed = 0;
       shownSteps.clear();
       for (size_t i = 0; i < seqs[seqI].steps.size(); i++) shownSteps.push_back(i);
@@ -1698,6 +1791,22 @@ static void ovaTouch(int x, int y) {
   }
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
+      for (int k = 0; k < LIST_ROWS; k++) {
+        if (listRow[k].w && inside(listRow[k], x, y)) { makeIdx = listTop + k; mkFocus = 0; dirtyOva = true; return; }
+      }
+      if ((int)makeList.size() > LIST_ROWS) {
+        if (inside(btnListUp, x, y) && listTop > 0) { listTop = std::max(0, listTop - LIST_ROWS); dirtyOva = true; return; }
+        if (inside(btnListDown, x, y) && listTop + LIST_ROWS < (int)makeList.size()) { listTop += LIST_ROWS; dirtyOva = true; return; }
+      }
+      if (lastKind >= 0 && inside(btnAgain, x, y)) {
+        for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == lastHw) makeIdx = i;
+        mkFocus = 0;
+        for (size_t i = 0; i < mkTopics.size(); i++) if (mkTopicsFor == lastHw && mkTopics[i] == lastFocus) mkFocus = i + 1;
+        if (lastKind == 0) makeQuiz(lastHw, "quiz");
+        else if (lastKind == 1) makeQuiz(lastHw, "cloze");
+        else startGame(lastKind, lastHw, makeList[makeIdx].label);
+        return;
+      }
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
       bool onLabel = y >= btnMkPrev.y && y < btnMkPrev.y + btnMkPrev.h && x > btnMkPrev.x + btnMkPrev.w && x < btnMkNext.x;
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
@@ -2324,6 +2433,51 @@ static String dateLabel(const String& iso) {
   return String(WEEKDAYS[lt->tm_wday]) + " " + String(t.tm_mday) + "/" + String(t.tm_mon + 1);
 }
 
+
+static void setLast(int kind, const String& result) {
+  lastKind = kind;
+  String name;
+  for (auto& m : makeList) if (m.id == lastHw) name = m.title;
+  lastText = String(MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
+             (name.length() ? " · " + name : String()) + (result.length() ? " · " + result : String());
+}
+
+/** Dagar från idag till ett datum (YYYY-MM-DD); 0 = idag, negativt = passerat. Utan klocka: 999. */
+static int daysUntil(const String& iso) {
+  if (iso.length() < 10) return 999;
+  struct tm t = {};
+  t.tm_year = iso.substring(0, 4).toInt() - 1900;
+  t.tm_mon = iso.substring(5, 7).toInt() - 1;
+  t.tm_mday = iso.substring(8, 10).toInt();
+  t.tm_hour = 12;
+  struct tm now;
+  if (!getLocalTime(&now, 0)) return 999;
+  now.tm_hour = 12; now.tm_min = 0; now.tm_sec = 0;
+  return (int)lround(difftime(mktime(&t), mktime(&now)) / 86400.0);
+}
+
+/** Ämnets färg – samma färger som i appen (färgen bestäms av ämnets namn). */
+static uint32_t subjectColor(const String& subject, const String& title) {
+  static const uint32_t COLORS[] = {0x2f6f5e, 0x2c63c9, 0xb7862a, 0xc8453b, 0x7a4fb5, 0x1f8a9e, 0xc2569b, 0x5c7d2e};
+  String key = subject.length() ? subject : title;
+  key.trim();
+  key.toLowerCase();
+  // samma hash som appen (h = h*31 + tecken), över Unicode-tecknen
+  uint32_t h = 0;
+  const uint8_t* p = (const uint8_t*)key.c_str();
+  while (*p) {
+    uint32_t cp; int n;
+    if (*p < 0x80) { cp = *p; n = 1; }
+    else if ((*p & 0xE0) == 0xC0) { cp = *p & 0x1F; n = 2; }
+    else if ((*p & 0xF0) == 0xE0) { cp = *p & 0x0F; n = 3; }
+    else { cp = *p & 0x07; n = 4; }
+    for (int i = 1; i < n && p[i]; i++) cp = (cp << 6) | (p[i] & 0x3F);
+    h = h * 31 + cp;
+    p += n;
+  }
+  return COLORS[h % 8];
+}
+
 static void tickPractice() {
   if (screen != Screen::OvaCard || !practiceId.length()) return;
   if (millis() - lastActiveTick >= 1000) {
@@ -2511,6 +2665,11 @@ void loop() {
     dirtyAll = true;
   }
   examSpeak();
+  static bool firstOva = false;
+  if (!firstOva && WiFi.status() == WL_CONNECTED) {
+    firstOva = true;
+    if (screen == Screen::OvaList) showScreen(Screen::OvaList, true);
+  }
   if (wsUp && !meLoaded) {
     meLoaded = true;
     JsonDocument me;
