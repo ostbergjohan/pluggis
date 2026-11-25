@@ -716,6 +716,7 @@ static bool revealed = false, noMoreCards = false, practiceAnyway = false;
 static int answered = 0, rightCount = 0;
 static std::vector<String> deckBacks;   // svaren på lekens kort – blir felaktiga alternativ
 static String spokenAnswer;
+static bool isLanguageDeck();
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
 static Button btnSay;
 static constexpr int ROUND = 10;
