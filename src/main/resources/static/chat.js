@@ -248,8 +248,21 @@ function looksSwedish(text) {
   const t = ` ${(text || '').toLowerCase()} `;
   return /[åäö]/.test(t) || / (och|att|jag|är|en|ett|det|med|för|inte|som|har|vi|du|han|hon|min|vad) /.test(t);
 }
-/** Röstens språk för en mening: språkämnets språk om meningen inte ser svensk ut. */
-function voiceLang(text, lang) { return lang && !looksSwedish(text) ? lang : ''; }
+/** Gissar språket på en icke-svensk text: tecken (ñ ¿ ß ç …) och vanliga småord. */
+function guessLang(text) {
+  const t = ` ${(text || '').toLowerCase().replace(/[.,!?;:"()]/g, ' ')} `;
+  const count = (re) => (t.match(re) || []).length;
+  const score = {
+    es: count(/[ñ¿¡]/g) * 3 + count(/ (el|la|los|las|un|una|que|y|es|por|para|con|muy|soy|estoy|tengo|hola|gracias|de|del|mi|tu|su) /g),
+    de: count(/ß/g) * 3 + count(/ (der|die|das|und|ist|ich|nicht|mit|ein|eine|zu|sie|wir|auf|für|bin|habe) /g),
+    fr: count(/[çœ]/g) * 3 + count(/[èêàù]/g) + count(/ (le|les|et|est|je|vous|une|pour|avec|pas|ne|bonjour|merci|des|du|au|nous|suis) /g),
+    en: count(/ (the|and|is|are|you|of|to|with|this|that|it|have|has|was|what|my|your) /g),
+  };
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
+  return best[1] > 0 ? best[0] : '';
+}
+/** Röstens språk för en mening: svensk om den ser svensk ut, annars ämnets språk – eller gissat ur texten. */
+function voiceLang(text, lang) { return looksSwedish(text) ? '' : (lang || guessLang(text)); }
 const PHONE_LANG = { es: 'es-ES', de: 'de-DE', fr: 'fr-FR', en: 'en-GB' };
 
 async function fetchVoice(text, lang = '') {
@@ -266,7 +279,8 @@ async function fetchVoice(text, lang = '') {
 async function speakServer(text, lang = '') {
   const run = ++speechRun;
   stopServerAudio();
-  const list = sentences(text);
+  // En lista (t.ex. fråga + alternativ) läses del för del, så att varje del får rätt språk
+  const list = Array.isArray(text) ? text.flatMap(t => sentences(t)) : sentences(text);
   let next = list.length ? fetchVoice(list[0], voiceLang(list[0], lang)) : null;
   for (let i = 0; i < list.length; i++) {
     let buf;
@@ -1245,14 +1259,26 @@ function practiceDeck(d) {
   const controls = h('div', { class: 'fc-controls' });
   const status = h('div', { class: 'meta fc-status' });
   const bar = h('div', { class: 'quiz-progress' }, h('div'));
-  const deckLang = langOf(d.deck.subject, d.deck.name);
+  let deckLang = langOf(d.deck.subject, d.deck.name);
+  if (!deckLang) {
+    api(`/api/flashcards/decks/${d.deck.id}/cards`).then(cards => {
+      const votes = {};
+      for (const c of cards) for (const t of [c.back, ...(c.wrongOptions || [])]) {
+        if (!t || looksSwedish(t)) continue;
+        const g = guessLang(t);
+        if (g) votes[g] = (votes[g] || 0) + 1;
+      }
+      const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0];
+      if (best && best[1] >= 2) deckLang = best[0];
+    }).catch(() => {});
+  }
   const say = h('button', { class: 'small-btn', onclick: () => readAloud(spoken(), say, deckLang) }, '🔊 Läs upp');
   let current = null;
   const spoken = () => {
     if (!current) return front.textContent;
     const q = current.front.replace(/___/g, ' lucka ');
-    if (current.kind === 'BASIC' || !current.choices) return q;
-    return `${q} ${current.choices.map((c, i) => `${'ABCD'[i]}, ${c}`).join('. ')}.`;
+    if (current.kind === 'BASIC' || !current.choices) return [q];
+    return [q, ...current.choices.map((c, i) => `${'ABCD'[i]}: ${c}.`)];
   };
   $('#view').replaceChildren(h('div', { class: 'page' },
     h('div', { style: 'display:flex;align-items:center;gap:8px' },
@@ -1489,17 +1515,20 @@ async function readAloud(text, btn, lang = '') {
     await speakServer(text, lang);
     if (speechRun === run && readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; }
   } else if (window.speechSynthesis) {
-    const u = new SpeechSynthesisUtterance(forSpeech(text));
-    const l = voiceLang(text, lang);
-    if (l) {   // telefonens röst för språket (iPhone/Android har spanska, tyska, franska …)
-      u.lang = PHONE_LANG[l];
-      const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l));
-      if (v) u.voice = v;
-    } else {
-      u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
-    }
-    u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
-    speechSynthesis.speak(u);
+    const parts = Array.isArray(text) ? text : [text];
+    parts.forEach((part, i) => {
+      const u = new SpeechSynthesisUtterance(forSpeech(part));
+      const l = voiceLang(part, lang);
+      if (l) {   // telefonens röst för språket (iPhone/Android har spanska, tyska, franska …)
+        u.lang = PHONE_LANG[l];
+        const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l));
+        if (v) u.voice = v;
+      } else {
+        u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+      }
+      if (i === parts.length - 1) u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
+      speechSynthesis.speak(u);
+    });
   }
 }
 

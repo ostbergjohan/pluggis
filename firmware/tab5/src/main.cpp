@@ -153,6 +153,7 @@ static void sayAloud(const String& text, const char* lang = "");
 static void sayCardSide(const String& text);
 static const char* langFrom(String t);
 static bool looksSwedish(const String& in);
+static const char* guessLang(const String& in);
 static void sayStop();
 static int examSpoken = -1;
 static void examSpeak();
@@ -917,6 +918,19 @@ static void openDeck(const DeckInfo& d) {
   JsonDocument all;
   if (api("GET", "/api/flashcards/decks/" + String(d.id) + "/cards", "", &all) == 200)
     for (JsonObject c : all.as<JsonArray>()) { String b = clean(c["back"] | ""); if (b.length()) deckBacks.push_back(b); }
+  // Språket i leken: räkna vad korten (som inte är svenska) ser ut att vara
+  {
+    int votes[4] = {0, 0, 0, 0};
+    const char* names[4] = {"es", "de", "fr", "en"};
+    for (auto& b : deckBacks) {
+      if (looksSwedish(b)) continue;
+      const char* g = guessLang(b);
+      for (int i = 0; i < 4; i++) if (!strcmp(g, names[i])) votes[i]++;
+    }
+    int bi = 0;
+    for (int i = 1; i < 4; i++) if (votes[i] > votes[bi]) bi = i;
+    deckGuessed = votes[bi] >= 2 ? names[bi] : "";
+  }
   nextCard();
   dirtyAll = true;
 }
@@ -1069,7 +1083,32 @@ static const char* langFrom(String t) {
   if (t.indexOf("engelsk") >= 0 || t.indexOf("english") >= 0) return "en";
   return "";
 }
-static const char* deckLang() { return langFrom(cur.subject + " " + cur.name); }
+/** Gissar språket på en icke-svensk text: tecken (ñ ¿ ß ç …) och vanliga småord. */
+static const char* guessLang(const String& in) {
+  String t = " " + in + " ";
+  t.toLowerCase();
+  for (const char* p : {".", ",", "!", "?", ";", ":", "\"", "(", ")"}) t.replace(p, " ");
+  auto words = [&](std::initializer_list<const char*> ws) {
+    int n = 0;
+    for (auto w : ws) { String k = String(" ") + w + " "; int i = 0; while ((i = t.indexOf(k, i)) >= 0) { n++; i += k.length() - 1; } }
+    return n;
+  };
+  auto chars = [&](std::initializer_list<const char*> cs) { int n = 0; for (auto c : cs) if (t.indexOf(c) >= 0) n += 3; return n; };
+  int es = chars({"ñ", "¿", "¡"}) + words({"el", "la", "los", "las", "un", "una", "que", "y", "es", "por", "para", "con", "muy", "soy", "estoy", "tengo", "hola", "gracias", "de", "del", "mi", "tu", "su"});
+  int de = chars({"ß"}) + words({"der", "die", "das", "und", "ist", "ich", "nicht", "mit", "ein", "eine", "zu", "sie", "wir", "auf", "für", "bin", "habe"});
+  int fr = chars({"ç", "œ", "è", "ê", "à", "ù"}) + words({"le", "les", "et", "est", "je", "vous", "une", "pour", "avec", "pas", "ne", "bonjour", "merci", "des", "du", "au", "nous", "suis"});
+  int en = words({"the", "and", "is", "are", "you", "of", "to", "with", "this", "that", "it", "have", "has", "was", "what", "my", "your"});
+  int best = std::max(std::max(es, de), std::max(fr, en));
+  if (best == 0) return "";
+  return best == es ? "es" : best == de ? "de" : best == fr ? "fr" : "en";
+}
+
+// Kortlekens språk: ämnet/namnet, annars det som flest kort i leken ser ut att vara (räknas när leken öppnas)
+static const char* deckGuessed = "";
+static const char* deckLang() {
+  const char* l = langFrom(cur.subject + " " + cur.name);
+  return *l ? l : deckGuessed;
+}
 
 /** Ser texten svensk ut? (å/ä/ö eller vanliga svenska småord) */
 static bool looksSwedish(const String& in) {
@@ -1083,8 +1122,9 @@ static bool looksSwedish(const String& in) {
 
 /** Läs upp en text från ett kort: utländsk röst för den utländska sidan i språk-kortlekar. */
 static void sayCardSide(const String& text) {
+  if (looksSwedish(text)) { sayAloud(text, ""); return; }
   const char* lang = deckLang();
-  sayAloud(text, *lang && !looksSwedish(text) ? lang : "");
+  sayAloud(text, *lang ? lang : guessLang(text));
 }
 
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
@@ -1880,7 +1920,7 @@ static void pumpListening() {
     fetchWantText = sents[fetchPos].text;
     {
       const char* l = langFrom(hwCur.subject + " " + hwCur.title);
-      fetchWantLang = *l && !looksSwedish(fetchWantText) ? l : "";
+      fetchWantLang = looksSwedish(fetchWantText) ? "" : (*l ? l : guessLang(fetchWantText));
     }
   }
   xSemaphoreGive(fetchLock);
