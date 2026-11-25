@@ -149,7 +149,8 @@ static void pumpMelody() {
 }
 
 // Uppläsning av frågor (Pluggis röst via servern, hämtas i bakgrundstråden)
-static void sayAloud(const String& text);
+static void sayAloud(const String& text, const char* lang = "");
+static void sayCardSide(const String& text);
 static void sayStop();
 static int examSpoken = -1;
 static void examSpeak();
@@ -886,7 +887,7 @@ static void nextCard() {
         }
       }
       noMoreCards = false;
-      if (!isLanguageDeck()) sayAloud(qFront.indexOf("___") >= 0 ? String(qFront) : qFront);
+      sayCardSide(qFront);
       return;
     }
     if (code == 404 && !practiceAnyway) { practiceAnyway = true; continue; }
@@ -1055,6 +1056,33 @@ static bool isLanguageDeck() {
   const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol"};
   for (auto w : words) if (t.indexOf(w) >= 0) return true;
   return false;
+}
+
+/** Språket i en språk-kortlek: "es", "de", "fr", "en" – annars "". */
+static const char* deckLang() {
+  String t = cur.subject + " " + cur.name;
+  t.toLowerCase();
+  if (t.indexOf("spansk") >= 0 || t.indexOf("españ") >= 0 || t.indexOf("espan") >= 0) return "es";
+  if (t.indexOf("tysk") >= 0 || t.indexOf("deutsch") >= 0) return "de";
+  if (t.indexOf("fransk") >= 0) return "fr";
+  if (t.indexOf("engelsk") >= 0 || t.indexOf("english") >= 0) return "en";
+  return "";
+}
+
+/** Ser texten svensk ut? (å/ä/ö eller vanliga svenska småord) */
+static bool looksSwedish(const String& in) {
+  String t = " " + in + " ";
+  t.toLowerCase();
+  if (t.indexOf("å") >= 0 || t.indexOf("ä") >= 0 || t.indexOf("ö") >= 0 || t.indexOf("Å") >= 0 || t.indexOf("Ä") >= 0 || t.indexOf("Ö") >= 0) return true;
+  const char* words[] = {" och ", " att ", " jag ", " är ", " en ", " ett ", " det ", " med ", " för ", " inte ", " som ", " har ", " vi ", " du ", " han ", " hon ", " min ", " vad "};
+  for (auto w : words) if (t.indexOf(w) >= 0) return true;
+  return false;
+}
+
+/** Läs upp en text från ett kort: utländsk röst för den utländska sidan i språk-kortlekar. */
+static void sayCardSide(const String& text) {
+  const char* lang = deckLang();
+  sayAloud(text, *lang && !looksSwedish(text) ? lang : "");
 }
 
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
@@ -1556,7 +1584,11 @@ static void gameTouch(int x, int y) {
 
 static void ovaTouch(int x, int y) {
   lastTouchAt = millis();
-  if (screen == Screen::OvaCard && !noMoreCards && chosen < 0 && y > TOP_H + 40 && y < TOP_H + 260) { sayAloud(revealed ? qFront + ". " + qBack : qFront); return; }
+  if (screen == Screen::OvaCard && !noMoreCards && chosen < 0 && y > TOP_H + 40 && y < TOP_H + 260) {
+    if (revealed && *deckLang()) sayCardSide(looksSwedish(qFront) ? qBack : qFront);
+    else sayCardSide(revealed ? qFront + ". " + qBack : qFront);
+    return;
+  }
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
@@ -1585,6 +1617,7 @@ static void ovaTouch(int x, int y) {
         chosen = i;
         bool ok = (int)i == correctIdx;
         if (ok) SFX_OK(); else SFX_BAD();
+        if (*deckLang()) { delay(450); sayCardSide(looksSwedish(qFront) ? qBack : qFront); }
         dirtyOva = true;
         redraw();
         grade(ok);
@@ -1593,7 +1626,7 @@ static void ovaTouch(int x, int y) {
       }
     }
   } else if (!revealed) {
-    if (isLanguageDeck()) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; } }
+    if (isLanguageDeck()) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
     else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
     else if (inside(btnSay, x, y)) startRecording();
   } else {
@@ -1860,7 +1893,7 @@ static void pumpListening() {
 }
 
 // En fråga att läsa upp (vid sidan av läxans uppläsning)
-static String sayWant;
+static String sayWant, sayWantLang;
 static int sayGen = 0, sayWantGen = -1, sayBufGen = -1;
 static uint8_t* sayBuf = nullptr;
 static size_t sayLen = 0;
@@ -1869,15 +1902,17 @@ static void fetchTask(void*) {
   for (;;) {
     int idx = -1, gen = -1;
     bool isSay = false;
-    String text;
+    String text, lang;
     xSemaphoreTake(fetchLock, portMAX_DELAY);
     if (fetchWantIdx >= 0 && fetchedIdx < 0) { idx = fetchWantIdx; gen = fetchWantGen; text = fetchWantText; fetchWantIdx = -1; }
-    else if (sayWant.length()) { isSay = true; gen = sayWantGen; text = sayWant; sayWant = ""; }
+    else if (sayWant.length()) { isSay = true; gen = sayWantGen; text = sayWant; lang = sayWantLang; sayWant = ""; }
     xSemaphoreGive(fetchLock);
     if (idx < 0 && !isSay) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
     uint8_t* buf;
     size_t len;
-    int code = apiBinary("/api/speech/preview?small=true", "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
+    String path = "/api/speech/preview?small=true";
+    if (isSay && lang.length()) path += "&lang=" + lang;
+    int code = apiBinary(path, "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
     xSemaphoreTake(fetchLock, portMAX_DELAY);
     if (isSay) {
       if (gen == sayGen && buf) { if (sayBuf) free(sayBuf); sayBuf = buf; sayLen = len; sayBufGen = gen; }
@@ -1888,7 +1923,7 @@ static void fetchTask(void*) {
   }
 }
 
-static void sayAloud(const String& text) {
+static void sayAloud(const String& text, const char* lang) {
   if (!text.length() || !fetchLock) return;
   String t = text;
   t.replace("___", ", lucka, ");
@@ -1897,6 +1932,7 @@ static void sayAloud(const String& text) {
   xSemaphoreTake(fetchLock, portMAX_DELAY);
   sayGen++;
   sayWant = t;
+  sayWantLang = lang ? lang : "";
   sayWantGen = sayGen;
   if (sayBuf) { free(sayBuf); sayBuf = nullptr; }
   xSemaphoreGive(fetchLock);
