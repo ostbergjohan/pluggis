@@ -263,6 +263,10 @@ material (foto, skärmdump, Word, PDF), öva själv (fliken **Öva**: flashkort,
 - Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning, kortlekar (öva, inte ändra) och poäng – inte inställningar,
   poängbonus, utbetalningar, kalender, loggar eller syskonens data.
 - Tryck på Pluggis-namnet i chatten för att logga ut (t.ex. på en delad telefon).
+- **Lyssna på materialet:** högst upp på en läxa/ett prov finns en spelare som läser upp allt inläst material sida för
+  sida (▶/⏸, ⏮ förra meningen, ⏭ nästa sida, framstegsstapel). Var eleven är sparas på läxan, så att det går att
+  fortsätta senare – även på en annan enhet – och sidor som lyssnats klart får ✓. *🎧 Lyssna härifrån* på varje sida
+  hoppar dit. Tiden räknas som övning. Uppläsningen stannar om telefonen låses (webbläsaren pausar sidan).
 
 ### Eleven och coachens ton
 

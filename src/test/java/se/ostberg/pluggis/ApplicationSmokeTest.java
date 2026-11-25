@@ -381,6 +381,28 @@ class ApplicationSmokeTest {
     }
 
     @Test
+    void listeningPositionIsSavedOnTheHomeworkAndStudentsMaySaveIt() throws Exception {
+        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"title\":\"Lyssnaprov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
+        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+                .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
+        mvc.perform(put("/api/homework/" + id + "/listen").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"materialId\":55,\"sentence\":7,\"listened\":[53,54,54]}")).andExpect(status().isOk());
+        JsonNode h = null;
+        for (JsonNode x : json(mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, code)).andReturn().getResponse().getContentAsString())) {
+            if (x.path("id").asLong() == id) {
+                h = x;
+            }
+        }
+        assertThat(h).isNotNull();
+        assertThat(h.path("listenMaterialId").asLong()).isEqualTo(55);
+        assertThat(h.path("listenSentence").asInt()).isEqualTo(7);
+        assertThat(h.path("listenedIds").toString()).isEqualTo("[53,54]");
+        mvc.perform(put("/api/homework/999999/listen").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"materialId\":1}")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void rejectsMissingToken() throws Exception {
         mvc.perform(get("/api/homework")).andExpect(status().isUnauthorized());
     }

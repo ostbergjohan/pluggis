@@ -152,6 +152,14 @@ public class HomeworkService {
     }
 
     @Transactional
+    public Optional<Homework> setListening(long id, Long materialId, Integer sentence, java.util.Collection<Long> listened) {
+        return repo.findById(id).map(h -> {
+            h.setListening(materialId, sentence, listened);
+            return h;
+        });
+    }
+
+    @Transactional
     public void setManualPlan(long id, boolean manual) {
         repo.findById(id).ifPresent(h -> h.setManualPlan(manual));
     }

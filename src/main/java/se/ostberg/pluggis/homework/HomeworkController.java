@@ -187,4 +187,15 @@ public class HomeworkController {
     public ResponseEntity<Map<String, String>> badRequest(IllegalArgumentException e) {
         return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
     }
+
+    /** Uppläsningen av materialet: var eleven är och vad som lyssnats klart (även från elevchatten). */
+    public record ListenRequest(Long materialId, Integer sentence, List<Long> listened) {
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/listen")
+    public ResponseEntity<?> listen(@PathVariable long id, @RequestBody ListenRequest body) {
+        return homework.setListening(id, body.materialId(), body.sentence(), body.listened())
+                .<ResponseEntity<?>>map(h -> ResponseEntity.ok(java.util.Map.of("ok", true)))
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

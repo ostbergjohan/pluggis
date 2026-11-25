@@ -38,6 +38,12 @@ public class Homework {
     private Integer weight;
     /** Föräldern har flyttat moment för hand – nattlig/automatisk omplanering låter planen vara. */
     private Boolean manualPlan;
+    /** Var eleven var i uppläsningen av materialet: materialets id och meningens nummer. */
+    private Long listenMaterialId;
+    private Integer listenSentence;
+    /** Material som lyssnats klart, kommaseparerade id:n. */
+    @jakarta.persistence.Column(length = 1000)
+    private String listenedIds;
 
     private String title;
 
@@ -109,6 +115,28 @@ public class Homework {
     public Integer getWeight() { return weight; }
 
     public boolean isManualPlan() { return Boolean.TRUE.equals(manualPlan); }
+
+    public Long getListenMaterialId() { return listenMaterialId; }
+
+    public Integer getListenSentence() { return listenSentence; }
+
+    public java.util.List<Long> getListenedIds() {
+        if (listenedIds == null || listenedIds.isBlank()) {
+            return java.util.List.of();
+        }
+        return java.util.Arrays.stream(listenedIds.split(",")).map(String::trim).filter(x -> x.matches("\\d+")).map(Long::valueOf).toList();
+    }
+
+    /** Sparar var eleven är i uppläsningen; {@code listened} = material som lyssnats klart (null = oförändrat). */
+    public void setListening(Long materialId, Integer sentence, java.util.Collection<Long> listened) {
+        this.listenMaterialId = materialId;
+        this.listenSentence = sentence == null ? null : Math.max(0, sentence);
+        if (listened != null) {
+            String joined = listened.stream().filter(java.util.Objects::nonNull).distinct().map(String::valueOf)
+                    .collect(java.util.stream.Collectors.joining(","));
+            this.listenedIds = joined.length() > 1000 ? joined.substring(0, 1000) : joined;
+        }
+    }
 
     public void setManualPlan(boolean manual) { this.manualPlan = manual; }
 

@@ -824,11 +824,13 @@ async function makeQuiz(homeworkId, mode, btn) {
  */
 const Practice = {
   id: null, what: null, homeworkId: null, active: 0, last: Date.now(), timer: null,
-  async begin(what, homeworkId) {
+  async begin(what, homeworkId, passive) {
+    if (this.timer && this.what === what) return;   // samma övning pågår redan
     this.end(false);
     this.what = what; this.homeworkId = homeworkId || null; this.active = 0; this.last = Date.now();
     this.timer = setInterval(() => {
-      if (document.visibilityState === 'visible' && Date.now() - this.last < 120000) this.active++;
+      // Aktiv tid: appen syns och eleven har tryckt nyligen – eller lyssnar just nu
+      if ((passive && passive()) || (document.visibilityState === 'visible' && Date.now() - this.last < 120000)) this.active++;
     }, 1000);
     try {
       const r = await api('/api/practice/start', { method: 'POST', body: { what, homeworkId: this.homeworkId } });
@@ -1384,6 +1386,8 @@ async function homeworkDetail(id) {
   if (!x) { page.append(h('div', { class: 'empty' }, 'Hittade inte läxan.')); return page; }
   page.append(h('h2', { style: 'margin-top:12px' }, h('span', { class: 'tag' + (x.kind === 'TEST' ? ' test' : '') }, x.kind === 'TEST' ? 'Prov' : 'Läxa'), ' ', x.title),
     h('div', { class: 'meta', style: 'color:var(--muted)' }, [x.subject, rel(x.dueDate)].filter(Boolean).join(' · ')));
+  const listen = listenPlayer(x, material);
+  if (listen) page.append(listen.el);
   try {
     const prog = (await api('/api/plan/progress')).find(p => p.homeworkId === x.id);
     if (prog) page.append(h('div', { style: 'margin-top:10px' }, progressCard(prog)));
@@ -1391,10 +1395,7 @@ async function homeworkDetail(id) {
   if (x.description) page.append(h('p', { style: 'white-space:pre-wrap' }, x.description));
   if ((x.steps || []).length) page.append(h('h3', {}, 'Det här ingår'), h('div', { class: 'box' }, x.steps.map(st => h('div', { class: 'row' }, st))));
 
-  const texts = material.filter(m => m.text).map(m => m.text);
-  page.append(h('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:18px' },
-    h('h3', { style: 'margin:0;flex:1' }, `Material (${material.length})`),
-    texts.length > 1 ? h('button', { class: 'small-btn', onclick: (e) => readAloud(texts.join('\n\n'), e.target) }, '🔊 Läs upp allt') : null));
+  page.append(h('h3', { style: 'margin-top:18px' }, `Material (${material.length})`));
   if (!material.length) {
     page.append(h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget material än. Fota sidorna i boken så vet Pluggis vad som ingår.')));
   } else {
@@ -1406,8 +1407,9 @@ async function homeworkDetail(id) {
         h('div', { class: 'mat-body' },
           h('div', { class: 'mat-title' }, m.page ? `Sida ${m.page}` : (m.filename || 'Fil')),
           m.summary ? h('div', { class: 'meta' }, m.summary) : null,
+          listen && listen.has(m.id) ? h('div', { class: 'meta listen-mark', 'data-mat': m.id }, listen.mark(m.id)) : null,
           m.text ? h('div', { class: 'mat-actions' },
-            h('button', { class: 'small-btn', onclick: (e) => readAloud(m.text, e.target) }, '🔊 Läs upp'),
+            listen && listen.has(m.id) ? h('button', { class: 'small-btn', onclick: () => { listen.jump(m.id); window.scrollTo({ top: 0, behavior: 'smooth' }); } }, '🎧 Lyssna härifrån') : null,
             h('button', { class: 'small-btn', onclick: (e) => { text.hidden = !text.hidden; e.target.textContent = text.hidden ? 'Visa text' : 'Dölj text'; } }, 'Visa text')) : null,
           text));
     })));
@@ -1460,6 +1462,146 @@ async function readAloud(text, btn) {
     u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
     speechSynthesis.speak(u);
   }
+}
+
+// ---- Lyssna på materialet (som en ljudbok) ----
+/**
+ * Läser upp allt inläst material i en läxa, sida för sida och mening för mening. Var eleven är sparas på
+ * läxan (servern), så det går att fortsätta senare – även på en annan enhet. Sidor som lyssnats klart får ✓.
+ */
+const Listener = { active: null };
+
+function listenPlayer(x, material) {
+  const chapters = material.filter(m => (m.text || '').trim())
+    .sort((a, b) => (a.page ?? 1e9) - (b.page ?? 1e9) || a.id - b.id)
+    .map((m, i) => ({ id: m.id, label: m.page ? `Sida ${m.page}` : (m.filename || `Del ${i + 1}`), sents: sentences(m.text) }))
+    .filter(c => c.sents.length);
+  if (!chapters.length) return null;
+  const listened = new Set(x.listenedIds || []);
+  let ci = Math.max(0, chapters.findIndex(c => c.id === x.listenMaterialId));
+  let si = chapters[ci].id === x.listenMaterialId ? (x.listenSentence || 0) : 0;
+  if (si >= chapters[ci].sents.length) si = 0;
+  let playing = false, run = 0, sinceSave = 0, finished = false;
+  const total = chapters.reduce((n, c) => n + c.sents.length, 0);
+  const posOf = () => chapters.slice(0, ci).reduce((n, c) => n + c.sents.length, 0) + si;
+  const resumable = ci > 0 || si > 0;
+
+  const title = h('div', { class: 'listen-title' });
+  const now = h('div', { class: 'listen-now' });
+  const bar = h('div', { class: 'quiz-progress' }, h('div'));
+  const playBtn = h('button', { class: 'listen-play', 'aria-label': 'Spela' }, '▶');
+  const back = h('button', { class: 'listen-btn', title: 'Förra meningen', 'aria-label': 'Förra meningen' }, '⏮');
+  const fwd = h('button', { class: 'listen-btn', title: 'Nästa sida', 'aria-label': 'Nästa sida' }, '⏭');
+  const hint = h('div', { class: 'meta listen-hint' });
+  const el = h('div', { class: 'box listen' },
+    h('div', { class: 'listen-head' }, h('span', { class: 'listen-ico' }, '🎧'), h('div', { class: 'grow' }, title, hint)),
+    bar, now, h('div', { class: 'listen-ctrl' }, back, playBtn, fwd));
+
+  function paint() {
+    const c = chapters[ci];
+    title.textContent = finished ? 'Allt uppläst ✓' : `${c.label} · ${ci + 1} av ${chapters.length}`;
+    bar.firstChild.style.width = `${Math.round(100 * (finished ? total : posOf()) / total)}%`;
+    playBtn.textContent = playing ? '⏸' : '▶';
+    playBtn.setAttribute('aria-label', playing ? 'Pausa' : 'Spela');
+    now.textContent = finished ? '' : c.sents[si] || '';
+    now.hidden = !playing && !resumable && posOf() === 0;
+    hint.textContent = playing ? 'Lyssnar …'
+      : finished ? 'Tryck ▶ för att lyssna igen från början.'
+      : posOf() > 0 ? `Fortsätt där du slutade – ${Math.round(100 * posOf() / total)} % lyssnat`
+      : `Lyssna på allt material: ${chapters.length} ${chapters.length === 1 ? 'del' : 'sidor'}, ca ${Math.max(1, Math.round(total * 6 / 60))} min`;
+    document.querySelectorAll('.listen-mark').forEach(m => {
+      const id = Number(m.dataset.mat);
+      m.textContent = mark(id);
+      m.classList.toggle('on', id === chapters[ci].id && (playing || posOf() > 0) && !finished);
+    });
+  }
+  function mark(id) {
+    if (!finished && id === chapters[ci].id && (playing || posOf() > 0)) return playing ? '🎧 Lyssnar nu' : '🎧 Du är här';
+    return listened.has(id) ? '✓ Lyssnat' : '';
+  }
+  async function save() {
+    sinceSave = 0;
+    try {
+      await api(`/api/homework/${x.id}/listen`, { method: 'PUT',
+        body: { materialId: finished ? null : chapters[ci].id, sentence: finished ? 0 : si, listened: [...listened] } });
+    } catch { /* sparas nästa gång */ }
+  }
+  /** En mening: Pluggis röst om den finns, annars telefonens. Löser ut när den är klar. */
+  let prefetch = null;
+  async function sayOne(text, myRun, nextText) {
+    const usePluggis = S.serverVoice && S.voice !== 'telefon';
+    if (usePluggis) {
+      try {
+        const buf = await (prefetch && prefetch.text === text ? prefetch.p : fetchVoice(text));
+        prefetch = nextText ? { text: nextText, p: fetchVoice(nextText).catch(() => null) } : null;
+        if (myRun !== run || !buf) return !!buf;
+        const ok = await playBuffer(buf);
+        if (ok || playerUnlocked) return true;
+      } catch { /* telefonens röst i stället */ }
+    }
+    if (!window.speechSynthesis || myRun !== run) return false;
+    return new Promise(resolve => {
+      const u = new SpeechSynthesisUtterance(forSpeech(text));
+      u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+      u.onend = () => resolve(true); u.onerror = () => resolve(false);
+      speechSynthesis.speak(u);
+    });
+  }
+  async function play() {
+    if (finished) { finished = false; ci = 0; si = 0; }
+    stopReading();
+    if (Listener.active && Listener.active !== api_) Listener.active.pause();
+    Listener.active = api_;
+    playing = true;
+    const myRun = ++run;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* */ }
+    if (!playerUnlocked) { try { player.src = SILENCE; player.play().then(() => { playerUnlocked = true; }).catch(() => {}); } catch { /* */ } }
+    Practice.begin(`Lyssnar: ${x.title}`, x.id, () => playing);
+    paint();
+    while (playing && myRun === run) {
+      const c = chapters[ci];
+      const nextText = si + 1 < c.sents.length ? c.sents[si + 1] : (chapters[ci + 1] ? chapters[ci + 1].sents[0] : null);
+      paint();
+      const ok = await sayOne(c.sents[si], myRun, nextText);
+      if (myRun !== run) return;
+      if (!ok) { toast('Uppläsningen stannade – tryck ▶ igen', true); pause(); return; }
+      si++;
+      if (si >= c.sents.length) {
+        listened.add(c.id);
+        if (ci + 1 >= chapters.length) { finished = true; playing = false; await save(); paint(); toast('Allt material uppläst! 🎧'); return; }
+        ci++; si = 0;
+        await save();
+      } else if (++sinceSave >= 4) {
+        save();
+      }
+    }
+  }
+  function pause() {
+    if (!playing) return;
+    playing = false; run++;
+    stopServerAudio();
+    try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch { /* */ }
+    save(); paint();
+  }
+  const api_ = {
+    el, pause,
+    has: (id) => chapters.some(c => c.id === id),
+    mark,
+    jump(id) { const i = chapters.findIndex(c => c.id === id); if (i < 0) return; pause(); finished = false; ci = i; si = 0; play(); },
+  };
+  playBtn.addEventListener('click', () => (playing ? pause() : play()));
+  back.addEventListener('click', () => {
+    const was = playing; pause();
+    if (si > 0) si--; else if (ci > 0) { ci--; si = chapters[ci].sents.length - 1; }
+    finished = false; paint(); if (was) play();
+  });
+  fwd.addEventListener('click', () => {
+    const was = playing; pause();
+    if (ci + 1 < chapters.length) { ci++; si = 0; finished = false; }
+    paint(); save(); if (was) play();
+  });
+  setTimeout(paint, 0);
+  return api_;
 }
 
 // ---- Uppladdning ----
@@ -1574,6 +1716,7 @@ async function refreshPoints() {
 
 // ---- Flikar ----
 async function show(tab) {
+  if (Listener.active) Listener.active.pause();
   Practice.end();
   if (tab !== 'laxor') { S.openHomework = null; }
   if (typeof stopReading === 'function' && readingBtn) stopReading();
