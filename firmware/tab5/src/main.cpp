@@ -896,10 +896,10 @@ static void showScreen(Screen s, bool force = false) {
 static void layoutOva() {
   int top = TOP_H + 230, gap = 20;
   int ry = TOP_H + 92, rh = 96;
-  btnMkPrev = {gap, ry, 80, rh, "<", PANEL};
+  btnMkPrev = {gap, ry, 110, rh, "<", PANEL};
   btnMkQuiz = {W - gap - 2 * 230 - gap, ry, 230, rh, "Snabbquiz", ACCENT};
   btnMkCloze = {W - gap - 230, ry, 230, rh, "Lucktext", ACCENT};
-  btnMkNext = {btnMkQuiz.x - gap - 80, ry, 80, rh, ">", PANEL};
+  btnMkNext = {btnMkQuiz.x - gap - 110, ry, 110, rh, ">", PANEL};
   int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
   for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
@@ -1104,7 +1104,8 @@ static void ovaTouch(int x, int y) {
   if (screen == Screen::OvaList) {
     if (!makeList.empty() && !makeBusy.length()) {
       if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
-      if (makeList.size() > 1 && inside(btnMkNext, x, y)) { makeIdx = (makeIdx + 1) % makeList.size(); dirtyOva = true; return; }
+      bool onLabel = y >= btnMkPrev.y && y < btnMkPrev.y + btnMkPrev.h && x > btnMkPrev.x + btnMkPrev.w && x < btnMkNext.x;
+      if (makeList.size() > 1 && (inside(btnMkNext, x, y) || onLabel)) { makeIdx = (makeIdx + 1) % makeList.size(); dirtyOva = true; return; }
       bool quiz = inside(btnMkQuiz, x, y), cloze = inside(btnMkCloze, x, y);
       if (quiz || cloze) { makeQuiz(makeList[makeIdx].id, quiz ? "quiz" : "cloze"); return; }
     }
@@ -1726,6 +1727,6 @@ void loop() {
     if (sessionActive) dirtyTimer = true;
     if (pointsBanner.length() && millis() > pointsBannerUntil) { pointsBanner = ""; dirtyMain = true; }
   }
-  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyDots) redraw();
+  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyDots || dirtyOva) redraw();
   delay(2);
 }
