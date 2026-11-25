@@ -1,0 +1,30 @@
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+  pull_request:
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+  workflow_dispatch:
+
+jobs:
+  tab5:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware/tab5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/tab5/platformio.ini') }}
+      - name: Installera PlatformIO
+        run: pip install -U platformio
+      # Kompileringskontroll. Riktig firmware byggs lokalt med din egen include/config.h (WiFi, server, token).
+      - name: Bygg (med config.example.h)
+        run: pio run
