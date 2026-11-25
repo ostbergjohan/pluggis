@@ -65,7 +65,8 @@ public class SpeechController {
 
     /** Provlyssna en röst innan den sparas. */
     @PostMapping(value = "/preview", produces = "audio/wav")
-    public ResponseEntity<byte[]> preview(@RequestBody(required = false) PreviewRequest body) {
+    public ResponseEntity<byte[]> preview(@RequestBody(required = false) PreviewRequest body,
+                                          @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean small) {
         if (!speech.ttsEnabled()) {
             return ResponseEntity.status(503).contentType(MediaType.TEXT_PLAIN)
                     .body("Ljudtjänsten är inte påslagen".getBytes());
@@ -75,6 +76,9 @@ public class SpeechController {
         double speed = body != null && body.speed() != null ? body.speed() : settings.speed();
         byte[] wav = speech.synthesize(text.length() > 300 ? text.substring(0, 300) : text, voice,
                 SettingsService.lengthScale(speed));
+        if (small) {
+            wav = Wav.toMono16k(wav);   // Tab5: mindre att hämta och spela upp
+        }
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("audio/wav")).body(wav);
     }
 }

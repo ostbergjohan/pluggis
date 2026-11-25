@@ -190,8 +190,10 @@ public class FlashcardController {
     /** För test utan enhet. */
     @GetMapping("/decks/{deckId}/next")
     public ResponseEntity<Card> next(@PathVariable long deckId, @RequestParam(defaultValue = "false") boolean practiceAnyway,
-                                     @RequestParam(required = false) String deviceId) {
-        return ResponseEntity.of(flashcards.next(deckId, practiceAnyway, deviceId));
+                                     @RequestParam(required = false) String deviceId,
+                                     @RequestParam(defaultValue = "true") boolean announce) {
+        // announce=false: Tab5 övar själv på skärmen – visa inte kortet i chatten/coachen också
+        return ResponseEntity.of(flashcards.next(deckId, practiceAnyway, announce ? deviceId : null));
     }
 
     @PostMapping("/cards/{cardId}/grade")
