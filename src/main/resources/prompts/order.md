@@ -19,3 +19,6 @@ Svara ENDAST med JSON:
 Håll dig ENDAST till materialet när det finns. Inga årtal i stegen om inte ordningen ska gå att lösa utan dem –
 eleven ska förstå sammanhanget, inte gissa siffror. Finns inget material: grunderna på årskurs 8-nivå och skriv
 det i "note". Går det inte: {"sequences": [], "note": "beskriv kort"}.
+
+Finns `avoid` i uppgiften: det fick eleven nyss – välj andra saker. Finns `variation`: följ den, så att övningen
+blir olika från gång till gång (men alltid ur materialet).

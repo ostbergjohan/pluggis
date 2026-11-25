@@ -1260,7 +1260,14 @@ static void startGame(int which, long hw, const String& title) {
       }
     }
     for (int i = pairs.size() - 1; i > 0; i--) std::swap(pairs[i], pairs[esp_random() % (i + 1)]);
+    // Variation: kort som var med de senaste gångerna hamnar sist
+    static std::vector<String> recentMatch;
+    std::stable_partition(pairs.begin(), pairs.end(), [](const Pair& p) {
+      return std::find(recentMatch.begin(), recentMatch.end(), p.a) == recentMatch.end();
+    });
     if (pairs.size() > 5) pairs.resize(5);
+    for (auto& p : pairs) recentMatch.insert(recentMatch.begin(), p.a);
+    if (recentMatch.size() > 15) recentMatch.resize(15);
     gameMsg = pairs.size() < 3 ? "Det behövs minst tre kort till läxan. Gör ett snabbquiz först." : "";
     rightOrder.clear();
     for (size_t i = 0; i < pairs.size(); i++) rightOrder.push_back(i);

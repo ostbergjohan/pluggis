@@ -72,6 +72,9 @@ public class GamesController {
     public record DoneRequest(String kind, String what) {
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private se.ostberg.pluggis.support.Variety variety;
+
     @PostMapping("/order")
     public ResponseEntity<?> order(@RequestBody OrderRequest body) {
         Map<String, Object> task = new LinkedHashMap<>();
@@ -87,6 +90,13 @@ public class GamesController {
             String mat = materials.allText(h.getId());
             task.put("material", mat.length() > 15000 ? mat.substring(0, 15000) : mat);
         }
+        if (variety != null) {
+            List<String> avoid = variety.recent("order", body.homeworkId());
+            if (!avoid.isEmpty()) {
+                task.put("avoid", avoid);
+            }
+            task.put("variation", variety.focusHint());
+        }
         try {
             ObjectNode req = claude.newRequest(props.anthropic().flashcards(), prompts.order());
             ObjectNode msg = req.putArray("messages").addObject();
@@ -97,6 +107,9 @@ public class GamesController {
             if (ok.isEmpty()) {
                 return ResponseEntity.unprocessableEntity().body(Map.of("error",
                         g.note() != null ? g.note() : "Hittade inget i materialet som har en tydlig ordning"));
+            }
+            if (variety != null) {
+                variety.remember("order", body.homeworkId(), ok.stream().map(Sequence::title).toList());
             }
             return ResponseEntity.ok(new OrderGame(ok, g.note()));
         } catch (Exception e) {

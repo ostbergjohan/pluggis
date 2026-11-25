@@ -90,6 +90,9 @@ public class ExplainService {
                        String note) {
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private se.ostberg.pluggis.support.Variety variety;
+
     public Turn start(Long homeworkId) {
         prune();
         var h = homeworkId == null ? null : homework.get(homeworkId).orElseThrow(() -> new IllegalArgumentException("Hittar inte läxan"));
@@ -103,6 +106,13 @@ public class ExplainService {
             String mat = materials.allText(h.getId());
             task.put("material", mat.length() > 15000 ? mat.substring(0, 15000) : mat);
         }
+        if (variety != null) {
+            List<String> avoid = variety.recent("explain", homeworkId);
+            if (!avoid.isEmpty()) {
+                task.put("avoid", avoid);
+            }
+            task.put("variation", variety.focusHint());
+        }
         Start s = ask(task, Start.class, "explain-start");
         List<String> points = s.keyPoints() == null ? List.of()
                 : s.keyPoints().stream().filter(p -> p != null && !p.isBlank()).limit(5).toList();
@@ -113,6 +123,9 @@ public class ExplainService {
                 s.concept() == null ? "det här" : s.concept().trim(), s.question().trim(), points);
         r.turns.add(Map.of("role", "pluggis", "text", r.question));
         rounds.put(r.id, r);
+        if (variety != null) {
+            variety.remember("explain", homeworkId, List.of(r.concept));
+        }
         return new Turn(r.id, r.concept, r.question, false, List.of(), List.of(), s.note());
     }
 

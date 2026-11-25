@@ -55,6 +55,13 @@ public class FlashcardGenerator {
         if (topic != null && !topic.isBlank()) {
             ask.append(" Område: ").append(topic).append('.');
         }
+        if (variety != null) {
+            ask.append("\n\n").append(variety.focusHint());
+            java.util.List<String> avoid = variety.recent("quiz", homeworkId);
+            if (!avoid.isEmpty()) {
+                ask.append("\nDe här frågorna fick eleven nyss – gör andra:\n- ").append(String.join("\n- ", avoid));
+            }
+        }
         if (sourceText != null && !sourceText.isBlank()) {
             ask.append("\n\nUtgå ENDAST från detta material:\n").append(sourceText);
         }
@@ -125,6 +132,9 @@ public class FlashcardGenerator {
     }
 
     /** "quiz" = flerval, "cloze" = lucktext, "mix" = blandat. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private se.ostberg.pluggis.support.Variety variety;
+
     public Result quiz(String mode, String topic, String sourceText, String subject, int count, Long homeworkId) {
         String m = mode == null ? "mix" : mode.trim().toLowerCase(java.util.Locale.ROOT);
         String kinds = switch (m) {
@@ -159,7 +169,11 @@ public class FlashcardGenerator {
         String name = ("cloze".equals(m) ? "✏️ Lucktext: " : "⚡ Snabbquiz: ") + base;
         String subj = generated.subject() == null ? subject : generated.subject();
         Deck deck = flashcards.createDeck(name, subj, homeworkId, Deck.Source.GENERATED, cards);
-        return new Result(deck, flashcards.cards(deck.getId()).size(), generated.note());
+        java.util.List<Card> made = flashcards.cards(deck.getId());
+        if (variety != null) {
+            variety.remember("quiz", homeworkId, made.stream().map(Card::getFront).limit(12).toList());
+        }
+        return new Result(deck, made.size(), generated.note());
     }
 
     /** Släpp bara igenom frågor som går att spela: minst två felaktiga alternativ, inget avslöjat svar, lucka i lucktext. */

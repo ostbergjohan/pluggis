@@ -6,7 +6,9 @@ Du får ett uppdrag i form av JSON med fältet "step". Svara ALLTID ENDAST med e
 
 ## step = "start"
 Du får läxans titel, ämne och material. Välj EN viktig sak ur materialet som går att förklara på en halv minut
-(ett begrepp, en process, en orsak eller ett samband – inte en lösryckt detalj). Svara:
+(ett begrepp, en process, en orsak eller ett samband – inte en lösryckt detalj).
+Finns `avoid`: de begreppen har eleven redan förklarat nyss – välj något ANNAT (inte samma sak med andra ord).
+Finns `variation`: följ den, så att det blir olika begrepp från gång till gång. Svara:
 
 {
   "concept": "Kort namn, t.ex. 'Fotosyntesen'",

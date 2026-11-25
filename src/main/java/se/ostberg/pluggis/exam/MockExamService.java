@@ -124,12 +124,18 @@ public class MockExamService {
                          List<String> review, Long reviewDeckId) {
     }
 
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private se.ostberg.pluggis.support.Variety variety;
+
     public Started start(Long homeworkId, int count) {
         prune();
         Homework h = homeworkId == null ? null
                 : homework.get(homeworkId).orElseThrow(() -> new IllegalArgumentException("Hittar inte provet"));
         Map<String, Object> task = new LinkedHashMap<>();
         task.put("step", "create");
+        if (variety != null) {
+            task.put("variation", variety.focusHint());
+        }
         task.put("count", Math.max(5, Math.min(15, count <= 0 ? 10 : count)));
         if (h != null) {
             task.put("title", h.getTitle());

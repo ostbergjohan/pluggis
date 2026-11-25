@@ -902,8 +902,15 @@ async function startMatch(homeworkId, btn) {
     toast('Gör flashkort, ett snabbquiz eller en lucktext till läxan först – Matcha par spelas med korten', true);
     return;
   }
+  // Variation: kort som var med de senaste gångerna hamnar sist
+  const recentKey = `pluggis.match.${homeworkId}`;
+  let recent = [];
+  try { recent = JSON.parse(localStorage.getItem(recentKey) || '[]'); } catch { /* */ }
+  pool.sort((a, b) => recent.includes(a.id) - recent.includes(b.id));
+  const chosen = pool.slice(0, 6);
+  try { localStorage.setItem(recentKey, JSON.stringify([...chosen.map(p => p.id), ...recent].slice(0, 18))); } catch { /* */ }
   const hw = (await api('/api/homework?openOnly=false').catch(() => [])).find(x => x.id === homeworkId);
-  playMatch(pool.slice(0, 6), hw ? hw.title : 'Matcha par', homeworkId);
+  playMatch(chosen, hw ? hw.title : 'Matcha par', homeworkId);
 }
 
 function playMatch(pairs, title, homeworkId) {

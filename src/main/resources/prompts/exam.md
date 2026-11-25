@@ -33,3 +33,6 @@ stavfel och ofullständiga meningar är okej, det är förståelsen som räknas.
   ]
 }
 Ingen markdown, inga emojis. Svenska.
+
+Finns `avoid` i uppgiften: det fick eleven nyss – välj andra saker. Finns `variation`: följ den, så att övningen
+blir olika från gång till gång (men alltid ur materialet).
