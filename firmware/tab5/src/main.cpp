@@ -1163,6 +1163,14 @@ static std::vector<Sent> sents;
 static std::vector<String> chapterLabel;
 static std::vector<long> chapterIds;
 static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
+// Nästa mening hämtas i en egen tråd, så att skärmen svarar på tryck medan den laddas
+static SemaphoreHandle_t fetchLock = nullptr;
+static volatile int fetchGen = 0;          // ökas vid paus/hopp – gamla hämtningar kastas
+static int fetchWantIdx = -1, fetchWantGen = -1;
+static String fetchWantText;
+static uint8_t* fetchedBuf = nullptr;
+static size_t fetchedLen = 0;
+static int fetchedIdx = -1, fetchedGen = -1, fetchedCode = 0;
 static bool listening = false, listenDone = false;
 static Button btnPlay, btnPrev, btnNextCh, btnBack;
 
@@ -1318,6 +1326,7 @@ static void listenSave() {
 static void listenStop(bool save) {
   if (!listening) return;
   listening = false;
+  fetchReset();
   stopPlayback();
   fetchPos = listenPos;
   nowPlaying = -1;
@@ -1328,6 +1337,7 @@ static void listenStop(bool save) {
 static void listenStart() {
   if (sents.empty()) return;
   if (listenDone) { listenDone = false; listenPos = 0; }
+  fetchReset();
   stopPlayback();
   fetchPos = listenPos;
   listening = true;
@@ -1347,7 +1357,7 @@ static void pumpListening() {
     if (++sinceSave >= 4) listenSave();
     dirtyOva = true;
   }
-  if (!playing.data && playQueue.empty() && fetchPos >= (int)sents.size()) {
+  if (!playing.data && playQueue.empty() && fetchPos >= (int)sents.size() && fetchedIdx < 0) {
     listening = false;
     listenDone = true;
     listenPos = sents.size();
@@ -1356,21 +1366,61 @@ static void pumpListening() {
     dirtyOva = true;
     return;
   }
-  if (playQueue.size() < 1 && fetchPos < (int)sents.size()) {
-    uint8_t* buf;
-    size_t len;
-    int code = apiBinary("/api/speech/preview?small=true", "{\"text\":\"" + jsonEscape(sents[fetchPos].text) + "\"}", &buf, &len);
-    if (!listening) { if (buf) free(buf); return; }
-    if (buf) {
-      Clip c{buf, len, fetchPos};
+  xSemaphoreTake(fetchLock, portMAX_DELAY);
+  bool ready = fetchedIdx >= 0 && fetchedGen == fetchGen;
+  uint8_t* buf = ready ? fetchedBuf : nullptr;
+  size_t len = fetchedLen;
+  int idx = fetchedIdx, code = fetchedCode;
+  if (ready) { fetchedBuf = nullptr; fetchedIdx = -1; }
+  bool idle = fetchWantIdx < 0 && fetchedIdx < 0;
+  if (!ready && idle && playQueue.size() < 1 && fetchPos < (int)sents.size()) {
+    fetchWantIdx = fetchPos;
+    fetchWantGen = fetchGen;
+    fetchWantText = sents[fetchPos].text;
+  }
+  xSemaphoreGive(fetchLock);
+  if (ready) {
+    if (buf && idx == fetchPos) {
+      Clip c{buf, len, idx};
       playQueue.push_back(c);
       fetchPos++;
+    } else if (buf) {
+      free(buf);
     } else {
       listening = false;
       ovaMessage = code == 503 ? "Uppläsningen är inte påslagen på servern." : "Uppläsningen stannade. Tryck Spela igen.";
+      practiceEnd();
       dirtyOva = true;
     }
   }
+}
+
+static void fetchTask(void*) {
+  for (;;) {
+    int idx = -1, gen = -1;
+    String text;
+    xSemaphoreTake(fetchLock, portMAX_DELAY);
+    if (fetchWantIdx >= 0 && fetchedIdx < 0) { idx = fetchWantIdx; gen = fetchWantGen; text = fetchWantText; fetchWantIdx = -1; }
+    xSemaphoreGive(fetchLock);
+    if (idx < 0) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
+    uint8_t* buf;
+    size_t len;
+    int code = apiBinary("/api/speech/preview?small=true", "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
+    xSemaphoreTake(fetchLock, portMAX_DELAY);
+    if (gen == fetchGen) { fetchedBuf = buf; fetchedLen = len; fetchedIdx = idx; fetchedGen = gen; fetchedCode = code; }
+    else if (buf) free(buf);
+    xSemaphoreGive(fetchLock);
+  }
+}
+
+static void fetchReset() {
+  xSemaphoreTake(fetchLock, portMAX_DELAY);
+  fetchGen++;
+  fetchWantIdx = -1;
+  if (fetchedBuf) free(fetchedBuf);
+  fetchedBuf = nullptr;
+  fetchedIdx = -1;
+  xSemaphoreGive(fetchLock);
 }
 
 static void loadPlan() {
@@ -1406,8 +1456,8 @@ static void layoutHwPlan() {
   for (int i = 0; i < 6; i++) hwTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int bh = 110, by = H - bh - gap;
   btnBack = {gap, by, 220, bh, "Tillbaka", PANEL};
-  btnPrev = {gap * 2 + 220, by, 200, bh, "Förra", PANEL};
-  btnPlay = {gap * 3 + 420, by, W - 4 * gap - 420 - 240, bh, "Spela", ACCENT};
+  btnPrev = {gap * 2 + 220, by, 220, bh, "Förra sida", PANEL};
+  btnPlay = {gap * 3 + 440, by, W - 5 * gap - 440 - 240, bh, "Spela", ACCENT};
   btnNextCh = {W - gap - 240, by, 240, bh, "Nästa sida", PANEL};
   int rh = 66, ry = TOP_H + 100;
   for (int i = 0; i < 7; i++) planRowBtn[i] = {gap, ry + i * (rh + 10), W - 2 * gap, rh, "", PANEL};
@@ -1473,7 +1523,7 @@ static void drawHwPlan() {
     }
     drawTextButton(btnBack, PANEL, "Tillbaka");
     if (!sents.empty()) {
-      drawTextButton(btnPrev, PANEL, "Förra");
+      drawTextButton(btnPrev, PANEL, "Förra sida");
       drawTextButton(btnPlay, listening ? WARN : ACCENT, listening ? "Paus" : listenPos > 0 && !listenDone ? "Fortsätt" : "Spela");
       drawTextButton(btnNextCh, PANEL, "Nästa sida");
     }
@@ -1550,8 +1600,15 @@ static void hwPlanTouch(int x, int y) {
       bool was = listening;
       listenStop(false);
       listenDone = false;
-      if (listenPos > 0) listenPos--;
+      int ch = chapterOf(listenPos);
+      int first = 0;
+      for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) { first = i; break; }
+      if (listenPos - first <= 1 && ch > 0) {   // redan i början: sidan innan
+        for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch - 1]) { first = i; break; }
+      }
+      listenPos = first;
       fetchPos = listenPos;
+      listenSave();
       if (was) listenStart();
       dirtyOva = true;
     } else if (inside(btnNextCh, x, y)) {
@@ -1647,6 +1704,8 @@ void setup() {
   layout();
   layoutOva();
   layoutHwPlan();
+  fetchLock = xSemaphoreCreateMutex();
+  xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
   dirtyAll = true;
   redraw();
 
