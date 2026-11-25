@@ -113,7 +113,8 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         switch (msg.path("type").asText()) {
             case "hello" -> {
                 // {"type":"hello","audio":true,"audioFormat":"wav"} – vill enheten ha uppläst ljud?
-                registry.setWantsAudio(deviceId, session, msg.path("audio").asBoolean(false));
+                // "audioChunk": små enheter (Tab5) får ljudet som 16 kHz mono i bitar om högst så många byte
+                registry.setWantsAudio(deviceId, session, msg.path("audio").asBoolean(false), msg.path("audioChunk").asInt(0));
                 session.getAttributes().put(AUDIO_FORMAT, msg.path("audioFormat").asText("wav"));
                 registry.send(deviceId, Map.of("type", "hello_ack", "audio", registry.wantsAudio(deviceId)));
             }
@@ -125,6 +126,18 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
             }
             case "button" -> {
                 boolean active = sessions.active(deviceId).isPresent();
+                boolean mainLong = "long".equalsIgnoreCase(msg.path("gesture").asText())
+                        && ("main".equalsIgnoreCase(msg.path("button").asText()) || "blue".equalsIgnoreCase(msg.path("button").asText()));
+                if (mainLong) {
+                    // Avsluta: avsluta passet direkt (inte via coachen), och låt sedan coachen säga något kort
+                    if (active) {
+                        sessions.finish(deviceId, "Avslutat med knappen");
+                        voice.onText(deviceId, "(Jag avslutade passet med knappen just nu. Säg något kort och peppande.)");
+                    } else {
+                        registry.send(deviceId, new DeviceMessages.Say("Inget pass pågår just nu. Tryck på Börja när du vill plugga."));
+                    }
+                    return;
+                }
                 ButtonMapper.map(msg.path("button").asText(), msg.path("gesture").asText("click"), active)
                         .ifPresent(action -> {
                             switch (action) {

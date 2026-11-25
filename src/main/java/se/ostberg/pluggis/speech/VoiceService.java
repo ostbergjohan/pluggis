@@ -121,8 +121,7 @@ public class VoiceService {
                     first = false;
                     meters.timer("pluggis.voice.first_audio").record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
                 }
-                registry.send(deviceId, new DeviceMessages.Audio("wav", seq++, sentence, wav.length));
-                registry.sendBinary(deviceId, wav);
+                registry.sendAudio(deviceId, seq++, sentence, wav);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -135,8 +134,7 @@ public class VoiceService {
         if (speech.ttsEnabled() && registry.wantsAudio(deviceId)) {
             try {
                 byte[] wav = speak(text);
-                registry.send(deviceId, new DeviceMessages.Audio("wav", 0, text, wav.length));
-                registry.sendBinary(deviceId, wav);
+                registry.sendAudio(deviceId, 0, text, wav);
                 registry.send(deviceId, new DeviceMessages.AudioEnd(1));
             } catch (RuntimeException e) {
                 log.warn("Text till tal misslyckades: {}", e.toString());

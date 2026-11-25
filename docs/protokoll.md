@@ -66,6 +66,10 @@ Kräver att Pluggis har en ljudtjänst (`PLUGGIS_SPEECH_URL`, se `speech/`).
 
 1. Efter anslutning skickar enheten
    `{"type":"hello","audio":true,"audioFormat":"wav"}` (simulatorn skickar `webm`).
+   Små enheter (Tab5) lägger till `"audioChunk":16384`: då görs uppläsningen om till wav 16 kHz mono och skickas
+   som flera binära ramar om högst så många byte efter `audio`-meddelandet (`bytes` = hela meningens längd).
+   Enheten samlar ramarna tills `bytes` är nådd. Utan `audioChunk` kommer hela wav-filen i en ram.
+   Långt tryck (`"gesture":"long"`) på huvudknappen avslutar ett pågående pass direkt på servern.
    Svar: `{"type":"hello_ack","audio":true}`.
 2. **Tryck-och-prata:** när knappen släpps skickar enheten hela yttrandet som **en binär ram**
    (wav 16 kHz mono 16-bit, eller webm/opus). Max ca 4 MB.

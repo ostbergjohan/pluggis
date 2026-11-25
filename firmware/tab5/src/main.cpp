@@ -87,7 +87,10 @@ struct Clip {
 };
 static std::deque<Clip> playQueue;
 static Clip playing{nullptr, 0};
-static int expectBinarySeq = -1;   // nästa binära ram är ljud för meningen med detta seq
+// Ljudet kommer i bitar (servern delar upp det, se "audioChunk" i hello): samla tills hela meningen finns
+static uint8_t* incoming = nullptr;
+static size_t incomingLen = 0, incomingFill = 0;
+static constexpr int AUDIO_CHUNK = 16384;
 
 static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true;
 
@@ -221,6 +224,19 @@ static void drawTop() {
 static int mainTop() { return TOP_H + 12; }
 static int mainBottom() { return H - BTN_H - 16 - (sessionActive ? TIMER_H + 12 : 12); }
 
+static bool dirtyDots = false;
+static void drawDots() {
+  auto& d = M5.Display;
+  int y = mainTop() + 8 + (heardText.length() ? 64 : 0) + 20;
+  d.fillRect(48, y, 700, 56, BG);
+  d.setFont(F_BIG);
+  d.setTextColor(ACCENT);
+  int dots = ((millis() - thinkingSince) / 400) % 4;
+  String t = "Pluggis tänker";
+  for (int i = 0; i < dots; i++) t += " .";
+  d.drawString(t, 48, y);
+}
+
 static void drawMain() {
   auto& d = M5.Display;
   int top = mainTop(), bottom = mainBottom();
@@ -253,12 +269,7 @@ static void drawMain() {
       y += 64;
     }
     if (thinking) {
-      d.setFont(F_BIG);
-      d.setTextColor(ACCENT);
-      int dots = ((millis() - thinkingSince) / 400) % 4;
-      String t = "Pluggis tänker";
-      for (int i = 0; i < dots; i++) t += " .";
-      d.drawString(t, x, y + 20);
+      drawDots();
     } else {
       drawWrapped(sayText, x, y, w, bottom - y, INK, F_BIG);
     }
@@ -321,6 +332,7 @@ static void redraw() {
   if (dirtyTop) { drawTop(); dirtyTop = false; }
   if (dirtyMain) { drawMain(); dirtyMain = false; }
   if (dirtyTimer) { drawTimer(); dirtyTimer = false; }
+  if (dirtyDots) { if (thinking) drawDots(); dirtyDots = false; }
   M5.Display.endWrite();
 }
 
@@ -335,7 +347,9 @@ static void stopPlayback() {
   freeClip(playing);
   for (auto& c : playQueue) free(c.data);
   playQueue.clear();
-  expectBinarySeq = -1;
+  if (incoming) free(incoming);
+  incoming = nullptr;
+  incomingLen = incomingFill = 0;
 }
 
 static void pumpPlayback() {
@@ -411,6 +425,7 @@ static void stopRecording(bool send) {
 
 // ---------------------------------------------------------------- protokoll
 static void sendButton(const char* gesture) {
+  if (!wsUp) { sayText = "Inte ansluten till Pluggis just nu. Vänta lite och försök igen."; thinking = false; dirtyMain = true; return; }
   JsonDocument doc;
   doc["type"] = "button";
   doc["button"] = "main";
@@ -448,7 +463,11 @@ static void onText(const char* json, size_t len) {
     }
     dirtyMain = true;
   } else if (type == "audio") {
-    expectBinarySeq = doc["seq"] | 0;
+    if (incoming) free(incoming);
+    incomingLen = doc["bytes"] | 0;
+    incomingFill = 0;
+    incoming = incomingLen && !recording
+        ? (uint8_t*)heap_caps_malloc(incomingLen, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
   } else if (type == "timer") {
     timerRemaining = doc["remainingSeconds"] | 0;
     timerTotal = doc["totalSeconds"] | timerTotal;
@@ -502,14 +521,16 @@ static void onText(const char* json, size_t len) {
 }
 
 static void onBinary(uint8_t* data, size_t len) {
-  if (expectBinarySeq < 0 || recording) return;
-  expectBinarySeq = -1;
-  // Biblioteket släpper bufferten efter anropet – kopiera till PSRAM
-  uint8_t* copy = (uint8_t*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!copy) return;
-  memcpy(copy, data, len);
-  playQueue.push_back({copy, len});
-  if (thinking) { thinking = false; dirtyMain = true; }
+  if (!incoming || recording) return;
+  size_t n = len > incomingLen - incomingFill ? incomingLen - incomingFill : len;
+  memcpy(incoming + incomingFill, data, n);
+  incomingFill += n;
+  if (incomingFill >= incomingLen) {
+    playQueue.push_back({incoming, incomingLen});
+    incoming = nullptr;
+    incomingLen = incomingFill = 0;
+    if (thinking) { thinking = false; dirtyMain = true; }
+  }
 }
 
 static void onWs(WStype_t type, uint8_t* payload, size_t length) {
@@ -521,6 +542,7 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       doc["type"] = "hello";
       doc["audio"] = true;
       doc["audioFormat"] = "wav";
+      doc["audioChunk"] = AUDIO_CHUNK;   // ljudet i små bitar, 16 kHz mono
       sendJson(doc);
       break;
     }
@@ -593,7 +615,13 @@ void loop() {
   if (t.wasPressed()) {
     if (inside(btnTalk, t.x, t.y)) startRecording();
     else if (inside(btnStart, t.x, t.y)) { drawButton(btnStart, true); sendButton(sessionActive ? "double" : "click"); delay(80); drawButton(btnStart); }
-    else if (inside(btnEnd, t.x, t.y)) { drawButton(btnEnd, true); sendButton("long"); delay(80); drawButton(btnEnd); }
+    else if (inside(btnEnd, t.x, t.y)) {
+      drawButton(btnEnd, true, "Avslutar ...");
+      stopPlayback();
+      sendButton("long");
+      delay(150);
+      drawButton(btnEnd);
+    }
     else if (mode == Mode::Card && cardAnswered) { mode = Mode::Coach; dirtyMain = true; }
   }
   if (recording) {
@@ -608,10 +636,10 @@ void loop() {
   static uint32_t lastTick = 0;
   if (millis() - lastTick > 400) {
     lastTick = millis();
-    if (thinking) dirtyMain = true;
+    if (thinking && mode == Mode::Coach) dirtyDots = true;
     if (sessionActive) dirtyTimer = true;
     if (pointsBanner.length() && millis() > pointsBannerUntil) { pointsBanner = ""; dirtyMain = true; }
   }
-  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer) redraw();
+  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyDots) redraw();
   delay(2);
 }

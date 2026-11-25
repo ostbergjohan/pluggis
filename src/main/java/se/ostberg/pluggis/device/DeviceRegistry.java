@@ -27,7 +27,11 @@ public class DeviceRegistry {
     private final Map<String, Map<String, Conn>> devices = new ConcurrentHashMap<>();
     private final ObjectMapper mapper;
 
-    private record Conn(WebSocketSession session, boolean audio) {
+    /**
+     * {@code chunkBytes} &gt; 0: små enheter (Tab5) som vill ha ljudet som 16 kHz mono i bitar om högst så många
+     * byte, i stället för en stor wav-ram som de inte hinner ta emot.
+     */
+    private record Conn(WebSocketSession session, boolean audio, int chunkBytes) {
     }
 
     public DeviceRegistry(ObjectMapper mapper) {
@@ -62,7 +66,7 @@ public class DeviceRegistry {
                 return false;
             });
         }
-        conns.put(raw.getId(), new Conn(safe, false));
+        conns.put(raw.getId(), new Conn(safe, false, 0));
     }
 
     static final String CLIENT_ID = "pluggis.clientId";
@@ -82,9 +86,45 @@ public class DeviceRegistry {
 
     /** Anslutningen har sagt (i "hello") om den vill ha uppläst ljud. */
     void setWantsAudio(String deviceId, WebSocketSession raw, boolean wantsAudio) {
+        setWantsAudio(deviceId, raw, wantsAudio, 0);
+    }
+
+    void setWantsAudio(String deviceId, WebSocketSession raw, boolean wantsAudio, int chunkBytes) {
         Map<String, Conn> conns = devices.get(deviceId);
         if (conns != null) {
-            conns.computeIfPresent(raw.getId(), (k, c) -> new Conn(c.session(), wantsAudio));
+            int chunk = chunkBytes <= 0 ? 0 : Math.max(1024, Math.min(chunkBytes, 64 * 1024));
+            conns.computeIfPresent(raw.getId(), (k, c) -> new Conn(c.session(), wantsAudio, chunk));
+        }
+    }
+
+    /**
+     * Skickar en uppläst mening: först {@code audio}-meddelandet, sedan ljudet. Anslutningar som bett om bitar
+     * får ljudet omgjort till 16 kHz mono och uppdelat; övriga får wav-filen som den är i en ram.
+     */
+    public void sendAudio(String deviceId, int seq, String text, byte[] wav) {
+        byte[] small = null;
+        for (Conn c : open(deviceId)) {
+            if (!c.audio()) {
+                continue;
+            }
+            try {
+                byte[] data = wav;
+                if (c.chunkBytes() > 0) {
+                    if (small == null) {
+                        small = se.ostberg.pluggis.speech.Wav.toMono16k(wav);
+                    }
+                    data = small;
+                }
+                c.session().sendMessage(new TextMessage(mapper.writeValueAsString(
+                        new DeviceMessages.Audio("wav", seq, text, data.length))));
+                int step = c.chunkBytes() > 0 ? c.chunkBytes() : data.length;
+                for (int off = 0; off < data.length; off += step) {
+                    int n = Math.min(step, data.length - off);
+                    c.session().sendMessage(new BinaryMessage(java.nio.ByteBuffer.wrap(data, off, n), true));
+                }
+            } catch (IOException | IllegalStateException e) {
+                drop(deviceId, c, "ljud", e);
+            }
         }
     }
 
