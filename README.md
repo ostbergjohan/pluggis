@@ -378,6 +378,9 @@ Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 - **🔢 Rätt ordning:** Claude gör 2–3 ordningar ur materialet (processteg, händelser, kedjor); eleven trycker på stegen
   i rätt ordning och får sedan en mening om varför. Prompten finns i `prompts/order.md`.
 - Båda ger +3 poäng (en gång per övning och dag).
+- **Öva på ett delområde:** när läxan är vald visas *Öva på: Allt · Siffror 1–100 · Veckodagar …*. Delområdena tas
+  fram när materialet läses in (äldre läxor första gången, `GET /api/homework/{id}/topics`, prompt `prompts/topics.md`)
+  och valet gäller alla övningarna – även på Tab5.
 - **Tiden i Öva räknas som plugg:** appen mäter aktiv tid (bara när den syns och eleven tryckt eller skrivit de senaste
   två minuterna) och servern räknar aldrig mer än den tid som faktiskt gått. Från 1 minut sparas det som ett pass –
   pluggminuter i statistiken, minutpoäng (från 3 min) och streak, men ingen "höll hela passet"-bonus. Pågår ett vanligt
