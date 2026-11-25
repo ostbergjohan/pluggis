@@ -40,6 +40,13 @@ static const lgfx::IFont* F_MID = &fonts::lgfxJapanGothicP_32;
 static const lgfx::IFont* F_SMALL = &fonts::lgfxJapanGothicP_24;
 
 static int W = 1280, H = 720;
+
+// Allt ritas först i en bild i minnet (frame) och läggs sedan på skärmen i ett svep – inget blinkande.
+static M5Canvas frame(&M5.Display);
+static LovyanGFX* G = &M5.Display;
+static void present() {
+  if (G == &frame) frame.pushSprite(0, 0);
+}
 static constexpr int TOP_H = 76;
 static constexpr int BTN_H = 130;
 static constexpr int TIMER_H = 64;
@@ -151,7 +158,7 @@ static void drawWrapped(const String& text, int x, int y, int w, int h, uint32_t
                         const lgfx::IFont* first = F_BIG, bool center = false) {
   const lgfx::IFont* fonts[] = {F_BIG, F_MID, F_SMALL};
   int start = first == F_MID ? 1 : first == F_SMALL ? 2 : 0;
-  auto& d = M5.Display;
+  auto& d = *G;
   for (int fi = start; fi < 3; fi++) {
     d.setFont(fonts[fi]);
     int lineH = d.fontHeight() + 8;
@@ -216,7 +223,7 @@ static bool inside(const Button& b, int x, int y) {
 }
 
 static void drawButton(const Button& b, bool pressed = false, const char* label = nullptr) {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRoundRect(b.x, b.y, b.w, b.h, 28, pressed ? WARN : b.color);
   d.setFont(F_BIG);
   d.setTextColor(INK);
@@ -226,7 +233,7 @@ static void drawButton(const Button& b, bool pressed = false, const char* label 
 }
 
 static void drawTab(const Button& b, bool active) {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRoundRect(b.x, b.y, b.w, b.h, 22, active ? ACCENT : PANEL);
   d.setFont(F_MID);
   d.setTextColor(INK);
@@ -236,14 +243,14 @@ static void drawTab(const Button& b, bool active) {
 }
 
 static void drawSpeaker(int x, int y, uint32_t c) {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRect(x, y + 12, 10, 16, c);
   d.fillTriangle(x + 10, y + 12, x + 24, y, x + 24, y + 40, c);
   d.fillTriangle(x + 10, y + 28, x + 24, y + 40, x + 10, y + 12, c);
 }
 
 static void drawBattery(int x, int y) {
-  auto& d = M5.Display;
+  auto& d = *G;
   if (batteryLevel < 0) return;
   uint32_t c = batteryLevel <= 15 ? BAD : batteryLevel <= 30 ? WARN : GOOD;
   d.drawRoundRect(x, y, 52, 28, 5, INK);
@@ -260,7 +267,7 @@ static void drawBattery(int x, int y) {
 }
 
 static void drawTop() {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRect(0, 0, W, TOP_H, BG);
   drawTab(tabCoach, screen == Screen::Coach);
   drawTab(tabOva, screen == Screen::OvaList || screen == Screen::OvaCard);
@@ -303,7 +310,7 @@ static void setVolume(int v) {
   M5.Speaker.setVolume(volume);
   prefs.putInt("volume", volume);
   if (!M5.Speaker.isPlaying()) M5.Speaker.tone(1000, 60);
-  drawTop();
+  dirtyTop = true;
 }
 
 static int mainTop() { return TOP_H + 12; }
@@ -311,7 +318,7 @@ static int mainBottom() { return H - BTN_H - 16 - (sessionActive ? TIMER_H + 12 
 
 static bool dirtyDots = false;
 static void drawDots() {
-  auto& d = M5.Display;
+  auto& d = *G;
   int y = mainTop() + 8 + (heardText.length() ? 64 : 0) + 20;
   d.fillRect(48, y, 700, 56, BG);
   d.setFont(F_BIG);
@@ -323,7 +330,7 @@ static void drawDots() {
 }
 
 static void drawMain() {
-  auto& d = M5.Display;
+  auto& d = *G;
   int top = mainTop(), bottom = mainBottom();
   d.fillRect(0, top, W, bottom - top + 2, BG);
   int x = 48, w = W - 96;
@@ -376,11 +383,10 @@ static int timerLeftNow() {
   return left < 0 ? 0 : left;
 }
 
-static M5Canvas timerCanvas(&M5.Display);
 static int timerDrawn = -2;
 
 static void drawTimer() {
-  auto& d = M5.Display;
+  auto& d = *G;
   int y = H - BTN_H - 16 - TIMER_H - 6;
   int x = 48, w = W - 96;
   if (!sessionActive) {
@@ -391,17 +397,12 @@ static void drawTimer() {
   int left = timerLeftNow();
   if (left == timerDrawn) return;
   timerDrawn = left;
-  if (!timerCanvas.getBuffer()) {
-    timerCanvas.setPsram(true);
-    timerCanvas.setColorDepth(16);
-    timerCanvas.createSprite(w, TIMER_H);
-  }
-  auto& c = timerCanvas;
+  auto& c = *G;
   float frac = timerTotal > 0 ? (float)left / timerTotal : 0;
-  c.fillScreen(BG);
-  c.fillRoundRect(0, 0, w, TIMER_H, 18, PANEL);
+  c.fillRect(0, y - 4, W, TIMER_H + 8, BG);
+  c.fillRoundRect(x, y, w, TIMER_H, 18, PANEL);
   int fw = (int)(w * frac);
-  if (fw > 36) c.fillRoundRect(0, 0, fw, TIMER_H, 18, left < 120 ? WARN : GOOD);
+  if (fw > 36) c.fillRoundRect(x, y, fw, TIMER_H, 18, left < 120 ? WARN : GOOD);
   c.setFont(F_MID);
   c.setTextColor(INK);
   c.setTextDatum(middle_left);
@@ -410,8 +411,8 @@ static void drawTimer() {
   String label = String(mm);
   if (sessionTask.length()) label += "   " + sessionTask;
   if (c.textWidth(label) > w - 40) label = String(mm);
-  c.drawString(label, 22, TIMER_H / 2);
-  c.pushSprite(x, y);
+  c.drawString(label, x + 22, y + TIMER_H / 2);
+  c.setTextDatum(top_left);
 }
 
 static void drawButtons() {
@@ -425,14 +426,14 @@ static void drawOva();
 
 static void redraw() {
   if (dirtyAll) {
-    M5.Display.fillScreen(BG);
+    G->fillScreen(BG);
     dirtyTop = true;
     timerDrawn = -2;
     if (screen == Screen::Coach) { dirtyMain = dirtyTimer = true; drawButtons(); }
     else dirtyOva = true;
     dirtyAll = false;
   }
-  M5.Display.startWrite();
+  bool any = dirtyTop || dirtyMain || dirtyTimer || dirtyDots || dirtyOva;
   if (dirtyTop) { drawTop(); dirtyTop = false; }
   if (screen == Screen::Coach) {
     if (dirtyMain) { drawMain(); dirtyMain = false; }
@@ -442,7 +443,7 @@ static void redraw() {
     dirtyMain = dirtyTimer = dirtyDots = false;
     if (dirtyOva) { drawOva(); dirtyOva = false; }
   }
-  M5.Display.endWrite();
+  if (any) present();
 }
 
 // ---------------------------------------------------------------- ljud
@@ -482,6 +483,8 @@ static void writeWavHeader(uint8_t* h, uint32_t dataBytes) {
 
 static int16_t* recSamplesPtr() { return recBuf + 22; }   // efter 44 byte huvud
 
+static void answerByVoice(bool send);
+
 static void startRecording() {
   if (recording || !recBuf) return;
   stopPlayback();
@@ -490,7 +493,8 @@ static void startRecording() {
   recSamples = 0;
   recording = true;
   recStarted = millis();
-  drawButton(btnTalk, true, "Släpp när du är klar");
+  if (screen == Screen::Coach) { drawButton(btnTalk, true, "Släpp när du är klar"); present(); }
+  else dirtyOva = true;
 }
 
 static void pumpRecording() {
@@ -516,7 +520,9 @@ static void stopRecording(bool send) {
   M5.Mic.end();
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
+  if (screen != Screen::Coach) { answerByVoice(send); return; }
   drawButton(btnTalk);
+  present();
   uint32_t ms = millis() - recStarted;
   if (!send || ms < 400 || recSamples < REC_RATE / 4) {
     if (send) { sayText = "Håll in knappen medan du pratar."; dirtyMain = true; }
@@ -687,6 +693,15 @@ struct DeckInfo {
   long homeworkId;
 };
 static std::vector<DeckInfo> decks;
+// "Ny övning": välj läxa/prov och gör ett snabbquiz eller en lucktext av materialet (som i appen)
+struct MakeHw {
+  long id;
+  String label;
+};
+static std::vector<MakeHw> makeList;
+static int makeIdx = 0;
+static Button btnMkPrev, btnMkNext, btnMkQuiz, btnMkCloze;
+static String makeBusy;
 static Button deckTiles[6];
 static bool decksLoaded = false;
 static String ovaMessage;
@@ -698,20 +713,24 @@ static std::vector<String> options;
 static int correctIdx = -1, chosen = -1;
 static bool revealed = false, noMoreCards = false, practiceAnyway = false;
 static int answered = 0, rightCount = 0;
+static std::vector<String> deckBacks;   // svaren på lekens kort – blir felaktiga alternativ
+static String spokenAnswer;
+static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
+static Button btnSay;
 static constexpr int ROUND = 10;
 static Button optBtn[4], btnReveal, btnKnew, btnDidnt;
 
 static String practiceId;
 static uint32_t practiceActive = 0, lastTouchAt = 0, lastActiveTick = 0;
 
-static int api(const char* method, const String& path, const String& body, JsonDocument* out) {
+static int api(const char* method, const String& path, const String& body, JsonDocument* out, uint32_t timeoutMs = 10000) {
   if (WiFi.status() != WL_CONNECTED) return -1;
   WiFiClient client;
   HTTPClient http;
   String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + path +
                (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
   if (!http.begin(client, url)) return -1;
-  http.setTimeout(10000);
+  http.setTimeout(timeoutMs);
   http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
   http.addHeader("Content-Type", "application/json");
   int code = strcmp(method, "GET") == 0 ? http.GET() : http.sendRequest(method, body);
@@ -743,8 +762,19 @@ static void loadDecks() {
     if (d.id && d.cards > 0) decks.push_back(d);
   }
   std::sort(decks.begin(), decks.end(), [](const DeckInfo& a, const DeckInfo& b) { return a.due > b.due; });
+  makeList.clear();
+  JsonDocument hw;
+  if (api("GET", "/api/homework", "", &hw) == 200) {
+    for (JsonObject x : hw.as<JsonArray>()) {
+      String kind = x["kind"] | "";
+      if (kind == "OTHER") continue;
+      String label = String(kind == "TEST" ? "Prov: " : "Läxa: ") + clean(x["title"] | "");
+      makeList.push_back({x["id"] | 0L, label});
+    }
+  }
+  if (makeIdx >= (int)makeList.size()) makeIdx = 0;
   if (decks.size() > 6) decks.resize(6);
-  if (decks.empty()) ovaMessage = "Inga kortlekar än. Be Pluggis göra kort eller quiz av en läxa.";
+  if (decks.empty() && makeList.empty()) ovaMessage = "Inga kortlekar än. Be Pluggis göra kort eller quiz av en läxa.";
   decksLoaded = true;
 }
 
@@ -769,6 +799,8 @@ static void practiceEnd() {
 static void nextCard() {
   chosen = -1;
   revealed = false;
+  spokenAnswer = "";
+  voiceVerdict = -1;
   options.clear();
   correctIdx = -1;
   if (answered >= ROUND) { noMoreCards = true; return; }
@@ -791,6 +823,19 @@ static void nextCard() {
         for (int i = options.size() - 1; i > 0; i--) std::swap(options[i], options[esp_random() % (i + 1)]);
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
+      // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
+      if (options.empty() && qBack.length() && qBack.length() <= 70) {
+        std::vector<String> pool;
+        for (auto& b : deckBacks)
+          if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
+        if (pool.size() >= 2) {
+          for (int i = pool.size() - 1; i > 0; i--) std::swap(pool[i], pool[esp_random() % (i + 1)]);
+          options.push_back(qBack);
+          for (size_t i = 0; i < pool.size() && options.size() < 4; i++) options.push_back(pool[i]);
+          for (int i = options.size() - 1; i > 0; i--) std::swap(options[i], options[esp_random() % (i + 1)]);
+          for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
+        }
+      }
       noMoreCards = false;
       return;
     }
@@ -812,8 +857,13 @@ static void openDeck(const DeckInfo& d) {
   answered = rightCount = 0;
   practiceAnyway = d.due == 0;
   screen = Screen::OvaCard;
-  drawOva();   // "Hämtar …" direkt
+  dirtyAll = true;
+  redraw();   // direkt, innan korten hämtas
   practiceBegin();
+  deckBacks.clear();
+  JsonDocument all;
+  if (api("GET", "/api/flashcards/decks/" + String(d.id) + "/cards", "", &all) == 200)
+    for (JsonObject c : all.as<JsonArray>()) { String b = clean(c["back"] | ""); if (b.length()) deckBacks.push_back(b); }
   nextCard();
   dirtyAll = true;
 }
@@ -841,18 +891,24 @@ static void showScreen(Screen s, bool force = false) {
 }
 
 static void layoutOva() {
-  int top = TOP_H + 110, gap = 20;
+  int top = TOP_H + 230, gap = 20;
+  int ry = TOP_H + 92, rh = 96;
+  btnMkPrev = {gap, ry, 80, rh, "<", PANEL};
+  btnMkQuiz = {W - gap - 2 * 230 - gap, ry, 230, rh, "Snabbquiz", ACCENT};
+  btnMkCloze = {W - gap - 230, ry, 230, rh, "Lucktext", ACCENT};
+  btnMkNext = {btnMkQuiz.x - gap - 80, ry, 80, rh, ">", PANEL};
   int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
   for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
   for (int i = 0; i < 4; i++) optBtn[i] = {gap + (i % 2) * (ow + gap), oy + (i / 2) * (oh + gap), ow, oh, "", PANEL};
-  btnReveal = {gap, H - oh - gap, W - 2 * gap, oh, "Visa svar", ACCENT};
+  btnReveal = {gap, H - oh - gap, ow, oh, "Visa svar", PANEL};
+  btnSay = {2 * gap + ow, H - oh - gap, ow, oh, "Håll in och svara", ACCENT};
   btnDidnt = {gap, H - oh - gap, ow, oh, "Kunde inte", BAD};
   btnKnew = {2 * gap + ow, H - oh - gap, ow, oh, "Kunde", GOOD};
 }
 
 static void drawTextButton(const Button& b, uint32_t color, const String& text) {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRoundRect(b.x, b.y, b.w, b.h, 24, color);
   drawWrapped(text, b.x + 16, b.y + 10, b.w - 32, b.h - 20, INK, F_MID, true);
 }
@@ -860,15 +916,29 @@ static void drawTextButton(const Button& b, uint32_t color, const String& text) 
 static void drawHwPlan();
 
 static void drawOva() {
-  auto& d = M5.Display;
+  auto& d = *G;
   d.fillRect(0, TOP_H, W, H - TOP_H, BG);
   if (screen != Screen::OvaList && screen != Screen::OvaCard) { drawHwPlan(); return; }
   if (screen == Screen::OvaList) {
     d.setFont(F_BIG);
     d.setTextColor(INK);
-    d.drawString("Vad vill du öva på?", 28, TOP_H + 28);
-    if (!decksLoaded) { drawWrapped("Hämtar kortlekar ...", 28, TOP_H + 120, W - 56, 80, MUTED, F_MID); return; }
+    d.drawString("Ny övning", 28, TOP_H + 24);
+    if (!decksLoaded) { drawWrapped("Hämtar ...", 28, TOP_H + 120, W - 56, 80, MUTED, F_MID); return; }
+    if (makeBusy.length()) { drawWrapped(makeBusy, 28, TOP_H + 120, W - 56, 300, ACCENT, F_BIG); return; }
     if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 120, W - 56, 200, MUTED, F_MID); return; }
+    if (makeList.empty()) {
+      drawWrapped("Lägg till en läxa eller ett prov för att göra snabbquiz och lucktext.", 28, btnMkPrev.y + 20, W - 56, 60, MUTED, F_SMALL);
+    } else {
+      if (makeList.size() > 1) { drawTextButton(btnMkPrev, PANEL, "<"); drawTextButton(btnMkNext, PANEL, ">"); }
+      int lx = btnMkPrev.x + btnMkPrev.w + 16;
+      drawWrapped(makeList[makeIdx].label, lx, btnMkPrev.y + 8, btnMkNext.x - 16 - lx, btnMkPrev.h - 16, INK, F_MID, true);
+      drawTextButton(btnMkQuiz, ACCENT, "Snabbquiz");
+      drawTextButton(btnMkCloze, ACCENT, "Lucktext");
+    }
+    if (decks.empty()) return;
+    d.setFont(F_SMALL);
+    d.setTextColor(MUTED);
+    d.drawString("Dina kortlekar", 28, deckTiles[0].y - 34);
     for (size_t i = 0; i < decks.size(); i++) {
       auto& b = deckTiles[i];
       d.fillRoundRect(b.x, b.y, b.w, b.h, 24, PANEL);
@@ -893,7 +963,7 @@ static void drawOva() {
     return;
   }
   bool hasOptions = options.size() >= 2;
-  int qBottom = hasOptions ? optBtn[0].y - 20 : btnReveal.y - 20;
+  int qBottom = hasOptions ? optBtn[0].y - 20 : btnReveal.y - (spokenAnswer.length() ? 90 : 20);
   String q = qFront;
   if (revealed && !hasOptions) q += "\n\n" + qBack;
   drawWrapped(q, 48, TOP_H + 60, W - 96, qBottom - TOP_H - 60 - (qHint.length() ? 40 : 0),
@@ -907,16 +977,119 @@ static void drawOva() {
     }
     if (chosen >= 0) drawWrapped("Tryck för nästa", 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
   } else if (!revealed) {
-    drawTextButton(btnReveal, ACCENT, "Visa svar");
+    drawTextButton(btnReveal, PANEL, "Visa svar");
+    drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
   } else {
+    if (spokenAnswer.length()) {
+      String v = voiceVerdict == 1 ? "Låter rätt!  " : voiceVerdict == 0 ? "Jämför med svaret.  " : "";
+      drawWrapped(v + "Du sa: " + spokenAnswer, 48, btnDidnt.y - 70, W - 96, 60, voiceVerdict == 1 ? GOOD : WARN, F_SMALL, true);
+    }
     drawTextButton(btnDidnt, BAD, "Kunde inte");
     drawTextButton(btnKnew, GOOD, "Kunde");
   }
 }
 
+
+/** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
+static String normalize(const String& in) {
+  String s = in;
+  s.toLowerCase();
+  s.replace("Å", "å"); s.replace("Ä", "ä"); s.replace("Ö", "ö");
+  String out;
+  for (size_t i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c == '.' || c == ',' || c == '!' || c == '?' || c == ':' || c == ';' || c == '"' || c == '\'' || c == '(' || c == ')' || c == '-') c = ' ';
+    if (c == ' ' && (out.endsWith(" ") || !out.length())) continue;
+    out += c;
+  }
+  out.trim();
+  return out;
+}
+
+static int judge(const String& said, const String& answer) {
+  String a = normalize(said), b = normalize(answer);
+  if (!a.length() || !b.length()) return -1;
+  if (a.indexOf(b) >= 0 || (a.length() >= 3 && b.indexOf(a) >= 0)) return 1;
+  // andel av svarets ord (längre än 2 tecken) som sades
+  int words = 0, hits = 0, start = 0;
+  while (start <= (int)b.length()) {
+    int sp = b.indexOf(' ', start);
+    String w = b.substring(start, sp < 0 ? b.length() : sp);
+    if (w.length() > 2) { words++; if (a.indexOf(w) >= 0) hits++; }
+    if (sp < 0) break;
+    start = sp + 1;
+  }
+  return words && hits * 10 >= words * 6 ? 1 : 0;
+}
+
+/** Inspelningen på ett kort: skicka till servern (KB-Whisper), visa vad som hördes och rätt svar. */
+static void answerByVoice(bool send) {
+  uint32_t ms = millis() - recStarted;
+  if (!send || screen != Screen::OvaCard || ms < 400 || recSamples < REC_RATE / 4) { dirtyOva = true; return; }
+  uint32_t bytes = recSamples * 2;
+  writeWavHeader((uint8_t*)recBuf, bytes);
+  spokenAnswer = "...";
+  dirtyOva = true;
+  redraw();
+  String said;
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFiClient client;
+    HTTPClient http;
+    String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID;
+    if (http.begin(client, url)) {
+      http.setTimeout(20000);
+      http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+      http.addHeader("Content-Type", "audio/wav");
+      int code = http.POST((uint8_t*)recBuf, 44 + bytes);
+      if (code == 200) {
+        JsonDocument doc;
+        if (!deserializeJson(doc, http.getString())) said = clean(doc["text"] | "");
+      }
+      http.end();
+    }
+  }
+  spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
+  voiceVerdict = said.length() ? judge(said, qBack) : -1;
+  revealed = true;
+  if (voiceVerdict == 1) M5.Speaker.tone(1320, 120);
+  dirtyOva = true;
+}
+
+
+/** Pluggis (Claude) gör frågorna av läxans material – tar en stund – och övningen startar direkt. */
+static void makeQuiz(long homeworkId, const char* mode) {
+  makeBusy = strcmp(mode, "cloze") == 0 ? "Pluggis gör en lucktext av materialet ...\n\nDet kan ta en halv minut."
+                                       : "Pluggis gör ett snabbquiz av materialet ...\n\nDet kan ta en halv minut.";
+  dirtyOva = true;
+  redraw();
+  JsonDocument doc;
+  int code = api("POST", "/api/flashcards/quiz", "{\"homeworkId\":" + String(homeworkId) + ",\"mode\":\"" + mode + "\",\"count\":10}", &doc, 120000);
+  makeBusy = "";
+  if (code != 200) {
+    ovaMessage = String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.";
+    dirtyOva = true;
+    return;
+  }
+  JsonObject deck = doc["deck"].is<JsonObject>() ? doc["deck"].as<JsonObject>() : doc.as<JsonObject>();
+  DeckInfo d;
+  d.id = deck["id"] | 0L;
+  d.name = clean(deck["name"] | "Snabbquiz");
+  d.cards = 10;
+  d.due = 10;
+  d.homeworkId = homeworkId;
+  if (!d.id) { loadDecks(); dirtyOva = true; return; }
+  openDeck(d);
+}
+
 static void ovaTouch(int x, int y) {
   lastTouchAt = millis();
   if (screen == Screen::OvaList) {
+    if (!makeList.empty() && !makeBusy.length()) {
+      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); dirtyOva = true; return; }
+      if (makeList.size() > 1 && inside(btnMkNext, x, y)) { makeIdx = (makeIdx + 1) % makeList.size(); dirtyOva = true; return; }
+      bool quiz = inside(btnMkQuiz, x, y), cloze = inside(btnMkCloze, x, y);
+      if (quiz || cloze) { makeQuiz(makeList[makeIdx].id, quiz ? "quiz" : "cloze"); return; }
+    }
     for (size_t i = 0; i < decks.size(); i++) if (inside(deckTiles[i], x, y)) { openDeck(decks[i]); return; }
     if (ovaMessage.length()) { decksLoaded = false; dirtyOva = true; redraw(); loadDecks(); dirtyOva = true; }
     return;
@@ -939,6 +1112,7 @@ static void ovaTouch(int x, int y) {
     }
   } else if (!revealed) {
     if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
+    else if (inside(btnSay, x, y)) startRecording();
   } else {
     bool knew = inside(btnKnew, x, y), didnt = inside(btnDidnt, x, y);
     if (knew || didnt) { grade(knew); nextCard(); dirtyOva = true; }
@@ -1222,7 +1396,7 @@ static void layoutHwPlan() {
 }
 
 static void drawHwPlan() {
-  auto& d = M5.Display;
+  auto& d = *G;
   if (!decksLoaded && screen != Screen::HwDetail) { drawWrapped("Hämtar ...", 28, TOP_H + 60, W - 56, 80, MUTED, F_MID); return; }
   if (screen == Screen::HwList) {
     d.setFont(F_BIG);
@@ -1444,6 +1618,10 @@ void setup() {
   M5.begin(cfg);
   M5.Display.setRotation(1);   // liggande
   M5.Display.setBrightness(200);
+  frame.setPsram(true);
+  frame.setColorDepth(16);
+  if (frame.createSprite(M5.Display.width(), M5.Display.height())) G = &frame;
+  else Serial.println("[pluggis] ingen bild i minnet – ritar direkt");
   prefs.begin("pluggis", false);
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
   layout();
@@ -1490,13 +1668,15 @@ void loop() {
     hwPlanTouch(t.x, t.y);
   } else if (t.wasPressed()) {
     if (inside(btnTalk, t.x, t.y)) startRecording();
-    else if (inside(btnStart, t.x, t.y)) { drawButton(btnStart, true); sendButton(sessionActive ? "double" : "click"); delay(80); drawButton(btnStart); }
+    else if (inside(btnStart, t.x, t.y)) { drawButton(btnStart, true); present(); sendButton(sessionActive ? "double" : "click"); delay(80); drawButton(btnStart); present(); }
     else if (inside(btnEnd, t.x, t.y)) {
       drawButton(btnEnd, true, "Avslutar ...");
+      present();
       stopPlayback();
       sendButton("long");
       delay(150);
       drawButton(btnEnd);
+      present();
     }
     else if (mode == Mode::Card && cardAnswered) { mode = Mode::Coach; dirtyMain = true; }
   }

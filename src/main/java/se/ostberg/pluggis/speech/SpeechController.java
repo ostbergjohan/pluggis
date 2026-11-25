@@ -81,4 +81,18 @@ public class SpeechController {
         }
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("audio/wav")).body(wav);
     }
+
+    /** Tal till text (lokal KB-Whisper) – Tab5 svarar på flashkort med rösten. Kroppen är en wav-fil. */
+    @PostMapping(value = "/transcribe", consumes = "audio/wav")
+    public ResponseEntity<java.util.Map<String, String>> transcribe(@RequestBody byte[] audio) {
+        if (audio == null || audio.length < 1000) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", "för kort inspelning"));
+        }
+        try {
+            String text = speech.transcribe(audio, "svar.wav");
+            return ResponseEntity.ok(java.util.Map.of("text", text == null ? "" : text.trim()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(503).body(java.util.Map.of("error", "Ljudtjänsten svarade inte"));
+        }
+    }
 }
