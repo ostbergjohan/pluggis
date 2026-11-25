@@ -237,7 +237,6 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
 | Plan | Tre veckor framåt dag för dag, plus det som ligger efter. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas. Flyttade läxor planeras inte om på natten förrän du trycker Planera igen |
-| Öva | Kortlekar och quiz: generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
 | Kostnad | Vad Claude kostar per dag, funktion och elev; välj API, hybrid eller abonnemang |
 | Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
@@ -357,7 +356,11 @@ Pluggis använder ett **tjänstekonto** och pratar själv med Google – ingenti
 
 Kalender-id kopplas per elev. *Koppla bort* tar bort kommande pass ur kalendern.
 
-## Flashkort
+## Flashkort och övningar
+
+**Kortlekar sparas inte:** varje övning görs ny av läxans material. Genererade lekar är tillfälliga och rensas
+automatiskt när de är äldre än 6 timmar (när eleven gör en ny övning). Admin har därför ingen Öva-flik längre.
+
 
 - **Snabbquiz och lucktext:** Claude gör frågor av läxans innehåll och material – flerval med fyra alternativ
   eller en mening med en lucka (`___`) att fylla i. Eleven gör dem från fliken **Öva** eller läxans sida i

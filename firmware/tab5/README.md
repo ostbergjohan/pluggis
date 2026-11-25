@@ -2,12 +2,12 @@
 
 Firmware för skrivbordsskärmen (PlatformIO/Arduino). Pratar med servern enligt [docs/protokoll.md](../../docs/protokoll.md).
 
-**Flikar högst upp:**
-- **Pluggis** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
-- **Öva** – *Ny övning* som i appen: välj läxa/prov med < > och tryck Snabbquiz, Lucktext, Förklara, Testprov, Matcha par
-  eller Rätt ordning. Under finns kortlekarna: flerval att trycka på (kort utan egna alternativ får svar från andra kort i
-  leken), vanliga kort med *Visa svar* eller *Håll in och svara* (inte i språk – där trycker man). Förklara och skrivfrågor
-  i testprovet besvaras med rösten. Ger poäng och övningstid.
+**Flikar högst upp (Tab5 startar på Öva):**
+- **Öva** – läxor och prov till vänster (datumordning, *Snart* / *Längre fram*, sex rader med Upp/Ner, ämnesfärg,
+  *börja nu* för det som ligger längre fram men har moment i planen). Till höger: vald läxa, *Öva på:* delområden och
+  de sex övningarna – Snabbquiz, Lucktext, Förklara, Testprov, Matcha par, Rätt ordning. Längst ner *Senast* med
+  *Kör igen*. Allt görs nytt varje gång (inga sparade kortlekar). Förklara och skrivfrågor besvaras med rösten.
+- **Chat** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
 - **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
 - **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av.
 - Volym − / + (sparas) och batterinivå uppe till höger.
