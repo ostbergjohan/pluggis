@@ -154,6 +154,7 @@ static void sayCardSide(const String& text);
 static const char* langFrom(String t);
 static bool looksSwedish(const String& in);
 static const char* guessLang(const String& in);
+static const char* deckGuessed = "";   // kortlekens språk enligt omröstning över korten
 static void sayStop();
 static int examSpoken = -1;
 static void examSpeak();
@@ -1104,7 +1105,6 @@ static const char* guessLang(const String& in) {
 }
 
 // Kortlekens språk: ämnet/namnet, annars det som flest kort i leken ser ut att vara (räknas när leken öppnas)
-static const char* deckGuessed = "";
 static const char* deckLang() {
   const char* l = langFrom(cur.subject + " " + cur.name);
   return *l ? l : deckGuessed;
