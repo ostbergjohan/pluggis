@@ -90,7 +90,7 @@ static Clip playing{nullptr, 0};
 // Ljudet kommer i bitar (servern delar upp det, se "audioChunk" i hello): samla tills hela meningen finns
 static uint8_t* incoming = nullptr;
 static size_t incomingLen = 0, incomingFill = 0;
-static constexpr int AUDIO_CHUNK = 16384;
+static constexpr int AUDIO_CHUNK = 8192;   // under bibliotekets gräns (15 kB per ram)
 
 static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true;
 
