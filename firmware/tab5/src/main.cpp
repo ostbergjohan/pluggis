@@ -152,6 +152,7 @@ static void pumpMelody() {
 }
 
 // Uppläsning av frågor (Pluggis röst via servern, hämtas i bakgrundstråden)
+static void showScreen(Screen s, bool force = false);
 static void sayAloud(const String& text, const char* lang = "");
 static void sayCardSide(const String& text);
 static const char* langFrom(String t);
@@ -978,7 +979,7 @@ static void loadHomework();
 static void loadPlan();
 static void listenStop(bool save);
 
-static void showScreen(Screen s, bool force = false) {
+static void showScreen(Screen s, bool force) {
   if (s == screen && !force) return;
   if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
   if (screen == Screen::Game) game = Game::None;
@@ -1011,8 +1012,7 @@ static void layoutOva() {
   int tw = (rw - 2 * 14) / 3, th = 118, ty = H - 58 - 2 * th - 14;
   for (int i = 0; i < 6; i++) btnMk[i] = {rx + (i % 3) * (tw + 14), ty + (i / 3) * (th + 14), tw, th, MK_LABELS[i], ACCENT};
   (void)ry; (void)rh;
-  int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
-  for (int i = 0; i < 6; i++) deckTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
+  for (int i = 0; i < 6; i++) deckTiles[i] = {0, top, 0, 0, "", PANEL};   // kortlekar sparas inte längre
   int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
   for (int i = 0; i < 4; i++) optBtn[i] = {gap + (i % 2) * (ow + gap), oy + (i / 2) * (oh + gap), ow, oh, "", PANEL};
   btnReveal = {gap, H - oh - gap, ow, oh, "Visa svar", PANEL};
