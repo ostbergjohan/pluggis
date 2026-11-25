@@ -657,17 +657,6 @@ function homeworkItem(x, rerender) {
           if (r) { if (r.note) toast(r.note); showPlan(); }
         } }, '🗓 Planera'),
         h('button', { onclick: () => matInput.click() }, '📎 Material'),
-        h('button', { onclick: async (e) => {
-          const v = f.values();
-          const r = await run(() => api(`/api/flashcards/generate?deviceId=${enc(state.deviceId)}`, { method: 'POST',
-            body: { topic: v.title, subject: v.subject, sourceText: [v.description, ...v.steps].filter(Boolean).join('\n'),
-              count: 15, homeworkId: x.id } }), e.target);
-          if (r) toast(`Kortlek "${r.deck.name}" med ${r.cardCount} kort skapad`);
-        } }, '🃏 Gör kort'),
-        x.kind !== 'OTHER' ? h('button', { onclick: async (e) => {
-          const r = await run(() => api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId: x.id, mode: 'mix', count: 10 } }), e.target);
-          if (r) toast(`"${r.deck.name}" med ${r.cardCount} frågor skapad – finns under Kort i elevchatten`);
-        } }, '⚡ Gör quiz') : null,
         h('span', { class: 'spacer' }),
         x.status === 'OPEN'
           ? h('button', { onclick: async () => { await run(() => api(`/api/homework/${x.id}/done`, { method: 'POST' }), null, 'Markerad som klar'); rerender(); } }, '✓ Klar')

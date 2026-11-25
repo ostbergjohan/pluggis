@@ -797,32 +797,14 @@ views.laxor = async () => {
 
 // ---- Flashkort, snabbquiz och lucktext ----
 views.kort = async () => {
+  // Kortlekar sparas inte – varje övning görs ny av läxans material
   const page = h('div', { class: 'page' }, h('h2', {}, 'Öva'));
-  const [decks, hw] = await Promise.all([api('/api/flashcards/decks'), api('/api/homework?openOnly=false').catch(() => [])]);
-  const hwById = new Map(hw.map(x => [x.id, x]));
-  // Skapa quiz till en kommande läxa/prov
+  const hw = await api('/api/homework?openOnly=false').catch(() => []);
   const upcoming = hw.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER').sort((a, b) => (a.dueDate || '9').localeCompare(b.dueDate || '9'));
   if (upcoming.length) page.append(quizMaker(upcoming));
-  if (!decks.length) {
-    page.append(h('div', { class: 'box' }, h('div', { class: 'empty' },
-      'Inga kortlekar än. Gör ett snabbquiz ovan, be Pluggis "Gör flashkort om …", eller skicka material med 📎.')));
-    return page;
-  }
-  const due = decks.reduce((n, d) => n + d.dueNow, 0);
-  page.append(h('p', { class: 'meta', style: 'color:var(--muted);margin:14px 0 10px' },
-    due ? `${due} att repetera nu – bra läge att köra!` : 'Inget är dags att repetera just nu. Du kan öva ändå.'));
-  const sorted = [...decks].sort((a, b) => (b.dueNow > 0) - (a.dueNow > 0) || b.dueNow - a.dueNow);
-  page.append(h('div', { class: 'box' }, sorted.map(d => {
-    const x = d.deck.homeworkId ? hwById.get(d.deck.homeworkId) : null;
-    const pct = d.cards ? Math.round(100 * d.learned / d.cards) : 0;
-    return h('div', { class: 'row tap', onclick: () => practiceDeck(d) },
-      h('div', { class: 'grow' },
-        h('div', {}, d.deck.name, x && x.weight >= 80 ? ' ⭐' : ''),
-        h('div', { class: 'meta' }, [d.deck.subject, `${d.cards} ${/Snabbquiz|Lucktext/.test(d.deck.name) ? 'frågor' : 'kort'}`, `${pct} % sitter`, x && x.dueDate ? rel(x.dueDate) : null].filter(Boolean).join(' · ')),
-        h('div', { class: 'deck-bar' }, h('div', { style: `width:${pct}%` }))),
-      d.dueNow ? h('span', { class: 'tag late' }, `${d.dueNow} nu`) : h('span', { class: 'tag' }, 'öva'));
-  })));
-  page.append(h('p', { class: 'hint-small' }, 'Tips: tryck 🃏 Förhör mig i chatten så förhör Pluggis dig med rösten i stället.'));
+  else page.append(h('div', { class: 'box' }, h('div', { class: 'empty' },
+    'Inga läxor eller prov att öva på just nu. Lägg till en läxa eller skicka material med 📎, så kan Pluggis göra övningar av den.')));
+  page.append(h('p', { class: 'hint-small' }, 'Tips: säg "förhör mig" i chatten så förhör Pluggis dig med rösten i stället.'));
   return page;
 };
 
@@ -966,13 +948,17 @@ function offerTick(item) {
 const shuffle = (a) => a.map(v => [Math.random(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
 const clock = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
-/** Par av läxans kortlekar (korta svar först). Spelas helt i telefonen – ingen Claude. */
+/** Par av läxans material: Pluggis gör nya frågor (snabbquiz) och paren spelas i telefonen. */
 async function startMatch(homeworkId, btn) {
   let cards = [];
+  btn = btn && btn.closest('button');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳<span>Pluggis gör par…</span>'; }
   try {
-    const decks = (await api('/api/flashcards/decks')).filter(d => d.deck.homeworkId === homeworkId);
-    for (const d of decks) cards.push(...await api(`/api/flashcards/decks/${d.deck.id}/cards`));
+    const r = await api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId, mode: 'quiz', count: 10, focus: focusOf(homeworkId) || null } });
+    cards = await api(`/api/flashcards/decks/${r.deck.id}/cards`);
   } catch (e) { toast(e.message, true); return; }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = label; } }
   const usable = cards.filter(c => c.back && c.back.length <= 70 && c.front.length <= 90)
     .map(c => ({ id: c.id, left: c.kind === 'CLOZE' ? c.front.replace('___', '…') : c.front, right: c.back }));
   const seen = new Set();
@@ -980,7 +966,7 @@ async function startMatch(homeworkId, btn) {
   const about = (p) => fw.some(w => `${p.left} ${p.right}`.toLowerCase().includes(w));
   const pool = shuffle(usable).sort((a, b) => about(b) - about(a)).filter(p => { const k = p.right.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
   if (pool.length < 3) {
-    toast('Gör flashkort, ett snabbquiz eller en lucktext till läxan först – Matcha par spelas med korten', true);
+    toast('Pluggis hittade inte tillräckligt med par i materialet – prova Snabbquiz i stället', true);
     return;
   }
   // Variation: kort som var med de senaste gångerna hamnar sist
@@ -1325,7 +1311,7 @@ function practiceDeck(d) {
   };
   $('#view').replaceChildren(h('div', { class: 'page' },
     h('div', { style: 'display:flex;align-items:center;gap:8px' },
-      h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Lekar'),
+      h('button', { class: 'small-btn', onclick: () => show('kort') }, '‹ Öva'),
       h('h2', { style: 'margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, d.deck.name)),
     bar, h('div', { class: 'fc-card' }, front, hintEl, back), h('div', { style: 'text-align:center;margin-top:8px' }, say),
     controls, status));

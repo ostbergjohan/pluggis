@@ -53,8 +53,19 @@ public class FlashcardService {
         this.clock = clock;
     }
 
+    /** Kortlekar sparas inte: varje övning görs ny, och gamla lekar (äldre än så här) rensas bort. */
+    static final java.time.Duration KEEP = java.time.Duration.ofHours(6);
+
     @Transactional
     public Deck createDeck(String name, String subject, Long homeworkId, Deck.Source source, List<NewCard> newCards) {
+        // Rensa elevens gamla lekar (körs i elevens sammanhang, så bara elevens egna)
+        java.time.Instant cutoff = java.time.Instant.now().minus(KEEP);
+        for (Deck old : decks.findAllByOrderByCreatedAtDesc()) {
+            if (old.getCreatedAt() != null && old.getCreatedAt().isBefore(cutoff)) {
+                cards.deleteByDeckId(old.getId());
+                decks.deleteById(old.getId());
+            }
+        }
         Deck deck = decks.save(new Deck(name, subject, homeworkId, source));
         addCards(deck.getId(), newCards);
         return deck;
