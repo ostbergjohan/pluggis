@@ -27,6 +27,26 @@ public class AzureTts {
     }
 
     /** Svenska neurala röster. */
+    /** Röster för språkämnen (glosor, fraser): språkkod → Azure-röst. */
+    public static final java.util.Map<String, String> LANGUAGE_VOICES = java.util.Map.of(
+            "es", "es-ES-ElviraNeural",
+            "de", "de-DE-KatjaNeural",
+            "fr", "fr-FR-DeniseNeural",
+            "en", "en-GB-SoniaNeural");
+
+    /** Röst för ett språk ("es", "spanska", "es-ES" …), eller null om det inte finns. */
+    public static String voiceFor(String lang) {
+        if (lang == null) {
+            return null;
+        }
+        String l = lang.trim().toLowerCase(java.util.Locale.ROOT);
+        if (l.startsWith("span") || l.startsWith("es")) return LANGUAGE_VOICES.get("es");
+        if (l.startsWith("tys") || l.startsWith("de") || l.startsWith("ger")) return LANGUAGE_VOICES.get("de");
+        if (l.startsWith("fra") || l.startsWith("fr")) return LANGUAGE_VOICES.get("fr");
+        if (l.startsWith("eng") || l.startsWith("en")) return LANGUAGE_VOICES.get("en");
+        return null;
+    }
+
     public static final List<Voice> VOICES = List.of(
             new Voice("sv-SE-SofieNeural", "Sofie", "kvinna"),
             new Voice("sv-SE-HilleviNeural", "Hillevi", "kvinna"),
@@ -80,7 +100,9 @@ public class AzureTts {
         String name = voice == null || voice.isBlank() ? VOICES.get(0).id()
                 : voice.startsWith(PREFIX) ? voice.substring(PREFIX.length()) : voice;
         int ratePercent = (int) Math.round((speed - 1.0) * 100);
-        String ssml = "<speak version='1.0' xml:lang='sv-SE'><voice name='" + escape(name) + "'>"
+        // språket står först i röstens namn, t.ex. "es-ES-ElviraNeural"
+        String xmlLang = name.matches("^[a-z]{2}-[A-Z]{2}-.*") ? name.substring(0, 5) : "sv-SE";
+        String ssml = "<speak version='1.0' xml:lang='" + xmlLang + "'><voice name='" + escape(name) + "'>"
                 + "<prosody rate='" + (ratePercent >= 0 ? "+" : "") + ratePercent + "%'>" + escape(text)
                 + "</prosody></voice></speak>";
         Timer.Sample sample = Timer.start(meters);

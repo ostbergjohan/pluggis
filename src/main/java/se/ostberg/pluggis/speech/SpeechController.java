@@ -66,7 +66,8 @@ public class SpeechController {
     /** Provlyssna en röst innan den sparas. */
     @PostMapping(value = "/preview", produces = "audio/wav")
     public ResponseEntity<byte[]> preview(@RequestBody(required = false) PreviewRequest body,
-                                          @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean small) {
+                                          @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean small,
+                                          @org.springframework.web.bind.annotation.RequestParam(required = false) String lang) {
         if (!speech.ttsEnabled()) {
             return ResponseEntity.status(503).contentType(MediaType.TEXT_PLAIN)
                     .body("Ljudtjänsten är inte påslagen".getBytes());
@@ -74,8 +75,18 @@ public class SpeechController {
         String text = body == null || body.text() == null || body.text().isBlank() ? SAMPLE : body.text();
         String voice = body != null && body.voice() != null ? body.voice() : settings.voice();
         double speed = body != null && body.speed() != null ? body.speed() : settings.speed();
-        byte[] wav = speech.synthesize(text.length() > 300 ? text.substring(0, 300) : text, voice,
-                SettingsService.lengthScale(speed));
+        String said = text.length() > 300 ? text.substring(0, 300) : text;
+        byte[] wav;
+        if (lang != null && !lang.isBlank() && !lang.toLowerCase(java.util.Locale.ROOT).startsWith("sv")) {
+            // glosor och fraser på spanska, tyska, franska eller engelska
+            try {
+                wav = speech.synthesizeLanguage(said, lang, SettingsService.lengthScale(speed));
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return ResponseEntity.status(503).contentType(MediaType.TEXT_PLAIN).body(e.getMessage().getBytes());
+            }
+        } else {
+            wav = speech.synthesize(said, voice, SettingsService.lengthScale(speed));
+        }
         if (small) {
             wav = Wav.toMono16k(wav);   // Tab5: mindre att hämta och spela upp
         }

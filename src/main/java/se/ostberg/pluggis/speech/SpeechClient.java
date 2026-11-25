@@ -95,6 +95,21 @@ public class SpeechClient {
      * Text → wav med vald röst (t.ex. "sv_SE-lisa-medium", null = standard) och
      * Piper-tempo (length_scale, större = långsammare).
      */
+    /**
+     * Uppläsning på ett annat språk (spanska, tyska, franska, engelska) – bara med Azure, eftersom de svenska
+     * rösterna uttalar utländska ord fel.
+     */
+    public byte[] synthesizeLanguage(String text, String lang, double lengthScale) {
+        String v = AzureTts.voiceFor(lang);
+        if (v == null) {
+            throw new IllegalArgumentException("Inget stöd för språket " + lang);
+        }
+        if (azure == null || !azure.available()) {
+            throw new IllegalStateException("Uppläsning på andra språk kräver Azure-rösterna (AZURE_SPEECH_KEY)");
+        }
+        return azure.synthesize(text, v, 1.0 / (lengthScale <= 0 ? 1.0 : lengthScale));
+    }
+
     public byte[] synthesize(String text, String voice, double lengthScale) {
         text = SpokenText.forSpeech(text);
         String chosen = voice == null || voice.isBlank() ? defaultVoice() : voice;
