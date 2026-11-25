@@ -1168,6 +1168,7 @@ static SemaphoreHandle_t fetchLock = nullptr;
 static volatile int fetchGen = 0;          // ökas vid paus/hopp – gamla hämtningar kastas
 static int fetchWantIdx = -1, fetchWantGen = -1;
 static String fetchWantText;
+static void fetchReset();
 static uint8_t* fetchedBuf = nullptr;
 static size_t fetchedLen = 0;
 static int fetchedIdx = -1, fetchedGen = -1, fetchedCode = 0;
