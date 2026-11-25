@@ -398,7 +398,7 @@ public class PlanningService {
 
     /**
      * Ordning inom varje dag: ett block per läxa/prov (ämne) så att eleven inte hoppar mellan ämnen –
-     * närmast deadline först, sedan viktigast, och inom blocket i planens ordning (startsteget först).
+     * närmast deadline först, sedan viktigast, och inom blocket i planens ordning.
      * Har föräldern ordnat dagen för hand gäller den ordningen.
      */
     public List<PlanItem> grouped(List<PlanItem> items) {
@@ -540,11 +540,19 @@ public class PlanningService {
             if (!allowed.contains(date)) {
                 continue;
             }
-            int minutes = g.minutes() == null ? 15 : Math.max(5, Math.min(30, g.minutes()));
+            if (SKIM_ONLY.matcher(g.task()).find()) {
+                continue; // "läs bara rubrikerna" ger ingenting
+            }
+            int minutes = g.minutes() == null ? MIN_ITEM_MINUTES : Math.max(MIN_ITEM_MINUTES, Math.min(30, g.minutes()));
             out.add(new PlanDays.Draft(date, g.task().trim(), minutes, type(g.type())));
         }
         return out;
     }
+
+    /** Kortaste moment i en plan – kortare pass blir för små för att komma någonstans. */
+    public static final int MIN_ITEM_MINUTES = 15;
+    private static final java.util.regex.Pattern SKIM_ONLY = java.util.regex.Pattern.compile(
+            "(?i)(bara|endast|skumma)\\s+(igenom\\s+)?(rubrik|bild|sidorna)|läs\\s+(bara\\s+)?rubrikerna");
 
     private static PlanItem.Type type(String raw) {
         if (raw == null) {

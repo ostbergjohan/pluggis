@@ -243,7 +243,7 @@ views.oversikt = async (main) => {
     kpi('Intjänat denna vecka', kr(week.earnedSek), `Obetalt ${kr(week.unpaidSek)}`),
     kpi('Streak', `${week.streakDays} ${week.streakDays === 1 ? 'dag' : 'dagar'}`, 'dagar i rad med pass'),
     kpi('Pluggtid 14 dagar', `${stats.totalMinutes} min`, `${stats.totalSessions} pass, ${stats.activeDays} aktiva dagar`),
-    kpi('Flashkort 14 dagar', stats.totalCardsReviewed, accuracy === null ? 'inga försök än' : `${accuracy} % rätt`),
+    kpi('Kort och quiz 14 dagar', stats.totalCardsReviewed, accuracy === null ? 'inga försök än' : `${accuracy} % rätt`),
   ));
 
   const upcoming = state.homework
@@ -265,7 +265,7 @@ views.oversikt = async (main) => {
         h('a', { href: '#laxor' }, 'fyll i vad som ingår'), ' så görs en plan.') : null),
     h('section', { class: 'panel' }, h('h2', {}, 'Pluggminuter per dag'),
       barChart([stats.perDay.map(d => d.minutes)], labels, { unit: ' min' })),
-    h('section', { class: 'panel' }, h('h2', {}, 'Flashkort per dag'),
+    h('section', { class: 'panel' }, h('h2', {}, 'Kort och quiz per dag'),
       barChart([stats.perDay.map(d => d.cardsReviewed), stats.perDay.map(d => d.cardsCorrect)], labels),
       h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--accent)' }), 'försök'),
         h('span', {}, h('i', { style: 'background:var(--blue)' }), 'rätt'))),
@@ -663,7 +663,7 @@ function homeworkItem(x, rerender) {
             body: { topic: v.title, subject: v.subject, sourceText: [v.description, ...v.steps].filter(Boolean).join('\n'),
               count: 15, homeworkId: x.id } }), e.target);
           if (r) toast(`Kortlek "${r.deck.name}" med ${r.cardCount} kort skapad`);
-        } }, '🃏 Gör flashkort'),
+        } }, '🃏 Gör kort'),
         x.kind !== 'OTHER' ? h('button', { onclick: async (e) => {
           const r = await run(() => api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId: x.id, mode: 'mix', count: 10 } }), e.target);
           if (r) toast(`"${r.deck.name}" med ${r.cardCount} frågor skapad – finns under Kort i elevchatten`);
@@ -955,7 +955,7 @@ function claudeBackendPanel(st) {
 // ----- Flashkort -----
 
 views.kort = async (main) => {
-  main.append(h('h1', {}, 'Flashkort'),
+  main.append(h('h1', {}, 'Öva – kort och quiz'),
     h('p', { class: 'sub' }, `Skapa kortlekar för hand, låt Claude göra dem från ett ämne eller ett foto, och öva här, i elevchatten${T5(' eller på Tab5')}.`));
   const forms = h('div');
   const photoInput = h('input', { type: 'file', accept: FILE_ACCEPT, style: 'display:none', onchange: async () => {

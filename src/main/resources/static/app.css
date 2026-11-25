@@ -260,7 +260,10 @@ code.sa { font-size: 13px; background: var(--bg); border: 1px solid var(--line);
 .mode-list { display: grid; gap: 8px; }
 .mode-opt { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .mode-opt.on { border-color: var(--accent); background: var(--accent-soft); }
-.mode-opt input { margin-top: 4px; }
+.mode-opt input[type=radio] { width: 18px; height: 18px; flex: 0 0 18px; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
+.mode-opt > div { flex: 1; min-width: 0; }
+.mode-opt strong { display: block; color: var(--ink); font-size: 15px; }
+.mode-opt.mode-opt { margin: 0; font-size: 14px; color: var(--ink); }
 
 .stage { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin-top: 8px; }
 .stage-list { display: grid; gap: 6px; }

@@ -94,7 +94,7 @@ public final class PlanDays {
         if (test) {
             LocalDate last = days.get(days.size() - 1);
             if (hasDeck) {
-                out.add(new Draft(last, "Repetera kortleken till " + h.getTitle(), 10, PlanItem.Type.FLASHCARDS));
+                out.add(new Draft(last, "Repetera kortleken till " + h.getTitle(), 15, PlanItem.Type.FLASHCARDS));
             }
             out.add(new Draft(last, "Förhör dig själv på det viktigaste i " + h.getTitle(), 15, PlanItem.Type.REVIEW));
         }

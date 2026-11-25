@@ -233,7 +233,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
 | Plan | Tre veckor framåt dag för dag, plus det som ligger efter. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas. Flyttade läxor planeras inte om på natten förrän du trycker Planera igen |
-| Flashkort | Generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
+| Öva | Kortlekar och quiz: generera med Claude, skriv egen lek (`fram ; bak ; ledtråd`), från foto, redigera kort, öva i webben, Anki-export |
 | Poäng | Händelser, bonuspoäng, markera utbetalning |
 | Kostnad | Vad Claude kostar per dag, funktion och elev; välj API, hybrid eller abonnemang |
 | Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
@@ -307,7 +307,7 @@ tidigare start i planen, lägre vikt håller det kort. Max per dag gäller allti
 
 **Anpassat för ADHD:**
 - **Ett block per ämne varje dag:** momenten grupperas per läxa/prov (närmast deadline först, sedan vikt) så att eleven inte hoppar mellan ämnen. Varje ämne har fast färg och symbol (🧪 NO, ➗ matte, 📖 svenska, 🇬🇧 engelska, 🗣️ språk, 🌍 SO …) i chatten, admin och kalendern. Dagar du ordnat för hand behåller din ordning.
-- Varje dag börjar med ett **startsteg** på 2–5 minuter ("läs bara rubrikerna"), så det är lätt att komma igång.
+- **Ordentliga pass:** varje moment är minst 15 minuter (högst 25), och inga "läs bara rubrikerna"-moment – varje läsmoment har en aktiv uppgift (t.ex. "Läs s. 40–45 och skriv 3 nyckelord"). Dagens mest konkreta moment ligger först så att det är lätt att komma igång.
 - Aldrig två läsmoment i rad; repetition först med boken framme, sedan utan (som på provet).
 - **Buffert:** planen fyller bara ~80 % av max per dag och lämnar en lätt reservdag före provet.
 - **Varje natt** (03:30) planeras det som ligger efter om, inom max per dag – i stället för att staplas på dagen efter.

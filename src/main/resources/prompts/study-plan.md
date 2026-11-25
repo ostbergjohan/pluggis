@@ -22,15 +22,17 @@ Regler:
   (bara repetition eller ingenting) före sista dagen, så att en missad dag inte välter planen.
 - Dela upp läsning konkret efter sidor, avsnitt eller rubriker (t.ex. "s. 40–48"), så att varje
   dag har en tydlig bit. Räkna sidor så att allt material blir täckt.
-- Varje moment högst 20 minuter och högst tre moment per dag, inom max minuter per dag.
-- STARTSTEG: varje dags första moment för den här uppgiften är ett litet steg på 2–5 minuter som gör det
-  lätt att börja, t.ex. "Ta fram NO-boken och läs bara rubrikerna på s. 40–48" eller "Öppna kortleken och
-  svara på 3 kort". Det ska kännas löjligt lätt.
+- Varje moment är MINST 15 och högst 25 minuter – inga småmoment. Högst två moment per dag för den här
+  uppgiften, inom max minuter per dag. Hellre ett ordentligt pass än flera små.
+- Inga moment som bara går ut på att skumma eller "läsa rubrikerna" – det ger ingenting. Varje läsmoment
+  har en tydlig bit och en aktiv uppgift i samma moment (t.ex. "Läs s. 40–45 och skriv 3 nyckelord").
+- Lätt att komma igång: lägg dagens mest konkreta och överblickbara moment först (t.ex. kortleken,
+  ett snabbquiz eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
 - Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsa med något aktivt
   (skriv nyckelord, rita, förhör dig, räkna, förklara högt).
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
   Kombinera läsning med något aktivt: nyckelord, tankekarta, egna frågor, räkna exempel.
-- PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (10–15 min, typ REVIEW) 1–2 dagar före
+- PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (15–20 min, typ REVIEW) 1–2 dagar före
   provet, efter att allt material gåtts igenom. Skriv det exakt så – eleven får en knapp för det i appen.
 - PROV: allt nytt material ska vara genomgånget senast 1–2 dagar före provet. De sista dagarna:
   repetition (REVIEW), självförhör, och FLASHCARDS om det finns en kortlek. Repetera tidigare
