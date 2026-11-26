@@ -34,10 +34,14 @@ public class StatsService {
     public record DeckAccuracy(long deckId, String name, long cards, long learned, int reviewed, int correct) {
     }
 
+    /** Ett pass eller en övning, för "Senaste" i föräldravyn. */
+    public record Recent(String task, Instant startedAt, long minutes) {
+    }
+
     public record Stats(String deviceId, int days, List<DayStat> perDay,
                         long totalMinutes, int totalSessions, int totalCardsReviewed, int totalCardsCorrect,
                         int totalPlanItemsDone, long totalPoints, int activeDays,
-                        List<DeckAccuracy> decks, int openHomework, int upcomingTests) {
+                        List<DeckAccuracy> decks, int openHomework, int upcomingTests, List<Recent> recent) {
     }
 
     private final ReviewLogRepository reviews;
@@ -81,7 +85,11 @@ public class StatsService {
             acc.put(from.plusDays(i), new long[6]);
         }
 
+        List<Recent> recent = new java.util.ArrayList<>();
         for (StudySession s : sessions.since(deviceId, fromInstant)) {
+            Instant fin = s.getFinishedAt() != null ? s.getFinishedAt() : Instant.now();
+            recent.add(new Recent(s.getTask(), s.getStartedAt(),
+                    Math.max(0, Math.min(Duration.between(s.getStartedAt(), fin).toMinutes(), s.getPlannedMinutes()))));
             long[] a = acc.get(s.getStartedAt().atZone(zone).toLocalDate());
             if (a == null) {
                 continue;
@@ -144,6 +152,7 @@ public class StatsService {
                 perDay.stream().mapToInt(DayStat::planItemsDone).sum(),
                 perDay.stream().mapToLong(DayStat::points).sum(),
                 (int) perDay.stream().filter(d -> d.minutes() > 0 || d.cardsReviewed() > 0 || d.planItemsDone() > 0).count(),
-                decks, open.size(), upcomingTests);
+                decks, open.size(), upcomingTests,
+                recent.stream().sorted(java.util.Comparator.comparing(Recent::startedAt).reversed()).limit(8).toList());
     }
 }

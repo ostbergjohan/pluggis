@@ -235,13 +235,11 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 
 | Flik | Vad |
 |---|---|
-| Översikt | Veckans poäng/kronor/streak, dagens plan att bocka av, kommande läxor och prov, pluggminuter och flashkort per dag, träffsäkerhet per kortlek |
-| Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), redigera vad som ingår, planera, gör flashkort, markera klar, ta bort |
-| Plan | Tre veckor framåt dag för dag, plus det som ligger efter. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas. Flyttade läxor planeras inte om på natten förrän du trycker Planera igen |
-| Poäng | Händelser, bonuspoäng, markera utbetalning |
-| Kostnad | Vad Claude kostar per dag, funktion och elev; välj API, hybrid eller abonnemang |
-| Logg | Backendens senaste 2 000 loggrader live, med nivåfilter, sökning och paus |
-| Inställningar | Token, elever och elevlänkar, elevens namn och coachens ton, poäng av/på, planering, Google Kalender, röst och tempo, iOS-genvägen |
+| Översikt | *Behöver dig* (läxor utan innehåll, moment som ligger efter), pluggtid, aktiva dagar, besvarade frågor (poäng och pengar bara om poäng är på), dagens plan, kommande läxor och prov, senaste passen och övningarna |
+| Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), fyll i vad som ingår, planera, markera klar, ta bort |
+| Plan | Tre veckor framåt; dagar utan moment slås ihop. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas |
+| *Elevens namn* | Coachen (namn, ton, önskemål, poäng av/på) · Planering (max per dag, pluggdagar, pluggtid) · Röst · Kalender (Google) · Poäng (om påslaget) |
+| System | Elever och koder · Claude och kostnad · Logg · Anslutning (token) · Tab5 (och simulatorn) |
 
 ### Flera elever
 

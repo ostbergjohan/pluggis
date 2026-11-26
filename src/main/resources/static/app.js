@@ -29,6 +29,12 @@ const state = {
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
+// replaceChildren/append skriver ut null och false som text ("null") – hoppa över tomma delar
+for (const fn of ['replaceChildren', 'append', 'prepend']) {
+  const orig = Element.prototype[fn];
+  Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.flat(Infinity).filter(k => k !== null && k !== undefined && k !== false)); };
+}
+
 /** Skapar element säkert (text sätts som text, aldrig som HTML). */
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -229,55 +235,80 @@ function barChart(series, labels, { height = 160, colors = ['bar', 'bar2'], unit
 const views = {};
 
 views.oversikt = async (main) => {
-  main.append(h('h1', {}, 'Översikt'), h('p', { class: 'sub' }, `Enhet: ${state.deviceId}`));
-  const [week, stats, today] = await Promise.all([
+  main.append(h('h1', {}, 'Översikt'));
+  const [week, stats, today, student] = await Promise.all([
     api(`/api/devices/${enc(state.deviceId)}/rewards`),
     api(`/api/devices/${enc(state.deviceId)}/stats?days=14`),
     api('/api/plan/today'),
+    api('/api/student').catch(() => ({})),
     loadHomework(false),
   ]);
+  const pointsOn = student.pointsEnabled !== false;
 
+  // --- Behöver dig: sådant som väntar på en förälder
+  const open = state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER');
+  const missingContent = open.filter(x => !x.description && !(x.steps || []).length);
+  const overdue = today.filter(t => t.overdue && !(t.item || t).done);
+  const needs = [];
+  for (const x of missingContent) {
+    needs.push(h('div', { class: 'check' }, kindTag(x.kind),
+      h('div', { class: 'grow' }, h('div', { class: 'task' }, x.title),
+        h('div', { class: 'item-meta' }, [x.subject, x.dueDate ? relDays(x.dueDate) : null, 'vad som ingår saknas – ingen plan än'].filter(Boolean).join(' · '))),
+      h('button', { class: 'small primary', onclick: () => { state.openHomeworkId = x.id; location.hash = '#laxor'; } }, 'Fyll i')));
+  }
+  if (overdue.length) {
+    needs.push(h('div', { class: 'check' }, h('span', { class: 'tag late' }, 'efter'),
+      h('div', { class: 'grow' }, h('div', { class: 'task' }, `${overdue.length} ${overdue.length === 1 ? 'moment ligger' : 'moment ligger'} efter i planen`),
+        h('div', { class: 'item-meta' }, 'Flytta till en annan dag, eller planera om.')),
+      h('button', { class: 'small', onclick: () => { location.hash = '#plan'; } }, 'Till planen')));
+  }
+  if (needs.length) main.append(h('section', { class: 'panel needs', style: 'margin-bottom:16px' }, h('h2', {}, 'Behöver dig'), needs));
+
+  // --- Nyckeltal (pengar bara om poäng används)
   const accuracy = stats.totalCardsReviewed ? Math.round(100 * stats.totalCardsCorrect / stats.totalCardsReviewed) : null;
-  main.append(h('div', { class: 'grid cols-4' },
-    kpi('Poäng denna vecka', week.weekPoints, `Totalt ${week.allTimePoints}`),
-    kpi('Intjänat denna vecka', kr(week.earnedSek), `Obetalt ${kr(week.unpaidSek)}`),
-    kpi('Streak', `${week.streakDays} ${week.streakDays === 1 ? 'dag' : 'dagar'}`, 'dagar i rad med pass'),
-    kpi('Pluggtid 14 dagar', `${stats.totalMinutes} min`, `${stats.totalSessions} pass, ${stats.activeDays} aktiva dagar`),
-    kpi('Kort och quiz 14 dagar', stats.totalCardsReviewed, accuracy === null ? 'inga försök än' : `${accuracy} % rätt`),
-  ));
+  const kpis = [
+    kpi('Pluggtid 14 dagar', `${stats.totalMinutes} min`, `${stats.totalSessions} pass och övningar`),
+    kpi('Aktiva dagar', `${stats.activeDays} av 14`, `streak ${week.streakDays} ${week.streakDays === 1 ? 'dag' : 'dagar'} i rad`),
+    kpi('Besvarade frågor', stats.totalCardsReviewed, accuracy === null ? 'inga än' : `${accuracy} % rätt`),
+  ];
+  if (pointsOn) {
+    kpis.push(kpi('Poäng denna vecka', week.weekPoints, `Totalt ${week.allTimePoints}`));
+    kpis.push(kpi('Intjänat denna vecka', kr(week.earnedSek), `Obetalt ${kr(week.unpaidSek)}`));
+  }
+  main.append(h('div', { class: 'grid cols-4' }, kpis));
 
-  const upcoming = state.homework
-    .filter(x => x.kind !== 'OTHER' && x.dueDate && daysUntil(x.dueDate) >= 0 && daysUntil(x.dueDate) <= 21)
+  // --- Idag och kommande
+  const upcoming = open
+    .filter(x => x.dueDate && daysUntil(x.dueDate) >= 0 && daysUntil(x.dueDate) <= 21)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const missingContent = state.homework.filter(x => x.kind !== 'OTHER' && !x.description && (!x.steps || !x.steps.length));
-
-  const labels = stats.perDay.map(d => fmtDay(d.day).replace('.', ''));
   main.append(h('div', { class: 'grid cols-2', style: 'margin-top:16px' },
     h('section', { class: 'panel' }, h('h2', {}, 'Idag'), planChecklist(today, true)),
     h('section', { class: 'panel' }, h('h2', {}, 'Kommande läxor och prov'),
       upcoming.length ? h('div', { class: 'list' }, upcoming.map(x => h('div', { class: 'check' },
         kindTag(x.kind),
         h('div', { style: 'flex:1' }, h('div', { class: 'task' }, x.title),
-          h('div', { class: 'item-meta' }, `${fmtLong(x.dueDate)} · ${relDays(x.dueDate)}`,
-            (!x.description && !(x.steps || []).length) ? ' · innehåll saknas' : '')))))
-        : h('div', { class: 'empty' }, 'Inget inom tre veckor.'),
-      missingContent.length ? h('p', { class: 'item-meta' }, `${missingContent.length} saknar innehåll – `,
-        h('a', { href: '#laxor' }, 'fyll i vad som ingår'), ' så görs en plan.') : null),
-    h('section', { class: 'panel' }, h('h2', {}, 'Pluggminuter per dag'),
-      barChart([stats.perDay.map(d => d.minutes)], labels, { unit: ' min' })),
-    h('section', { class: 'panel' }, h('h2', {}, 'Kort och quiz per dag'),
-      barChart([stats.perDay.map(d => d.cardsReviewed), stats.perDay.map(d => d.cardsCorrect)], labels),
-      h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--accent)' }), 'försök'),
-        h('span', {}, h('i', { style: 'background:var(--blue)' }), 'rätt'))),
-  ));
+          h('div', { class: 'item-meta' }, [x.subject, `${fmtLong(x.dueDate)} · ${relDays(x.dueDate)}`].filter(Boolean).join(' · '))))))
+        : h('div', { class: 'empty' }, 'Inget inom tre veckor.'))));
 
-  if (stats.decks.length) {
-    main.append(h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Kortlekar'),
-      h('table', {}, h('thead', {}, h('tr', {}, ['Lek', 'Kort', 'Sitter (fack 4–5)', 'Försök 14 d', 'Rätt'].map(t => h('th', {}, t)))),
-        h('tbody', {}, stats.decks.map(d => h('tr', {},
-          h('td', {}, d.name), h('td', {}, d.cards), h('td', {}, `${d.learned} / ${d.cards}`),
-          h('td', {}, d.reviewed), h('td', {}, d.reviewed ? `${Math.round(100 * d.correct / d.reviewed)} %` : '–')))))));
-  }
+  // --- Senaste passen och övningarna, och kurvor
+  const recent = (stats.recent || []).map(r => {
+    const task = (r.task || '').replace(/^Övning:\s*/, '');
+    const when = new Date(r.startedAt);
+    return h('div', { class: 'check' },
+      h('div', { class: 'grow' }, h('div', { class: 'task' }, task || 'Pass'),
+        h('div', { class: 'item-meta' }, `${when.toLocaleDateString('sv-SE', { weekday: 'short', day: 'numeric', month: 'numeric' })} ${when.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}`)),
+      h('span', { class: 'item-meta' }, `${r.minutes} min`));
+  });
+  const labels = stats.perDay.map(d => fmtDay(d.day).replace('.', ''));
+  main.append(h('div', { class: 'grid cols-2', style: 'margin-top:16px' },
+    h('section', { class: 'panel recent' }, h('h2', {}, 'Senaste passen och övningarna'),
+      recent.length ? h('div', { class: 'list' }, recent) : h('div', { class: 'empty' }, 'Inget de senaste två veckorna.')),
+    h('section', { class: 'panel' }, h('h2', {}, 'Pluggminuter per dag'),
+      barChart([stats.perDay.map(d => d.minutes)], labels, { unit: ' min' }),
+      h('h2', { style: 'margin-top:18px' }, 'Besvarade frågor per dag'),
+      barChart([stats.perDay.map(d => d.cardsReviewed), stats.perDay.map(d => d.cardsCorrect)], labels),
+      h('div', { class: 'legend' }, h('span', {}, h('i', { style: 'background:var(--accent)' }), 'besvarade'),
+        h('span', {}, h('i', { style: 'background:var(--blue)' }), 'rätt')))));
 };
 
 function kpi(label, value, hint) {
@@ -594,7 +625,7 @@ function homeworkItem(x, rerender) {
     } },
       kindTag(x.kind),
       h('div', { class: 'item-title' }, x.title),
-      missing ? h('span', { class: 'tag late' }, 'innehåll saknas') : null,
+      missing ? h('span', { class: 'tag late', title: 'Tryck för att fylla i vad som ingår' }, '✎ fyll i vad som ingår') : null,
       x.weight && x.weight !== 50 && x.kind !== 'OTHER' ? h('span', { class: 'tag' + (x.weight >= 80 ? ' late' : ''), title: 'Vikt' }, `vikt ${x.weight} %`) : null,
       x.status === 'DONE' ? h('span', { class: 'tag done' }, 'klar') : null,
       h('div', { class: 'item-meta' }, meta)));
@@ -613,7 +644,6 @@ function homeworkItem(x, rerender) {
           f.type && f.type.startsWith('image/') ? h('img', { src: URL.createObjectURL(f), alt: '' }) : h('span', { class: 'stage-doc' }, (f.name.split('.').pop() || 'fil').toUpperCase()),
           h('span', { class: 'item-meta' }, `${i + 1}. ${f.name}`),
           h('button', { class: 'ghost', title: 'Ta bort', onclick: () => { staged.splice(i, 1); drawStage(); } }, '✕')))),
-        h('label', { style: 'display:flex;gap:6px;align-items:center;margin-top:8px' }, cardsCb, 'Gör flashkort av materialet också'),
         h('div', { class: 'toolbar', style: 'margin-top:8px' },
           staged.length < MAX_FILES ? h('button', { onclick: () => matInput.click() }, '➕ Lägg till fler sidor') : null,
           h('button', { class: 'primary', onclick: () => sendMaterial(staged.splice(0), cardsCb.checked) },
@@ -788,8 +818,8 @@ views.plan = async (main) => {
     } }, '⋯');
     const check = planChecklist([{ item, homeworkTitle: titleOf(item.homeworkId), overdue: t.overdue }], true);
     row.append(h('div', { class: 'dnd-main' }, handle, h('div', { style: 'flex:1;min-width:0' }, check), more), tools);
-    row.addEventListener('dragstart', (e) => { dragId = item.id; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(item.id)); });
-    row.addEventListener('dragend', () => { row.classList.remove('dragging'); document.querySelectorAll('.drop-mark').forEach(m => m.remove()); });
+    row.addEventListener('dragstart', (e) => { dragId = item.id; row.classList.add('dragging'); document.body.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(item.id)); });
+    row.addEventListener('dragend', () => { row.classList.remove('dragging'); document.body.classList.remove('is-dragging'); document.querySelectorAll('.drop-mark').forEach(m => m.remove()); });
     return row;
   }
 
@@ -849,11 +879,29 @@ views.plan = async (main) => {
   }
   const panel = h('section', { class: 'panel' });
   if (!upcoming.length) panel.append(h('div', { class: 'empty' }, 'Inget planerat. Gå till Läxor & prov, fyll i vad som ingår och tryck Planera.'));
+  // Dagar utan moment slås ihop till en rad ("5 dagar utan plugg"), men går att öppna och släppa moment på
   const start = parseDay(todayIso());
+  const hasItems = (iso) => upcoming.some(t => (t.item || t).planDate === iso);
+  let emptyDays = [];
+  const flush = () => {
+    if (!emptyDays.length) return;
+    if (emptyDays.length < 2) { panel.append(dayZone(emptyDays[0])); emptyDays = []; return; }
+    const days = emptyDays.slice();
+    const inner = h('div', { class: 'empty-run-days' }, days.map(dayZone));
+    const btn = h('button', { class: 'empty-run-btn', onclick: () => box.classList.toggle('open') },
+      `▸ ${fmtDay(days[0])} – ${fmtDay(days[days.length - 1])}: ${days.length} dagar utan plugg`);
+    const box = h('div', { class: 'empty-run' }, btn, inner);
+    panel.append(box);
+    emptyDays = [];
+  };
   for (let n = 0; n <= 20; n++) {
     const d = new Date(start); d.setDate(d.getDate() + n);
-    panel.append(dayZone(d.toLocaleDateString('sv-SE')));
+    const iso = d.toLocaleDateString('sv-SE');
+    if (n > 0 && !hasItems(iso)) { emptyDays.push(iso); continue; }
+    flush();
+    panel.append(dayZone(iso));
   }
+  flush();
   main.append(panel);
 };
 
@@ -1461,38 +1509,67 @@ views.logg = async (main) => {
 
 // ----- Inställningar -----
 
-views.installningar = async (main) => {
+// ----- Eleven: allt som gäller den valda eleven -----
+
+function currentStudentName() {
+  return (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name || 'Eleven';
+}
+
+function subnav(base, items, active) {
+  return h('nav', { class: 'subnav' }, items.map(([id, label]) =>
+    h('a', { href: `#${base}/${id}`, class: id === active ? 'active' : null }, label)));
+}
+
+views.elev = async (main) => {
+  let s = {};
+  try { s = await api('/api/student'); } catch { /* visas i panelerna */ }
+  const items = [['coachen', 'Coachen'], ['planering', 'Planering'], ['rost', 'Röst'], ['kalender', 'Kalender']];
+  if (s.pointsEnabled !== false) items.push(['poang', 'Poäng']);
+  const sub = items.some(([id]) => id === state.sub) ? state.sub : 'coachen';
+  main.append(h('h1', {}, currentStudentName()), subnav('elev', items, sub));
+  if (sub === 'coachen') main.append(studentPanel());
+  else if (sub === 'planering') main.append(planningPanel());
+  else if (sub === 'rost') main.append(voicePanel());
+  else if (sub === 'kalender') main.append(googlePanel());
+  else if (sub === 'poang') { const box = h('div'); await views.poang(box); box.querySelector('h1')?.remove(); main.append(box); }
+};
+
+// ----- System: sådant som gäller hela Pluggis -----
+
+views.system = async (main) => {
+  const items = [['elever', 'Elever och koder'], ['kostnad', 'Claude och kostnad'], ['logg', 'Logg'], ['anslutning', 'Anslutning'], ['tab5', 'Tab5']];
+  if (state.showTab5) items.push(['simulator', 'Tab5-simulator']);
+  const sub = items.some(([id]) => id === state.sub) ? state.sub : 'elever';
+  main.append(h('h1', {}, 'System'), subnav('system', items, sub));
+  const box = h('div');
+  if (sub === 'elever') box.append(studentsPanel());
+  else if (sub === 'kostnad') await views.kostnad(box);
+  else if (sub === 'logg') await views.logg(box);
+  else if (sub === 'anslutning') box.append(connectionPanel());
+  else if (sub === 'tab5') box.append(tab5Panel());
+  else if (sub === 'simulator') await views.simulator(box);
+  box.querySelector('h1')?.remove();
+  main.append(box);
+};
+
+function connectionPanel() {
   const token = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN' });
   const result = h('div', { class: 'item-meta', style: 'margin-top:10px' });
-  main.append(h('h1', {}, 'Inställningar'),
-    h('section', { class: 'panel' },
-      h('h2', {}, 'Anslutning'),
-      h('label', {}, 'Token (samma som PLUGGIS_DEVICE_TOKEN)'), token,
-      h('div', { class: 'toolbar', style: 'margin-top:12px' },
-        h('button', { class: 'primary', onclick: async (e) => {
-          state.token = token.value.trim();
-          store.set('lc.token', state.token);
-          const r = await run(() => api('/api/devices'), e.target);
-          if (r) result.textContent = `Sparat. Anslutna enheter: ${r.connected.length ? r.connected.join(', ') : 'inga'}`;
-          await loadStudents();
-          pollDevice();
-        } }, 'Spara och testa')),
-      result,
-      h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.')),
-    studentsPanel(),
-    studentPanel(),
-    planningPanel(),
-    googlePanel(),
-    voicePanel(),
-    tab5Panel(),
-    h('section', { class: 'panel', style: 'margin-top:16px' },
-      h('h2', {}, 'iOS-genväg: skärmdump från InfoMentor'),
-      h('ol', {},
-        h('li', {}, 'Genvägar → ny genväg → slå på "Visa i delningsblad", ta emot Bilder.'),
-        h('li', {}, 'Lägg till "Hämta innehåll från URL": ', h('code', {}, `${location.origin}/api/homework/photo?deviceId=${state.deviceId}`)),
-        h('li', {}, 'Metod POST, Rubriker: X-Pluggis-Token = din token, Begärans brödtext: Formulär, fält "image" = Genvägsindata.'),
-        h('li', {}, 'Lägg till "Visa resultat". Dela sedan skärmdumpen av veckoplanen till genvägen.'))));
-};
+  return h('section', { class: 'panel' },
+    h('h2', {}, 'Anslutning'),
+    h('label', {}, 'Token (samma som PLUGGIS_DEVICE_TOKEN)'), token,
+    h('div', { class: 'toolbar', style: 'margin-top:12px' },
+      h('button', { class: 'primary', onclick: async (e) => {
+        state.token = token.value.trim();
+        store.set('lc.token', state.token);
+        const r = await run(() => api('/api/devices'), e.target);
+        if (r) result.textContent = `Sparat. Anslutna enheter: ${r.connected.length ? r.connected.join(', ') : 'inga'}`;
+        await loadStudents();
+        pollDevice();
+      } }, 'Spara och testa')),
+    result,
+    h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.'));
+}
 
 function tab5Panel() {
   const on = h('input', { type: 'checkbox', checked: state.showTab5 });
@@ -1507,7 +1584,7 @@ function tab5Panel() {
 }
 
 function studentsPanel() {
-  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Elever'),
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Elever'),
     h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
   async function paint() {
     let list;
@@ -1562,7 +1639,7 @@ function studentsPanel() {
 }
 
 function googlePanel() {
-  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Google Kalender'),
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Google Kalender'),
     h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
   async function paint(st) {
     if (!st) {
@@ -1614,7 +1691,7 @@ function googlePanel() {
 
 function planningPanel() {
   const who = () => (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name;
-  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Planering'),
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Planering'),
     h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
   const DAYS = [['MONDAY', 'Mån'], ['TUESDAY', 'Tis'], ['WEDNESDAY', 'Ons'], ['THURSDAY', 'Tor'], ['FRIDAY', 'Fre'], ['SATURDAY', 'Lör'], ['SUNDAY', 'Sön']];
   (async () => {
@@ -1656,7 +1733,7 @@ function planningPanel() {
 }
 
 function studentPanel() {
-  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Eleven och coachen'),
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Eleven och coachen'),
     h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
   (async () => {
     let s;
@@ -1690,7 +1767,7 @@ function studentPanel() {
 }
 
 function voicePanel() {
-  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Röst'),
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Röst'),
     h('div', { class: 'empty' }, h('span', { class: 'spinner' }), ' Hämtar röster…'));
   (async () => {
     let s;
@@ -1739,8 +1816,15 @@ function voicePanel() {
 
 async function route() {
   if (state.leaveView) { try { state.leaveView(); } catch { /* ignore */ } state.leaveView = null; }
-  const view = (location.hash || '#oversikt').slice(1);
+  let [view, sub] = (location.hash || '#oversikt').slice(1).split('/');
+  // Gamla adresser (bokmärken, länkar i texter) leder rätt
+  const OLD = { installningar: ['elev', 'coachen'], poang: ['elev', 'poang'], kostnad: ['system', 'kostnad'],
+    logg: ['system', 'logg'], simulator: ['system', 'simulator'], kort: ['oversikt'] };
+  if (OLD[view]) [view, sub] = OLD[view];
+  state.sub = sub || null;
   const render = views[view] || views.oversikt;
+  const elevTab = $('#tabs a[data-view=elev]');
+  if (elevTab && state.students && state.students.length) elevTab.textContent = currentStudentName();
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('active', a.dataset.view === view));
   const main = $('#main');
   main.replaceChildren(h('div', { class: 'empty' }, h('span', { class: 'spinner' }), ' Laddar…'));
@@ -1748,19 +1832,19 @@ async function route() {
   try {
     await render(fresh);
     // Flera elever: visa tydligt vems sida det är, så att inget läggs in på fel elev
-    const who = state.students && state.students.length > 1 && !['kostnad', 'logg'].includes(view)
+    const who = state.students && state.students.length > 1 && view !== 'system' 
       ? state.students.find(s => String(s.id) === String(state.studentId)) : null;
     if (who) {
       const others = state.students.filter(s => s !== who);
       fresh.prepend(h('div', { class: 'who-bar' }, '👤 ', h('strong', {}, who.name || `Elev ${who.id}`),
-        h('span', { class: 'item-meta' }, ' – läxor, prov, kalender, plan, material, kort och poäng här gäller bara den här eleven. '),
+        h('span', { class: 'item-meta' }, ' – läxor, prov, kalender, plan, material och poäng här gäller bara den här eleven. '),
         others.map(o => h('button', { class: 'ghost small', onclick: () => { $('#studentSel').value = String(o.id); selectStudent(o); } },
           `Byt till ${o.name || 'elev ' + o.id}`))));
     }
     main.replaceChildren(fresh);
   } catch (e) {
     main.replaceChildren(h('section', { class: 'panel' }, h('h2', {}, 'Kunde inte ladda'),
-      h('p', {}, e.message === '401' ? 'Ange token under ' : (e.message || 'Okänt fel'), e.message === '401' ? h('a', { href: '#installningar' }, 'Inställningar') : '')));
+      h('p', {}, e.message === '401' ? 'Ange token under ' : (e.message || 'Okänt fel'), e.message === '401' ? h('a', { href: '#system/anslutning' }, 'System → Anslutning') : '')));
   }
 }
 

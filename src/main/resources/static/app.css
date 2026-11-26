@@ -106,7 +106,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .check:last-child { border-bottom: 0; }
 .check input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
 .check.done .task { text-decoration: line-through; color: var(--muted); }
-.day-head { font-weight: 700; margin: 16px 0 4px; text-transform: capitalize; }
+.day-head { font-weight: 700; margin: 16px 0 4px; }
+.day-head > span:first-child::first-letter { text-transform: uppercase; }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -296,3 +297,25 @@ button.ghost:hover { background: var(--accent-soft); }
 
 .who-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; margin-bottom: 14px;
   border-radius: 10px; background: var(--accent-soft); border: 1px solid var(--line); font-size: 14px; }
+
+/* Kryssrutor och radioknappar: inte hela bredden, och texten bredvid */
+input[type=checkbox], input[type=radio] { width: 18px; height: 18px; flex: 0 0 18px; padding: 0; margin: 0; accent-color: var(--accent); }
+label.inline { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 14px; margin: 12px 0 4px; cursor: pointer; }
+
+/* Plan: dagar utan moment ihopslagna */
+.empty-run { border-top: 1px solid var(--line); margin-top: 8px; }
+.empty-run-btn { background: none; border: 0; color: var(--muted); padding: 10px 0; font-size: 14px; cursor: pointer; width: 100%; text-align: left; }
+.empty-run-days { display: none; }
+.empty-run.open .empty-run-days, .is-dragging .empty-run-days { display: block; }
+.empty-run.open .empty-run-btn { color: var(--ink); }
+
+/* Undermeny i Eleven och System */
+.subnav { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 18px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.subnav a { padding: 7px 14px; border-radius: 8px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.subnav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* Översikt: Behöver dig */
+.needs { border-color: #e6c46a; background: #fdf7e6; }
+.needs .check { align-items: center; }
+.needs .check .grow, .recent .check .grow { flex: 1; }
+.recent .check { padding: 8px 0; }
