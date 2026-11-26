@@ -1123,6 +1123,8 @@ struct HwInfo {
 };
 static std::vector<HwInfo> hws;
 static HwInfo hwCur;
+static std::vector<HwInfo> planHws;   // läxorna bakom planens moment (för att kunna läsa upp dem)
+static Screen hwBackTo = Screen::HwList;   // vart Tillbaka går från en läxa (Läxor eller Plan)
 
 // Uppläsning av läxans material, mening för mening (som en ljudbok), sparar var man är på läxan
 struct Sent {
@@ -1133,6 +1135,9 @@ struct Sent {
 static std::vector<Sent> sents;
 static std::vector<String> chapterLabel;
 static std::vector<long> chapterIds;
+static std::vector<int> chapterPage;   // sidnumret för varje del (0 = okänt)
+static int listenEnd = -1;             // läs bara upp hit (meningens index, ej med); -1 = till slutet
+static long readingPlanItem = 0;       // planens moment som läses upp just nu (bockas av när sidorna är klara)
 static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
 // Nästa mening hämtas i en egen tråd, så att skärmen svarar på tryck medan den laddas
 static SemaphoreHandle_t fetchLock = nullptr;
@@ -1147,11 +1152,45 @@ static bool listening = false, listenDone = false;
 
 // Plan: en dag i taget
 struct PlanRow {
-  long id;
-  String date, task, subject;
+  long id, hwId;
+  String date, task, subject, type;
   int minutes;
   bool done;
+  int pageFrom, pageTo;   // "Läs s. 40–45" → 40, 45 (0 = inga sidor i texten)
 };
+
+/** Sidorna i ett läsmoment: "s. 40–45", "sid 40-45", "sidan 12", "sidorna 3 och 4". */
+static void parsePages(const String& task, int& from, int& to) {
+  from = to = 0;
+  String t = task;
+  t.toLowerCase();
+  int at = -1;
+  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s."}) {
+    at = t.indexOf(key);
+    if (at >= 0) { at += strlen(key); break; }
+  }
+  if (at < 0) return;
+  auto num = [&](int& i) {
+    while (i < (int)t.length() && (t[i] == ' ' || t[i] == '\xA0')) i++;
+    int v = 0, start = i;
+    while (i < (int)t.length() && t[i] >= '0' && t[i] <= '9') v = v * 10 + (t[i++] - '0');
+    return i > start ? v : 0;
+  };
+  int i = at;
+  from = num(i);
+  if (!from) return;
+  to = from;
+  // "–" (en dash, 3 byte i UTF-8), "-", "till" eller "och" före sista sidan
+  String rest = t.substring(i, i + 8);
+  int skip = rest.startsWith("-") ? 1 : rest.startsWith("\xE2\x80\x93") ? 3 : rest.startsWith(" - ") ? 3
+           : rest.startsWith(" till ") ? 6 : rest.startsWith(" och ") ? 5 : 0;
+  if (skip) {
+    int j = i + skip;
+    int v = num(j);
+    if (v >= from) to = v;
+  }
+}
+
 static std::vector<PlanRow> planRows;
 static std::vector<String> planDays;
 static int planDay = 0;
@@ -1201,6 +1240,19 @@ static String jsonEscape(const String& t) {
   return o;
 }
 
+static HwInfo hwFromJson(JsonObject x) {
+  HwInfo h;
+  h.id = x["id"] | 0L;
+  h.title = clean(x["title"] | "");
+  h.subject = clean(x["subject"] | "");
+  h.kind = x["kind"] | "";
+  h.due = x["dueDate"] | "";
+  h.about = clean(x["content"].is<const char*>() ? x["content"].as<const char*>() : (x["description"] | ""));
+  h.listenMat = x["listenMaterialId"] | 0L;
+  h.listenSent = x["listenSentence"] | 0;
+  return h;
+}
+
 static void loadHomework() {
   hws.clear();
   ovaMessage = "";
@@ -1208,15 +1260,7 @@ static void loadHomework() {
   int code = api("GET", "/api/homework", "", &doc);
   if (code != 200) { ovaMessage = "Kunde inte hämta läxorna (" + String(code) + ")."; decksLoaded = true; return; }
   for (JsonObject x : doc.as<JsonArray>()) {
-    HwInfo h;
-    h.id = x["id"] | 0L;
-    h.title = clean(x["title"] | "");
-    h.subject = clean(x["subject"] | "");
-    h.kind = x["kind"] | "";
-    h.due = x["dueDate"] | "";
-    h.about = clean(x["content"].is<const char*>() ? x["content"].as<const char*>() : (x["description"] | ""));
-    h.listenMat = x["listenMaterialId"] | 0L;
-    h.listenSent = x["listenSentence"] | 0;
+    HwInfo h = hwFromJson(x);
     if (h.id) hws.push_back(h);
   }
   if (hws.empty()) ovaMessage = "Inga läxor eller prov just nu.";
@@ -1250,6 +1294,9 @@ static void openHomework(const HwInfo& h) {
   sents.clear();
   chapterLabel.clear();
   chapterIds.clear();
+  chapterPage.clear();
+  listenEnd = -1;
+  readingPlanItem = 0;
   listening = listenDone = false;
   listenPos = fetchPos = 0;
   nowPlaying = -1;
@@ -1267,6 +1314,7 @@ static void openHomework(const HwInfo& h) {
       long id = m["id"] | 0L;
       int page = m["page"] | 0;
       chapterIds.push_back(id);
+      chapterPage.push_back(page);
       chapterLabel.push_back(page ? "Sida " + String(page) : "Del " + String(chapterIds.size()));
       splitSentences(clean(m["text"].as<const char*>()), id);
     }
@@ -1316,6 +1364,51 @@ static void listenStart() {
 }
 
 /** Anropas i loop(): hämta nästa mening medan den förra spelas, och håll reda på var vi är. */
+/** Läsmomentet i planen är uppläst: bocka av det (ger poäng som vanligt). */
+static void readingDone() {
+  if (!readingPlanItem) return;
+  if (api("POST", "/api/plan/items/" + String(readingPlanItem) + "/done", "", nullptr) == 200) {
+    for (auto& r : planRows) if (r.id == readingPlanItem) r.done = true;
+    SFX_DONE();
+    ovaMessage = "Klart! Det är uppläst och bockat i planen.";
+  }
+  readingPlanItem = 0;
+}
+
+static void listenStart();
+
+/** Ett läsmoment i planen: öppna läxans material och läs upp just de sidorna. */
+static void openReading(const PlanRow& r) {
+  HwInfo h;
+  bool found = false;
+  for (auto& x : planHws) if (x.id == r.hwId) { h = x; found = true; }
+  if (!found) return;
+  openHomework(h);
+  hwBackTo = Screen::Plan;
+  if (sents.empty()) return;   // inget inläst material: läxans sida säger det
+  auto firstSentence = [](size_t ch) {
+    for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) return (int)i;
+    return 0;
+  };
+  bool pages = r.pageFrom && std::any_of(chapterPage.begin(), chapterPage.end(), [](int p) { return p > 0; });
+  if (pages) {
+    // Börja på sidan (eller närmaste sida före), sluta före första sidan efter momentets sista
+    int start = -1;
+    for (size_t c = 0; c < chapterPage.size(); c++) if (chapterPage[c] && chapterPage[c] <= r.pageFrom) start = c;
+    if (start < 0) for (size_t c = 0; c < chapterPage.size(); c++) if (chapterPage[c] >= r.pageFrom) { start = c; break; }
+    listenPos = firstSentence(start < 0 ? 0 : start);
+    listenEnd = -1;
+    for (size_t c = 0; c < chapterPage.size(); c++)
+      if (chapterPage[c] > r.pageTo) { listenEnd = firstSentence(c); break; }
+    if (listenEnd >= 0 && listenEnd <= listenPos) listenEnd = -1;
+  }
+  listenDone = false;
+  fetchPos = listenPos;
+  readingPlanItem = r.id;
+  listenStart();
+  dirtyOva = true;
+}
+
 static void pumpListening() {
   if (!listening) return;
   lastTouchAt = millis();   // lyssnande räknas som aktiv övningstid
@@ -1326,12 +1419,24 @@ static void pumpListening() {
     if (++sinceSave >= 4) listenSave();
     dirtyOva = true;
   }
-  if (!playing.data && playQueue.empty() && fetchPos >= (int)sents.size() && fetchedIdx < 0) {
+  int end = listenEnd >= 0 && listenEnd < (int)sents.size() ? listenEnd : sents.size();
+  if (!playing.data && playQueue.empty() && fetchPos >= end && fetchedIdx < 0) {
     listening = false;
+    if (end < (int)sents.size()) {
+      // Sidorna i planens moment är upplästa: spara var eleven är och bocka av momentet
+      listenPos = end;
+      listenSave();
+      practiceEnd();
+      readingDone();
+      listenEnd = -1;
+      dirtyOva = true;
+      return;
+    }
     listenDone = true;
     listenPos = sents.size();
     listenSave();
     practiceEnd();
+    readingDone();
     dirtyOva = true;
     return;
   }
@@ -1342,7 +1447,7 @@ static void pumpListening() {
   int idx = fetchedIdx, code = fetchedCode;
   if (ready) { fetchedBuf = nullptr; fetchedIdx = -1; }
   bool idle = fetchWantIdx < 0 && fetchedIdx < 0;
-  if (!ready && idle && playQueue.size() < 1 && fetchPos < (int)sents.size()) {
+  if (!ready && idle && playQueue.size() < 1 && fetchPos < end) {
     fetchWantIdx = fetchPos;
     fetchWantGen = fetchGen;
     fetchWantText = sents[fetchPos].text;
@@ -1446,12 +1551,14 @@ static void fetchReset() {
 static void loadPlan() {
   planRows.clear();
   planDays.clear();
+  planHws.clear();
   ovaMessage = "";
   JsonDocument hwDoc;
   api("GET", "/api/homework?openOnly=false", "", &hwDoc);
   JsonDocument doc;
   int code = api("GET", "/api/plan/upcoming?days=14", "", &doc);
   if (code != 200) { ovaMessage = "Kunde inte hämta planen (" + String(code) + ")."; decksLoaded = true; return; }
+  for (JsonObject h : hwDoc.as<JsonArray>()) planHws.push_back(hwFromJson(h));
   for (JsonObject x : doc.as<JsonArray>()) {
     PlanRow r;
     r.id = x["id"] | 0L;
@@ -1460,6 +1567,9 @@ static void loadPlan() {
     r.minutes = x["minutes"] | 0;
     r.done = !x["doneAt"].isNull();
     long hwId = x["homeworkId"] | 0L;
+    r.hwId = hwId;
+    r.type = x["type"] | "";
+    parsePages(r.task, r.pageFrom, r.pageTo);
     for (JsonObject h : hwDoc.as<JsonArray>()) if ((h["id"] | 0L) == hwId) { r.subject = clean(h["subject"] | (h["title"] | "")); break; }
     planRows.push_back(r);
     if (std::find(planDays.begin(), planDays.end(), r.date) == planDays.end()) planDays.push_back(r.date);
@@ -1777,7 +1887,7 @@ static void drawPlan() {
     planShown.push_back(i);
     m.totalMinutes += r.minutes;
     if (r.done) m.doneMinutes += r.minutes;
-    m.items.push_back({S(r.subject), S(r.task), subjectColor(r.subject, r.task), r.minutes, r.done});
+    m.items.push_back({S(r.subject), S(r.task), subjectColor(r.subject, r.task), r.minutes, r.done, r.type == "READ" && r.hwId});
   }
   int left = m.totalMinutes - m.doneMinutes;
   m.day = S(dateLabel(day));
@@ -2015,9 +2125,12 @@ static void onAction(const ui::Action& a) {
 
     // --- Läxor
     case ui::Act::HwOpen:
-      if (a.a < (int)hws.size()) openHomework(hws[a.a]);
+      if (a.a < (int)hws.size()) { openHomework(hws[a.a]); hwBackTo = Screen::HwList; }
       break;
-    case ui::Act::HwBack: showScreen(Screen::HwList); break;
+    case ui::Act::HwBack:
+      if (listening) listenStop(true);
+      showScreen(hwBackTo);
+      break;
     case ui::Act::HwPlay:
       if (sents.empty()) break;
       ovaMessage = "";
@@ -2061,9 +2174,12 @@ static void onAction(const ui::Action& a) {
     // --- Plan
     case ui::Act::PlanPrev: if (planDay > 0) { planDay--; dirtyOva = true; } break;
     case ui::Act::PlanNext: if (planDay + 1 < (int)planDays.size()) { planDay++; dirtyOva = true; } break;
-    case ui::Act::PlanRow: {
+    case ui::Act::PlanRow:
+    case ui::Act::PlanCheck: {
       if (a.a >= (int)planShown.size()) break;
       auto& r = planRows[planShown[a.a]];
+      // Tryck på ett läsmoment: läs upp sidorna. Bocken bockar alltid av.
+      if (a.act == ui::Act::PlanRow && r.type == "READ" && r.hwId) { openReading(r); break; }
       if (r.done) break;
       if (api("POST", "/api/plan/items/" + String(r.id) + "/done", "", nullptr) == 200) {
         r.done = true;

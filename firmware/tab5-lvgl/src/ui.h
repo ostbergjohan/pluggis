@@ -46,7 +46,7 @@ enum class Act : uint16_t {
   GameSpeak, GameChoice, GameSkip, GameLeft, GameRight, GameStep,
   // Läxor och plan
   HwOpen, HwBack, HwPrev, HwPlay, HwNext,
-  PlanPrev, PlanNext, PlanRow,
+  PlanPrev, PlanNext, PlanRow, PlanCheck,
   // Chat
   CoachStart, CoachEnd,
 };
@@ -188,6 +188,7 @@ struct PlanItem {
   uint32_t color = ACCENT;
   int minutes = 0;
   bool done = false;
+  bool listen = false;       // läsmoment: tryck på raden läser upp sidorna
 };
 struct Plan {
   std::string day, summary;  // "Imorgon", "25 min kvar av 40"

@@ -219,7 +219,8 @@ int main() {
   p.doneMinutes = 35;
   p.totalMinutes = 60;
   p.hasNext = true;
-  p.items = {{"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true},
+  p.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, true},
+             {"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true, true},
              {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
              {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false},
              {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false},
