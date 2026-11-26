@@ -2059,12 +2059,10 @@ static void setupLvgl() {
   W = M5.Display.width();
   H = M5.Display.height();
   lvDisp = lv_display_create(W, H);
-  // Två bitar på 1/10 av skärmen: helst i det snabba interna minnet, annars i PSRAM
+  // Två bitar på 1/10 av skärmen i PSRAM. Det interna minnet behövs till WiFi (ESP32-C6 över SDIO).
   size_t bytes = W * (H / 10) * 2;
-  uint8_t* b1 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  uint8_t* b2 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-  if (!b1) b1 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!b2) b2 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  uint8_t* b1 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  uint8_t* b2 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   lv_display_set_buffers(lvDisp, b1, b2, bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
   lv_display_set_flush_cb(lvDisp, lvFlush);
   lv_indev_t* touch = lv_indev_create();
@@ -2097,6 +2095,7 @@ void setup() {
   M5.Display.setBrightness(200);
   prefs.begin("pluggis", false);
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
+  connectWifi();   // först, innan skärmen tar minne
   setupLvgl();
   fetchLock = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
@@ -2113,7 +2112,6 @@ void setup() {
   M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
 
   lastActivity = millis();
-  connectWifi();
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
   String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
   ws.begin(PLUGGIS_HOST, PLUGGIS_PORT, url.c_str());
@@ -2174,7 +2172,12 @@ void loop() {
   if (swallowTouch && !touchDown) swallowTouch = false;
 
   static wl_status_t lastWifi = WL_IDLE_STATUS;
-  if (WiFi.status() != lastWifi) { lastWifi = WiFi.status(); dirtyTop = true; }
+  if (WiFi.status() != lastWifi) {
+    lastWifi = WiFi.status();
+    dirtyTop = true;
+    Serial.printf("[pluggis] WiFi-status %d, ledigt internt minne %u byte\n", (int)lastWifi,
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  }
 
   static bool firstOva = false;
   if (!firstOva && WiFi.status() == WL_CONNECTED) {
