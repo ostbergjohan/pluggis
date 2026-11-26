@@ -69,6 +69,14 @@ public class PlanningService {
         this.events = events;
     }
 
+    /** Läxornas inlästa material: avgör om det finns något att planera och hur lång tid läsningen tar. */
+    private se.ostberg.pluggis.homework.MaterialRepository materials;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setMaterials(se.ostberg.pluggis.homework.MaterialRepository materials) {
+        this.materials = materials;
+    }
+
     public PlanningService(PlanItemRepository repo, HomeworkService homework, RewardsService rewards,
                            ClaudeClient claude, Prompts prompts, PluggisProperties props, ObjectMapper mapper,
                            se.ostberg.pluggis.student.StudentService students) {
@@ -145,6 +153,10 @@ public class PlanningService {
             } else if (h.isManualPlan()) {
                 skipped.add(h.getTitle() + " (flyttad för hand – tryck Planera på läxan)");
                 log.info("Planera om allt: hoppar över läxa {} – flyttad för hand", h.getId());
+            } else if (!hasContent(h)) {
+                repo.deleteOpenForHomework(h.getId());
+                skipped.add(h.getTitle() + " (inget innehåll än – lägg in vad som ingår eller material)");
+                log.info("Planera om allt: hoppar över läxa {} – inget innehåll eller material än", h.getId());
             } else {
                 todo.add(h);
             }
@@ -185,6 +197,16 @@ public class PlanningService {
         if (h.getDueDate() == null) {
             throw new IllegalArgumentException("Läxan saknar datum – ange när den ska in eller när provet är");
         }
+        if (!hasContent(h)) {
+            // Utan innehåll blir planen bara gissningar – den kommer med när material eller "vad som ingår" finns
+            int removed = repo.deleteOpenForHomework(homeworkId);
+            if (removed > 0) {
+                changed();
+            }
+            log.info("Läxa {} planeras inte: inget innehåll eller material än{}", homeworkId,
+                    removed > 0 ? " (" + removed + " gamla moment borttagna)" : "");
+            throw new IllegalArgumentException("Inget att planera än – lägg in vad som ingår eller ladda upp material först");
+        }
         LocalDate today = todayDate();
         List<PlanItem> done = repo.findByHomeworkIdOrderByPlanDateAscIdAsc(homeworkId).stream()
                 .filter(PlanItem::isDone).toList();
@@ -215,6 +237,9 @@ public class PlanningService {
             source = "reservplan";
             drafts = PlanDays.fallback(h, remainingSteps(h, done), days, h.getDeckId() != null);
         }
+
+        // Läsmoment med sidor: minuterna räknas ur materialets uppläsningstid i stället för Claudes gissning
+        drafts = readingMinutes(drafts, pageMinutes(h));
 
         // Hård spärr: Claude får förslag, men koden ser till att max per dag håller
         PlanDays.Fitted fitted = PlanDays.fitToBudget(drafts, days, busyMinutes(h, days), maxMinutesPerDay());
@@ -541,6 +566,7 @@ public class PlanningService {
         if (!h.getSteps().isEmpty()) {
             ask.append("Delsteg/avsnitt: ").append(String.join(" | ", h.getSteps())).append('\n');
         }
+        appendReadingTimes(ask, h);
         ask.append("Vikt: ").append(h.weightOrDefault()).append(" % (hur viktigt föräldern tycker att det här är; 50 % = normalt)\n");
         ask.append("Kortlek finns: ").append(h.getDeckId() != null ? "ja" : "nej").append('\n');
         ask.append("Max minuter per dag (allt plugg den dagen, även andra läxor): ").append(maxMinutesPerDay()).append('\n');
@@ -569,6 +595,110 @@ public class PlanningService {
         msg.put("role", "user");
         msg.put("content", ask.toString());
         return JsonExtract.parse(claude.create(req, "planning").text(), mapper, GeneratedPlan.class);
+    }
+
+    /** Finns det något att planera: "vad som ingår", delsteg eller inläst material med text. */
+    boolean hasContent(Homework h) {
+        if (h.getDescription() != null && !h.getDescription().isBlank()) {
+            return true;
+        }
+        if (h.getSteps() != null && !h.getSteps().isEmpty()) {
+            return true;
+        }
+        return materials != null && h.getId() != null && materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId()).stream()
+                .anyMatch(m -> m.getText() != null && !m.getText().isBlank());
+    }
+
+    /** Ord per minut i uppläsningen (Pluggis röst läser ungefär så fort). */
+    static final int WORDS_PER_MINUTE = 140;
+
+    /** Uppläsningstid i minuter per sida, för material med sidnummer. Tom om inga sidor är kända. */
+    java.util.SortedMap<Integer, Double> pageMinutes(Homework h) {
+        java.util.SortedMap<Integer, Double> out = new java.util.TreeMap<>();
+        if (materials == null || h.getId() == null) {
+            return out;
+        }
+        for (var m : materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId())) {
+            if (m.getPage() != null && m.getText() != null && !m.getText().isBlank()) {
+                out.merge(m.getPage(), words(m.getText()) / (double) WORDS_PER_MINUTE, Double::sum);
+            }
+        }
+        return out;
+    }
+
+    private static int words(String text) {
+        String t = text.trim();
+        return t.isEmpty() ? 0 : t.split("\\s+").length;
+    }
+
+    /** Berättar för Claude hur lång tid sidorna tar att läsa upp, så att varje läsmoment får lagom många sidor. */
+    private void appendReadingTimes(StringBuilder ask, Homework h) {
+        if (materials == null || h.getId() == null) {
+            return;
+        }
+        var pages = pageMinutes(h);
+        double unpaged = materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId()).stream()
+                .filter(m -> m.getPage() == null && m.getText() != null && !m.getText().isBlank())
+                .mapToDouble(m -> words(m.getText()) / (double) WORDS_PER_MINUTE).sum();
+        if (pages.isEmpty() && unpaged == 0) {
+            return;
+        }
+        ask.append("Inläst material och uppläsningstid (ca ").append(WORDS_PER_MINUTE).append(" ord/min): ");
+        pages.forEach((p, min) -> ask.append("s. ").append(p).append(": ").append(roundHalf(min)).append(" min, "));
+        if (unpaged > 0) {
+            ask.append("material utan sidnummer: ").append(roundHalf(unpaged)).append(" min, ");
+        }
+        double total = pages.values().stream().mapToDouble(Double::doubleValue).sum() + unpaged;
+        ask.append("totalt ").append(roundHalf(total)).append(" min\n");
+    }
+
+    private static String roundHalf(double min) {
+        double r = Math.max(0.5, Math.round(min * 2) / 2.0);
+        return r == Math.floor(r) ? String.valueOf((int) r) : String.valueOf(r).replace('.', ',');
+    }
+
+    private static final java.util.regex.Pattern PAGES = java.util.regex.Pattern.compile(
+            "(?i)\\b(?:s\\.|sid\\.?|sidan|sidorna)\\s*(\\d+)(?:\\s*(?:[-–]|till|och)\\s*(\\d+))?");
+
+    /** Sidorna i ett läsmoment ("Läs s. 40–45" → 40, 45). Null om texten inte nämner sidor. */
+    static int[] pagesIn(String task) {
+        var m = PAGES.matcher(task == null ? "" : task);
+        if (!m.find()) {
+            return null;
+        }
+        int from = Integer.parseInt(m.group(1));
+        int to = m.group(2) != null ? Integer.parseInt(m.group(2)) : from;
+        return to >= from ? new int[]{from, to} : new int[]{from, from};
+    }
+
+    /**
+     * Läsmoment får minuter efter hur lång tid sidorna tar att läsa upp (plus lite marginal), men minst
+     * MIN_ITEM_MINUTES och högst 30. Moment utan kända sidor lämnas som de är.
+     */
+    static List<PlanDays.Draft> readingMinutes(List<PlanDays.Draft> drafts, java.util.SortedMap<Integer, Double> pageMinutes) {
+        if (pageMinutes.isEmpty()) {
+            return drafts;
+        }
+        List<PlanDays.Draft> out = new ArrayList<>();
+        for (PlanDays.Draft d : drafts) {
+            int[] pages = d.type() == PlanItem.Type.READ ? pagesIn(d.task()) : null;
+            double sum = 0;
+            boolean known = false;
+            if (pages != null) {
+                for (var e : pageMinutes.subMap(pages[0], pages[1] + 1).entrySet()) {
+                    sum += e.getValue();
+                    known = true;
+                }
+            }
+            if (!known) {
+                out.add(d);
+                continue;
+            }
+            int minutes = (int) Math.ceil(sum * 1.25 + 2);   // tid att komma igång och stanna upp lite
+            minutes = Math.max(MIN_ITEM_MINUTES, Math.min(30, minutes));
+            out.add(new PlanDays.Draft(d.date(), d.task(), minutes, d.type()));
+        }
+        return out;
     }
 
     /** Andra läxors ogjorda moment per dag – räknas in i dagens max. */

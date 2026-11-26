@@ -22,6 +22,9 @@ Regler:
   (bara repetition eller ingenting) före sista dagen, så att en missad dag inte välter planen.
 - Dela upp läsning konkret efter sidor, avsnitt eller rubriker (t.ex. "s. 40–48"), så att varje
   dag har en tydlig bit. Räkna sidor så att allt material blir täckt.
+- Har du fått uppläsningstid per sida: välj så många sidor per läsmoment att tiden blir ungefär
+  15–20 minuter (räkna med lite marginal). Gissa inte – minuterna för läsmoment räknas om efter sidorna.
+  Skriv alltid sidorna som "s. 40–45" så att eleven kan trycka på momentet och lyssna på just de sidorna.
 - Varje moment är MINST 15 och högst 25 minuter – inga småmoment. Högst två moment per dag för den här
   uppgiften, inom max minuter per dag. Hellre ett ordentligt pass än flera små.
 - Inga moment som bara går ut på att skumma eller "läsa rubrikerna" – det ger ingenting. Ett läsmoment är
@@ -31,6 +34,8 @@ Regler:
   ett snabbquiz eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
 - Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsning med en övning i Pluggis
   (snabbquiz, lucktext, Förklara för Pluggis, matcha par) eller med att räkna/öva uppgifter.
+- Skriv övningar i Pluggis med sina namn, så att eleven kan starta dem direkt från planen:
+  "Gör ett snabbquiz", "Gör en lucktext", "Förklara för Pluggis", "Matcha par", "Rätt ordning", "Testprov i Pluggis".
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
   Det aktiva sker i egna moment med övningarna i Pluggis – inte som skrivuppgifter till läsningen.
 - PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (15–20 min, typ REVIEW) 1–2 dagar före

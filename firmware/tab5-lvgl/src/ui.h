@@ -188,7 +188,7 @@ struct PlanItem {
   uint32_t color = ACCENT;
   int minutes = 0;
   bool done = false;
-  bool listen = false;       // läsmoment: tryck på raden läser upp sidorna
+  int action = 0;            // tryck på raden: 0 bockar av, 1 läser upp sidorna, 2 startar övningen
 };
 struct Plan {
   std::string day, summary;  // "Imorgon", "25 min kvar av 40"

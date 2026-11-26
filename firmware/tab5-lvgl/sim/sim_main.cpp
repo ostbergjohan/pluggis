@@ -219,10 +219,10 @@ int main() {
   p.doneMinutes = 35;
   p.totalMinutes = 60;
   p.hasNext = true;
-  p.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, true},
-             {"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true, true},
+  p.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, 1},
+             {"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true, 1},
              {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
-             {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false},
+             {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false, 2},
              {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false},
              {"Prov: Vikingatiden – handel, resor och vardagsliv", "Läs s. 112–118 om handelsresorna österut och gör tankekartan över de viktigaste orterna", 0xb7862a, 20, false},
              {"Engelska", "Repetera glosorna med boken framme, sedan utan, som på provet", 0x1f8a9e, 15, false}};

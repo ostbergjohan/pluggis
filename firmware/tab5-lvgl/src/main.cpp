@@ -40,6 +40,7 @@ static bool asleep = false, idleWarned = false;
 static bool booting = true;   // startskärmen visas tills WiFi och läxorna är på plats
 static String wsLast = "inte startad";   // senaste som hänt med WebSocket (visas när man trycker på "Ansluter")
 static uint32_t wsLastAt = 0, wsTries = 0;
+static long practicePlanItem = 0;      // planens moment vars övning pågår (bockas av när övningen är klar)
 static String lastError;   // senaste felet från servern eller ett anrop – visas på startskärmen och i loggen
 
 // ---------------------------------------------------------------- skärmen (LVGL)
@@ -361,6 +362,7 @@ static void onText(const char* json, size_t len) {
     if (screen != Screen::Coach) dirtyOva = true;
   } else if (type == "open_practice") {
     // Coachen öppnar en övning: gå till Öva och starta den där
+    practicePlanItem = 0;   // coachen startade övningen, inte planen
     pendingKind = doc["kind"] | "quiz";
     pendingHw = doc["homeworkId"] | 0L;
     pendingPractice = true;
@@ -1138,6 +1140,19 @@ static std::vector<long> chapterIds;
 static std::vector<int> chapterPage;   // sidnumret för varje del (0 = okänt)
 static int listenEnd = -1;             // läs bara upp hit (meningens index, ej med); -1 = till slutet
 static long readingPlanItem = 0;       // planens moment som läses upp just nu (bockas av när sidorna är klara)
+
+/** Övningen ett moment i planen gäller ("Gör ett snabbquiz" → "quiz"), eller tom. Samma namn som open_practice. */
+static String exerciseFor(const String& task) {
+  String t = task;
+  t.toLowerCase();
+  if (t.indexOf("testprov") >= 0) return "exam";
+  if (t.indexOf("snabbquiz") >= 0 || t.indexOf("quiz") >= 0) return "quiz";
+  if (t.indexOf("lucktext") >= 0) return "cloze";
+  if (t.indexOf("förklara för pluggis") >= 0 || t.indexOf("förklara i pluggis") >= 0) return "explain";
+  if (t.indexOf("matcha par") >= 0 || t.indexOf("matcha") >= 0) return "match";
+  if (t.indexOf("rätt ordning") >= 0) return "order";
+  return "";
+}
 static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
 // Nästa mening hämtas i en egen tråd, så att skärmen svarar på tryck medan den laddas
 static SemaphoreHandle_t fetchLock = nullptr;
@@ -1604,6 +1619,12 @@ static String dateLabel(const String& iso) {
 
 
 static void setLast(int kind, const String& result) {
+  // Övningen startades från planen: bocka av momentet (poäng som vanligt)
+  if (practicePlanItem && api("POST", "/api/plan/items/" + String(practicePlanItem) + "/done", "", nullptr) == 200) {
+    for (auto& r : planRows) if (r.id == practicePlanItem) r.done = true;
+    ui::toast("Bockat i planen");
+  }
+  practicePlanItem = 0;
   lastKind = kind;
   String name;
   for (auto& m : makeList) if (m.id == lastHw) name = m.title;
@@ -1887,7 +1908,8 @@ static void drawPlan() {
     planShown.push_back(i);
     m.totalMinutes += r.minutes;
     if (r.done) m.doneMinutes += r.minutes;
-    m.items.push_back({S(r.subject), S(r.task), subjectColor(r.subject, r.task), r.minutes, r.done, r.type == "READ" && r.hwId});
+    int action = !r.hwId ? 0 : r.type == "READ" ? 1 : exerciseFor(r.task).length() ? 2 : 0;
+    m.items.push_back({S(r.subject), S(r.task), subjectColor(r.subject, r.task), r.minutes, r.done, action});
   }
   int left = m.totalMinutes - m.doneMinutes;
   m.day = S(dateLabel(day));
@@ -2180,6 +2202,14 @@ static void onAction(const ui::Action& a) {
       auto& r = planRows[planShown[a.a]];
       // Tryck på ett läsmoment: läs upp sidorna. Bocken bockar alltid av.
       if (a.act == ui::Act::PlanRow && r.type == "READ" && r.hwId) { openReading(r); break; }
+      // Tryck på en övning ("Gör ett snabbquiz"): starta den för läxan
+      if (a.act == ui::Act::PlanRow && r.hwId && !r.done && exerciseFor(r.task).length()) {
+        pendingKind = exerciseFor(r.task);
+        pendingHw = r.hwId;
+        pendingPractice = true;
+        practicePlanItem = r.id;
+        break;
+      }
       if (r.done) break;
       if (api("POST", "/api/plan/items/" + String(r.id) + "/done", "", nullptr) == 200) {
         r.done = true;

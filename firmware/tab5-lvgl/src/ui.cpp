@@ -1219,13 +1219,14 @@ void buildPlan(const Plan& m) {
     snprintf(mn, sizeof(mn), "%d min", r.minutes);
     lv_obj_t* ml = label(b, mn, F_S, MUTED);
     lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, -24, 18);
-    if (r.listen && !r.done) {
-      lv_obj_t* lc = chip(b, std::string(LV_SYMBOL_VOLUME_MAX) + "  Lyssna", ACCENT, INK);
+    if (r.action && !r.done) {
+      lv_obj_t* lc = chip(b, r.action == 1 ? std::string(LV_SYMBOL_VOLUME_MAX) + "  Lyssna" : std::string(LV_SYMBOL_PLAY) + "  Starta",
+                          r.action == 1 ? ACCENT : 0x2FB58C, INK);
       lv_obj_update_layout(ml);
       lv_obj_align(lc, LV_ALIGN_TOP_RIGHT, -24 - lv_obj_get_width(ml) - 16, 10);
     }
     if (!r.subject.empty()) {
-      lv_obj_t* sl = oneLine(b, r.subject, F_S, lv_color_to_u32(lv_color_lighten(C(r.color), 110)) & 0xFFFFFF, TW - (r.listen && !r.done ? 320 : 140));
+      lv_obj_t* sl = oneLine(b, r.subject, F_S, lv_color_to_u32(lv_color_lighten(C(r.color), 110)) & 0xFFFFFF, TW - (r.action && !r.done ? 320 : 140));
       lv_obj_set_pos(sl, TX, 18);
     }
     lv_obj_t* tl = label(b, r.task, F_M, r.done ? MUTED : INK);
