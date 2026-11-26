@@ -98,7 +98,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
 
     /**
      * Eleven med det här enhets-id:t. Stavat med andra stora/små bokstäver ("Fred" i stället för "fred")
-     * hittas ändå, men loggas. Finns det inte alls loggas vilka som finns och skärmen får veta det.
+     * hittas ändå, men loggas. Finns det inte alls loggas vilka som finns.
      */
     private java.util.Optional<se.ostberg.pluggis.student.Student> findDevice(WebSocketSession session, String deviceId, String from) {
         if (deviceId == null || deviceId.isBlank()) {
@@ -114,9 +114,9 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
             return found;
         }
         String known = students.all().stream().map(se.ostberg.pluggis.student.Student::getDeviceId).toList().toString();
-        log.warn("Okänt enhets-id '{}' från {} – finns: {}. Skärmen räknas som första eleven.", wanted, from, known);
-        tell(session, "Enhets-id '" + wanted + "' finns inte i Pluggis. Finns: " + known
-                + ". Ändra PLUGGIS_DEVICE_ID i config.h (admin -> Inställningar -> Elever).");
+        // Tillåtet (t.ex. webbsimulatorn), så bara i loggen: skärmen räknas som första eleven
+        log.warn("Okänt enhets-id '{}' från {} – elevernas enhets-id: {}. Räknas som första eleven; "
+                + "ändra PLUGGIS_DEVICE_ID i config.h om det är Tab5.", wanted, from, known);
         return found;
     }
 
