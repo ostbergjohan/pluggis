@@ -205,13 +205,14 @@ Att tänka på:
 | Foto/skärmdumpar | Sonnet 5.5, `effort: medium` | Handskrift och tabeller |
 | Pluggplaner | Sonnet 5.5, `effort: medium` | Ingen väntar i realtid, kvalitet viktigare |
 | Flashkort | Sonnet 5.5, `effort: medium` | Bra kort kräver omdöme |
+| Testprov | Opus 5.5, `effort: medium` | Frågor över hela materialet och rättning av skrivfrågor; görs sällan |
 
 Byt med `PLUGGIS_COACH_MODEL` m.fl. (se `.env.example`). Coachens fasta regler och verktygen
 cachas (prompt caching); bara "läget just nu" och samtalet skickas fullt varje gång.
 Svaret strömmas och delas upp i meningar som läses upp en i taget.
 
 **Språk:** glosor, kort och läxmaterial i spanska, tyska, franska och engelska läses upp med Azures röst för språket
-(Elvira, Katja, Denise, Sonia) – meningar som ser svenska ut fortfarande med svensk röst. Kräver Azure-nyckeln nedan;
+(Elvira, Katja, Denise, Sonia) – i ett språkämne läses allt med språkets röst, även de svenska delarna. Kräver Azure-nyckeln nedan;
 utan den används telefonens röst för språket i appen.
 
 **Azures svenska röster (valfritt, gratis):** sätt `AZURE_SPEECH_KEY` och `AZURE_SPEECH_REGION` i `.env`

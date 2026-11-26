@@ -88,6 +88,12 @@ pluggis:
       effort: medium
       thinking: ""
       max-tokens: 4096
+    # Testprov (frågor över hela materialet och rättning av skrivfrågor): Opus 5.5 – mer omdöme, görs sällan.
+    exam:
+      model: ${PLUGGIS_EXAM_MODEL:claude-opus-5-5}
+      effort: medium
+      thinking: ""
+      max-tokens: 6000
   speech:
     # pluggis-speech (se speech/). Tomt = ingen ljudväg.
     base-url: ${PLUGGIS_SPEECH_URL:}

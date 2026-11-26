@@ -261,8 +261,11 @@ function guessLang(text) {
   const best = Object.entries(score).sort((a, b) => b[1] - a[1])[0];
   return best[1] > 0 ? best[0] : '';
 }
-/** Röstens språk för en mening: svensk om den ser svensk ut, annars ämnets språk – eller gissat ur texten. */
-function voiceLang(text, lang) { return looksSwedish(text) ? '' : (lang || guessLang(text)); }
+/**
+ * Röstens språk för en mening. Språkämne (spanska, tyska …): alltid språkets röst – även de svenska delarna.
+ * Annars svensk röst, utom för text som ser utländsk ut.
+ */
+function voiceLang(text, lang) { return lang || (looksSwedish(text) ? '' : guessLang(text)); }
 const PHONE_LANG = { es: 'es-ES', de: 'de-DE', fr: 'fr-FR', en: 'en-GB' };
 
 async function fetchVoice(text, lang = '') {

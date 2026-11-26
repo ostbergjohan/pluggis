@@ -20,7 +20,7 @@ class ClaudeClientTest {
     private ClaudeClient client() {
         var profile = new PluggisProperties.ModelProfile("claude-haiku-5-5", "low", "disabled", 400);
         var anthropic = new PluggisProperties.Anthropic("key", "https://api.anthropic.com", "2023-06-01",
-                profile, profile, profile, profile);
+                profile, profile, profile, profile, profile);
         var props = new PluggisProperties(null, "Europe/Stockholm", 30, 30, anthropic,
                 null, null, null, null, null);
         return new ClaudeClient(RestClient.builder(), mapper, new SimpleMeterRegistry(), props);

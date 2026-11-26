@@ -66,7 +66,13 @@ public record PluggisProperties(
             ModelProfile coach,
             ModelProfile vision,
             ModelProfile planning,
-            ModelProfile flashcards) {
+            ModelProfile flashcards,
+            ModelProfile exam) {
+
+        /** Testprovet (frågor och rättning): egen modell, annars samma som flashkorten. */
+        public ModelProfile examOrFlashcards() {
+            return exam != null && exam.model() != null && !exam.model().isBlank() ? exam : flashcards;
+        }
     }
 
     /**

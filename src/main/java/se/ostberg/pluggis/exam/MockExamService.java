@@ -293,7 +293,7 @@ public class MockExamService {
 
     private <T> T ask(Map<String, Object> task, Class<T> type, String purpose) {
         try {
-            ObjectNode req = claude.newRequest(props.anthropic().flashcards(), prompts.exam());
+            ObjectNode req = claude.newRequest(props.anthropic().examOrFlashcards(), prompts.exam());
             ObjectNode msg = req.putArray("messages").addObject();
             msg.put("role", "user");
             msg.put("content", mapper.writeValueAsString(task));

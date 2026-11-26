@@ -1249,9 +1249,10 @@ static bool looksSwedish(const String& in) {
 
 /** Läs upp en text från ett kort: utländsk röst för den utländska sidan i språk-kortlekar. */
 static void sayCardSide(const String& text) {
-  if (looksSwedish(text)) { sayAloud(text, ""); return; }
+  // Språk-kortlek: alltid språkets röst, även de svenska delarna
   const char* lang = deckLang();
-  sayAloud(text, *lang ? lang : guessLang(text));
+  if (*lang) { sayAloud(text, lang); return; }
+  sayAloud(text, looksSwedish(text) ? "" : guessLang(text));
 }
 
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
@@ -1568,7 +1569,7 @@ static void examSpeak() {
   auto& q = examQs[examI];
   String t = q.question;
   const char* l = langFrom(gameTitle);
-  if (*l) { sayAloud(t, looksSwedish(t) ? "" : l); return; }
+  if (*l) { sayAloud(t, l); return; }   // språkprov: allt med språkets röst
   if (q.choices.size() >= 2) {
     const char* letters[] = {"A", "B", "C", "D"};
     for (size_t i = 0; i < q.choices.size() && i < 4; i++) t += String(". ") + letters[i] + ": " + q.choices[i];
@@ -2105,7 +2106,7 @@ static void pumpListening() {
     fetchWantText = sents[fetchPos].text;
     {
       const char* l = langFrom(hwCur.subject + " " + hwCur.title);
-      fetchWantLang = looksSwedish(fetchWantText) ? "" : (*l ? l : guessLang(fetchWantText));
+      fetchWantLang = *l ? l : (looksSwedish(fetchWantText) ? "" : guessLang(fetchWantText));   // språkläxa: alltid språkets röst
     }
   }
   xSemaphoreGive(fetchLock);
