@@ -238,7 +238,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Översikt | *Behöver dig* (läxor utan innehåll, moment som ligger efter), pluggtid, aktiva dagar, besvarade frågor (poäng och pengar bara om poäng är på), dagens plan, kommande läxor och prov, senaste passen och övningarna |
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), fyll i vad som ingår, planera, markera klar, ta bort |
 | Plan | Tre veckor framåt; dagar utan moment slås ihop. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas |
-| *Elevens namn* | Coachen (namn, ton, önskemål, poäng av/på) · Planering (max per dag, pluggdagar, pluggtid) · Röst · Kalender (Google) · Poäng (om påslaget) |
+| *Elevens namn* | Coachen (namn, ton, önskemål, poäng av/på) · Planering (max per dag, pluggdagar, pluggtid) · Röst · Kalender (skolans InfoMentor-kalender in, och planen ut till Google) · Poäng (om påslaget) |
 | System | Elever och koder · Claude och kostnad · Logg · Anslutning (token) · Tab5 (och simulatorn) |
 
 ### Flera elever
@@ -281,7 +281,7 @@ Statistik finns även som JSON: `GET /api/devices/{id}/stats?days=14`.
 ## Läxor in, planering och påminnelser
 
 **Skolan använder InfoMentor**, som har en kalenderprenumeration (`webcals://im2-api.infomentor.se/…`).
-Under **Läxor & prov → 📅 Kalender** klistrar du in länken, väljer "bara läxor och prov" och trycker
+Under **elevens flik → Kalender** (eller genvägen **Läxor & prov → 📅 Kalender**) klistrar du in länken, väljer "bara läxor och prov" och trycker
 **Spara och synka**. Den synkas sedan varje timme; ändrade datum ger ny plan. Länken är personlig –
 behandla den som ett lösenord (den sparas bara i Pluggis databas).
 
