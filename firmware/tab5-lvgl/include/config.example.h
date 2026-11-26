@@ -4,7 +4,8 @@
 #define PLUGGIS_WIFI_SSID   "ditt-wifi"
 #define PLUGGIS_WIFI_PASS   "lösenord"
 
-// Datorn/servern där Pluggis körs (samma som i elevchattens adress), utan http://
+// Datorns IP-adress där Pluggis körs, utan http:// (hostname -I på servern). Använd IP, inte datorns namn:
+// Tab5 kan oftast inte slå upp namn som "debian" på hemnätet.
 #define PLUGGIS_HOST        "192.168.1.20"
 #define PLUGGIS_PORT        8080
 
