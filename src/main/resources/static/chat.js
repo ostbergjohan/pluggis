@@ -1103,6 +1103,7 @@ async function startOrder(homeworkId, btn) {
         h('span', { class: 'meta' }, `${k + 1} av ${g.sequences.length}`)),
       h('p', { class: 'meta', style: 'margin:6px 0 10px' }, `${seq.prompt}. Tryck på det som kommer först, sedan nästa …`),
       placed, h('div', { class: 'meta', style: 'margin:12px 0 6px' }, 'Kvar:'), pool, why, after));
+    autoRead(`${seq.title}. ${seq.prompt}.`);
 
     function done() {
       why.hidden = !seq.why;
@@ -1183,6 +1184,7 @@ async function startExam(homeworkId, btn) {
             submit();
           } }, 'Lämna in')
           : h('button', { class: 'big', onclick: () => go(i + 1) }, 'Nästa ›'))));
+    autoRead([q.question.replace(/___/g, ' lucka '), ...(q.choices || []).map((c, k) => `${'ABCD'[k]}: ${c}.`)], langOf(ex.title));
     if (q.type === 'open') input.focus();
   }
 
@@ -1257,6 +1259,7 @@ async function explainFor(homeworkId, btn) {
   if (r.note) toast(r.note);
   Practice.begin(`Förklara: ${r.concept}`, homeworkId);
   bubble('pluggis', r.reply);
+  autoRead(r.reply);
   input.focus();
 
   send.addEventListener('click', async () => {
@@ -1268,6 +1271,7 @@ async function explainFor(homeworkId, btn) {
     try {
       const t = await api(`/api/explain/${r.id}/answer?deviceId=${enc(S.deviceId)}`, { method: 'POST', body: { text } });
       bubble('pluggis', t.reply);
+      autoRead(t.reply);
       if (t.done) {
         box.replaceWith(explainSummary(t, homeworkId));
         refreshPoints();
@@ -1363,6 +1367,7 @@ function practiceDeck(d) {
     if (card.kind === 'BASIC' || !(card.wrongOptions || []).length) {
       front.textContent = card.front;
       controls.replaceChildren(...[hintBtn, h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar')].filter(Boolean));
+      autoRead(spoken(), deckLang);
       return;
     }
     // Flerval och lucktext: alternativen i slumpad ordning
@@ -1376,6 +1381,7 @@ function practiceDeck(d) {
     const buttons = card.choices.map((c, i) => h('button', { class: 'choice', onclick: () => pick(card, c, buttons) },
       h('span', { class: 'choice-letter' }, 'ABCD'[i]), h('span', {}, c)));
     controls.replaceChildren(...[h('div', { class: 'choices' }, buttons), hintBtn].filter(Boolean));
+    autoRead(spoken(), deckLang);
   }
 
   async function pick(card, value, buttons) {
@@ -1547,6 +1553,16 @@ function stopReading() {
   if (window.speechSynthesis) speechSynthesis.cancel();
   if (readingBtn) { readingBtn.textContent = readingBtn.dataset.label || '🔊 Läs upp'; readingBtn = null; }
 }
+/**
+ * Läs upp en fråga automatiskt när den visas (eleven har dyslexi) – om inte rösten är avstängd under 🔊.
+ * text kan vara en lista (fråga + alternativ) så att varje del får rätt röst.
+ */
+function autoRead(text, lang = '') {
+  if (S.voice === 'av' || !text || (Array.isArray(text) && !text.length)) return;
+  const b = h('button');   // osynlig – readAloud vill ha en knapp att visa "Sluta" på
+  setTimeout(() => readAloud(text, b, lang), 150);
+}
+
 async function readAloud(text, btn, lang = '') {
   if (readingBtn === btn) { stopReading(); return; }   // tryck igen = sluta
   stopReading();

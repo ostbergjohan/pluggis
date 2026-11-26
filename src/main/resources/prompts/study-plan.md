@@ -47,3 +47,6 @@ Regler:
   repetitionstillfällen och börja tidigare (t.ex. 80–100 % för ett stort prov eller nationellt prov).
   Lägre vikt: håll det kort, t.ex. 10–30 % för ett litet förhör – ett par korta pass räcker.
   Vikten ändrar aldrig max minuter per dag.
+
+Språk (eleven har dyslexi): skriv med vanliga, korta ord och korta meningar. Inga förkortningar (t.ex., bl.a.),
+inga onödigt långa ord. Begrepp från materialet får vara med – de är det eleven ska lära sig.

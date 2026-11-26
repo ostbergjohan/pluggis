@@ -313,6 +313,10 @@ Standard för nya elever: `PLUGGIS_MAX_MINUTES_PER_DAY` (40) och `PLUGGIS_STUDY_
 **Vikt** (10–100 %, standard 50 %) sätts per läxa/prov i admin. Högre vikt ger mer tid, fler repetitioner och
 tidigare start i planen, lägre vikt håller det kort. Max per dag gäller alltid; ändrad vikt gör om planen.
 
+**Anpassat för dyslexi:** frågorna i alla övningar läses upp automatiskt när de visas (i appen och på Tab5, om inte
+rösten är av under 🔊), allt material kan lyssnas på, svar kan sägas i stället för skrivas, och coachen och övningarna
+använder vanliga, korta ord utan förkortningar.
+
 **Anpassat för ADHD:**
 - **Ett block per ämne varje dag:** momenten grupperas per läxa/prov (närmast deadline först, sedan vikt) så att eleven inte hoppar mellan ämnen. Varje ämne har fast färg och symbol (🧪 NO, ➗ matte, 📖 svenska, 🇬🇧 engelska, 🗣️ språk, 🌍 SO …) i chatten, admin och kalendern. Dagar du ordnat för hand behåller din ordning.
 - **Ordentliga pass:** varje moment är minst 15 minuter (högst 25), och inga "läs bara rubrikerna"-moment. Läsmoment är bara läsning ("Läs s. 40–45", går också att lyssna på i Pluggis) – det aktiva sker i egna moment med övningarna i Pluggis, inte som skrivuppgifter. Dagens mest konkreta moment ligger först så att det är lätt att komma igång.

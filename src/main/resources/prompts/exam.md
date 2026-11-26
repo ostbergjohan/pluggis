@@ -39,3 +39,6 @@ blir olika från gång till gång (men alltid ur materialet).
 
 Finns `focus` i uppgiften: eleven har valt att öva på just det delområdet. Håll dig ENBART till det (ur materialet);
 `variation` gäller då bara inom det delområdet.
+
+Språk (eleven har dyslexi): skriv med vanliga, korta ord och korta meningar. Inga förkortningar (t.ex., bl.a.),
+inga onödigt långa ord. Begrepp från materialet får vara med – de är det eleven ska lära sig.

@@ -31,3 +31,6 @@ Regler:
 - Variera: blanda begrepp, orsak–verkan, exempel och "vad hör ihop".
 - Skriv på svenska om inte materialet är på ett annat språk (glosor: fråga på svenska, alternativen på målspråket).
 - Går materialet inte att använda: returnera {"cards": [], "note": "beskriv problemet kort"}.
+
+Språk (eleven har dyslexi): skriv med vanliga, korta ord och korta meningar. Inga förkortningar (t.ex., bl.a.),
+inga onödigt långa ord. Begrepp från materialet får vara med – de är det eleven ska lära sig.
