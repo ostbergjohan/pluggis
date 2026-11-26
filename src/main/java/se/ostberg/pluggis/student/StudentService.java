@@ -74,7 +74,13 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public Optional<Student> byDeviceId(String deviceId) {
-        return deviceId == null || deviceId.isBlank() ? Optional.empty() : repo.findByDeviceId(deviceId.trim());
+        if (deviceId == null || deviceId.isBlank()) {
+            return Optional.empty();
+        }
+        String id = deviceId.trim();
+        // Exakt först; annars samma id med andra stora/små bokstäver ("Fred" från Tab5:s config.h för "fred")
+        return repo.findByDeviceId(id).or(() -> repo.findAllByOrderByIdAsc().stream()
+                .filter(s -> id.equalsIgnoreCase(s.getDeviceId())).findFirst());
     }
 
     /** Eleven anropet gäller. */

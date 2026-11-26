@@ -60,10 +60,11 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         var query = UriComponentsBuilder.fromUri(session.getUri()).build().getQueryParams();
         String deviceId = query.getFirst(DEVICE_ID);
         String token = query.getFirst("token");
+        String from = session.getRemoteAddress() != null ? session.getRemoteAddress().getAddress().getHostAddress() : "?";
 
         Long studentId = null;
         if (props.tokenRequired() && props.tokenMatches(token)) {
-            studentId = students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
+            studentId = findDevice(session, deviceId, from).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
         } else {
             var kid = chat.studentFor(token);
             if (kid.isPresent()) {
@@ -77,6 +78,10 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
             }
         }
         if (deviceId == null || deviceId.isBlank()) {
+            log.warn("Enhet nekad från {}: {} (deviceId {})", from,
+                    token == null || token.isBlank() ? "token saknas" : "fel token", query.getFirst(DEVICE_ID));
+            tell(session, "Servern nekade skärmen: fel token. PLUGGIS_TOKEN i config.h ska vara samma som "
+                    + "PLUGGIS_DEVICE_TOKEN i .env.");
             session.close(CloseStatus.POLICY_VIOLATION.withReason("deviceId eller token saknas/fel"));
             return;
         }
@@ -84,11 +89,44 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         session.getAttributes().put(STUDENT_ID,
                 studentId != null ? studentId : se.ostberg.pluggis.student.StudentContext.defaultId());
         registry.register(deviceId, session, query.getFirst("client"));
-        log.info("Enhet ansluten: {}", deviceId);
+        log.info("Enhet ansluten: {} från {}", deviceId, from);
 
         String device = deviceId;
         sessions.active(device).ifPresent(s -> registry.send(device,
                 DeviceMessages.SessionState.started(s.getTask(), s.getPlannedMinutes())));
+    }
+
+    /**
+     * Eleven med det här enhets-id:t. Stavat med andra stora/små bokstäver ("Fred" i stället för "fred")
+     * hittas ändå, men loggas. Finns det inte alls loggas vilka som finns och skärmen får veta det.
+     */
+    private java.util.Optional<se.ostberg.pluggis.student.Student> findDevice(WebSocketSession session, String deviceId, String from) {
+        if (deviceId == null || deviceId.isBlank()) {
+            return java.util.Optional.empty();
+        }
+        String wanted = deviceId.trim();
+        var found = students.byDeviceId(wanted);
+        if (found.isPresent()) {
+            if (!wanted.equals(found.get().getDeviceId())) {
+                log.warn("Enhets-id '{}' från {} är stavat annorlunda än '{}' – fungerar, men skriv '{}' i PLUGGIS_DEVICE_ID i config.h.",
+                        wanted, from, found.get().getDeviceId(), found.get().getDeviceId());
+            }
+            return found;
+        }
+        String known = students.all().stream().map(se.ostberg.pluggis.student.Student::getDeviceId).toList().toString();
+        log.warn("Okänt enhets-id '{}' från {} – finns: {}. Skärmen räknas som första eleven.", wanted, from, known);
+        tell(session, "Enhets-id '" + wanted + "' finns inte i Pluggis. Finns: " + known
+                + ". Ändra PLUGGIS_DEVICE_ID i config.h (admin -> Inställningar -> Elever).");
+        return found;
+    }
+
+    /** Skickar ett fel till skärmen direkt (innan den är registrerad). */
+    private void tell(WebSocketSession session, String message) {
+        try {
+            session.sendMessage(new TextMessage(mapper.writeValueAsString(new DeviceMessages.Error(message))));
+        } catch (IOException | RuntimeException e) {
+            log.debug("Kunde inte skicka felet till skärmen: {}", e.getMessage());
+        }
     }
 
     @Override

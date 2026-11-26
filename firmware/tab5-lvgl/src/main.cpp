@@ -37,6 +37,8 @@ static bool pendingPractice = false;   // coachen bad om en övning (startas fr�
 static String pendingKind;
 static long pendingHw = 0;
 static bool asleep = false, idleWarned = false;
+static bool booting = true;   // startskärmen visas tills WiFi och läxorna är på plats
+static String lastError;   // senaste felet från servern eller ett anrop – visas på startskärmen och i loggen
 
 // ---------------------------------------------------------------- skärmen (LVGL)
 // Allt som syns byggs i ui.cpp. Här finns bara tillståndet; redraw() bygger om den skärm som ändrats.
@@ -365,7 +367,10 @@ static void onText(const char* json, size_t len) {
     sayText = "Kameran på skärmen kommer snart. Fota med telefonen i Pluggis-appen så länge.";
     dirtyMain = true;
   } else if (type == "error") {
-    Serial.printf("[pluggis] fel från servern: %s\n", (const char*)(doc["message"] | ""));
+    String msg = doc["message"] | "";
+    Serial.printf("[pluggis] fel från servern: %s\n", msg.c_str());
+    lastError = msg;
+    if (!booting && msg.length()) ui::toast(std::string("Servern: ") + msg.c_str());
     thinking = false;
     dirtyMain = true;
   }
@@ -387,6 +392,7 @@ static void onBinary(uint8_t* data, size_t len) {
 static void onWs(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED: {
+      Serial.printf("[pluggis] ansluten till %s:%d som %s\n", PLUGGIS_HOST, PLUGGIS_PORT, PLUGGIS_DEVICE_ID);
       wsUp = true;
       dirtyTop = true;
       JsonDocument doc;
@@ -399,6 +405,8 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
     }
     case WStype_DISCONNECTED:
       if (wsUp) Serial.println("[pluggis] frånkopplad, försöker igen");
+      else Serial.printf("[pluggis] får ingen WebSocket mot %s:%d%s\n", PLUGGIS_HOST, PLUGGIS_PORT,
+                         WiFi.status() == WL_CONNECTED ? "" : " (inget WiFi)");
       wsUp = false;
       thinking = false;
       dirtyTop = dirtyMain = true;
@@ -483,6 +491,13 @@ static int api(const char* method, const String& path, const String& body, JsonD
   http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
   http.addHeader("Content-Type", "application/json");
   int code = strcmp(method, "GET") == 0 ? http.GET() : http.sendRequest(method, body);
+  if (code <= 0 || code >= 400) {
+    String what = code <= 0 ? String("ingen kontakt med ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + " (" + http.errorToString(code) + ")"
+                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla PLUGGIS_TOKEN i config.h"
+                : String("svarade ") + String(code);
+    Serial.printf("[pluggis] %s %s: %s\n", method, path.c_str(), what.c_str());
+    lastError = String(method) + " " + path + ": " + what;
+  }
   if (code > 0 && out) {
     String resp = http.getString();
     if (resp.length()) deserializeJson(*out, resp);
@@ -1523,7 +1538,6 @@ static void tickPractice() {
 // ---------------------------------------------------------------- vad som syns (modeller till ui.cpp)
 static std::string S(const String& s) { return std::string(s.c_str()); }
 
-static bool booting = true;
 static uint32_t bootStart = 0;
 static int timerDrawn = -2;
 
@@ -1540,7 +1554,8 @@ static void drawBoot() {
   if (millis() - bootStart > 30000) {
     warn = !wifi ? String("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet är 2,4 GHz. (WiFi-status ") +
                        String((int)WiFi.status()) + ", " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB ledigt)"
-                 : String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?";
+                 : String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?" +
+                       (lastError.length() ? "\n" + lastError : String());
   }
   ui::showBoot(S(line), S(warn));
 }
@@ -2113,6 +2128,8 @@ void setup() {
 
   lastActivity = millis();
   bootStart = millis();
+  Serial.printf("[pluggis] startar: WiFi \"%s\", server %s:%d, enhet %s\n", PLUGGIS_WIFI_SSID, PLUGGIS_HOST, PLUGGIS_PORT,
+                PLUGGIS_DEVICE_ID);
   connectWifi();   // sist, som i den gamla firmware: WiFi-chippet (ESP32-C6) behöver hinna starta efter M5.begin()
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
   String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
