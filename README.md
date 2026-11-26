@@ -314,7 +314,7 @@ tidigare start i planen, lägre vikt håller det kort. Max per dag gäller allti
 
 **Anpassat för ADHD:**
 - **Ett block per ämne varje dag:** momenten grupperas per läxa/prov (närmast deadline först, sedan vikt) så att eleven inte hoppar mellan ämnen. Varje ämne har fast färg och symbol (🧪 NO, ➗ matte, 📖 svenska, 🇬🇧 engelska, 🗣️ språk, 🌍 SO …) i chatten, admin och kalendern. Dagar du ordnat för hand behåller din ordning.
-- **Ordentliga pass:** varje moment är minst 15 minuter (högst 25), och inga "läs bara rubrikerna"-moment – varje läsmoment har en aktiv uppgift (t.ex. "Läs s. 40–45 och skriv 3 nyckelord"). Dagens mest konkreta moment ligger först så att det är lätt att komma igång.
+- **Ordentliga pass:** varje moment är minst 15 minuter (högst 25), och inga "läs bara rubrikerna"-moment. Läsmoment är bara läsning ("Läs s. 40–45", går också att lyssna på i Pluggis) – det aktiva sker i egna moment med övningarna i Pluggis, inte som skrivuppgifter. Dagens mest konkreta moment ligger först så att det är lätt att komma igång.
 - Aldrig två läsmoment i rad; repetition först med boken framme, sedan utan (som på provet).
 - **Buffert:** planen fyller bara ~80 % av max per dag och lämnar en lätt reservdag före provet.
 - **Varje natt** (03:30) planeras det som ligger efter om, inom max per dag – i stället för att staplas på dagen efter.

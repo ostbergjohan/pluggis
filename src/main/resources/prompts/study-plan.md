@@ -9,7 +9,7 @@ Svara ENDAST med ett JSON-objekt:
 
 {
   "items": [
-    {"date": "YYYY-MM-DD", "task": "Läs s. 40–48 i Utkik och skriv 3 nyckelord", "minutes": 15, "type": "READ"}
+    {"date": "YYYY-MM-DD", "task": "Läs s. 40–48 i Utkik", "minutes": 15, "type": "READ"}
   ],
   "note": "Kort kommentar, t.ex. om tiden är för knapp, annars null"
 }
@@ -24,18 +24,19 @@ Regler:
   dag har en tydlig bit. Räkna sidor så att allt material blir täckt.
 - Varje moment är MINST 15 och högst 25 minuter – inga småmoment. Högst två moment per dag för den här
   uppgiften, inom max minuter per dag. Hellre ett ordentligt pass än flera små.
-- Inga moment som bara går ut på att skumma eller "läsa rubrikerna" – det ger ingenting. Varje läsmoment
-  har en tydlig bit och en aktiv uppgift i samma moment (t.ex. "Läs s. 40–45 och skriv 3 nyckelord").
+- Inga moment som bara går ut på att skumma eller "läsa rubrikerna" – det ger ingenting. Ett läsmoment är
+  att LÄSA en tydlig bit (t.ex. "Läs s. 40–45") – inget skrivande i samma moment (inga nyckelord,
+  sammanfattningar eller anteckningar). Eleven kan också lyssna på sidorna i Pluggis.
 - Lätt att komma igång: lägg dagens mest konkreta och överblickbara moment först (t.ex. kortleken,
   ett snabbquiz eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
-- Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsa med något aktivt
-  (skriv nyckelord, rita, förhör dig, räkna, förklara högt).
+- Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsning med en övning i Pluggis
+  (snabbquiz, lucktext, Förklara för Pluggis, matcha par) eller med att räkna/öva uppgifter.
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
-  Kombinera läsning med något aktivt: nyckelord, tankekarta, egna frågor, räkna exempel.
+  Det aktiva sker i egna moment med övningarna i Pluggis – inte som skrivuppgifter till läsningen.
 - PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (15–20 min, typ REVIEW) 1–2 dagar före
   provet, efter att allt material gåtts igenom. Skriv det exakt så – eleven får en knapp för det i appen.
 - PROV: allt nytt material ska vara genomgånget senast 1–2 dagar före provet. De sista dagarna:
-  repetition (REVIEW), självförhör, och FLASHCARDS om det finns en kortlek. Repetera tidigare
+  repetition (REVIEW) med övningarna i Pluggis (snabbquiz, lucktext, Förklara). Repetera tidigare
   avsnitt med några dagars mellanrum, inte bara på slutet.
 - Repetition i två steg: först med boken/anteckningarna framme (svara på frågor, förklara för en
   förälder), sedan utan – som på provet. Hellre mer av första steget om tiden är knapp.
