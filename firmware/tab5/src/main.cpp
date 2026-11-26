@@ -866,7 +866,10 @@ static void loadDecks() {
   decksLoaded = true;
 }
 
+static void practiceEnd();
+
 static void practiceBegin() {
+  if (practiceId.length()) practiceEnd();   // en övning åt gången
   JsonDocument doc;
   String name = cur.name;
   name.replace("\"", "'");
@@ -880,8 +883,15 @@ static void practiceBegin() {
 
 static void practiceEnd() {
   if (!practiceId.length()) return;
-  api("POST", "/api/practice/" + practiceId + "/end", "{\"activeSeconds\":" + String(practiceActive) + "}", nullptr);
+  JsonDocument r;
+  String id = practiceId;
   practiceId = "";
+  if (api("POST", "/api/practice/" + id + "/end", "{\"activeSeconds\":" + String(practiceActive) + "}", &r) == 200) {
+    int min = r["minutes"] | 0;
+    Serial.printf("[pluggis] övningstid: %u s aktiv, %d min räknades\n", (unsigned)practiceActive, min);
+    if (min > 0 && lastText.length() && !lastText.endsWith(" min")) { lastText += " · " + String(min) + " min"; dirtyOva = true; }
+  }
+  practiceActive = 0;
 }
 
 static void nextCard() {
@@ -2479,7 +2489,9 @@ static uint32_t subjectColor(const String& subject, const String& title) {
 }
 
 static void tickPractice() {
-  if (screen != Screen::OvaCard || !practiceId.length()) return;
+  // Övningstid: kort, Förklara/Testprov/Matcha par/Rätt ordning och uppläsning av läxor
+  bool practicing = screen == Screen::OvaCard || screen == Screen::Game || (screen == Screen::HwDetail && listening);
+  if (!practicing || !practiceId.length()) { lastActiveTick = millis(); return; }
   if (millis() - lastActiveTick >= 1000) {
     lastActiveTick += 1000;
     if (millis() - lastTouchAt < 120000) practiceActive++;
