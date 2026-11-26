@@ -190,6 +190,9 @@ public class PlanningService {
 
     /** Planera om bara om det redan finns en plan (t.ex. när kalendern flyttat datumet). */
     public void replanIfPlanned(long homeworkId) {
+        if (homework.get(homeworkId).map(Homework::isOther).orElse(true)) {
+            return;   // "annat" (t.ex. aktivitetsdag) planeras inte
+        }
         if (!repo.findByHomeworkIdOrderByPlanDateAscIdAsc(homeworkId).isEmpty()) {
             plan(homeworkId);
         }

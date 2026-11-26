@@ -177,7 +177,7 @@ public class MaterialService {
         }
 
         boolean replanned = false;
-        if ((changed || deckId != null) && h.getDueDate() != null) {
+        if ((changed || deckId != null) && h.getDueDate() != null && !h.isOther()) {  // "annat" planeras inte
             try {
                 planning.plan(homeworkId);
                 replanned = true;
