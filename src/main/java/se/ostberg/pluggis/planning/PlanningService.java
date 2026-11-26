@@ -612,15 +612,15 @@ public class PlanningService {
     /** Ord per minut i uppläsningen (Pluggis röst läser ungefär så fort). */
     static final int WORDS_PER_MINUTE = 140;
 
-    /** Uppläsningstid i minuter per sida, för material med sidnummer. Tom om inga sidor är kända. */
+    /** Uppläsningstid i minuter per boksida (tryckt sidnummer). Tom om inga sidnummer är kända. */
     java.util.SortedMap<Integer, Double> pageMinutes(Homework h) {
         java.util.SortedMap<Integer, Double> out = new java.util.TreeMap<>();
         if (materials == null || h.getId() == null) {
             return out;
         }
         for (var m : materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId())) {
-            if (m.getPage() != null && m.getText() != null && !m.getText().isBlank()) {
-                out.merge(m.getPage(), words(m.getText()) / (double) WORDS_PER_MINUTE, Double::sum);
+            if (m.getBookPage() != null && m.getText() != null && !m.getText().isBlank()) {
+                out.merge(m.getBookPage(), words(m.getText()) / (double) WORDS_PER_MINUTE, Double::sum);
             }
         }
         return out;
@@ -638,7 +638,7 @@ public class PlanningService {
         }
         var pages = pageMinutes(h);
         double unpaged = materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId()).stream()
-                .filter(m -> m.getPage() == null && m.getText() != null && !m.getText().isBlank())
+                .filter(m -> m.getBookPage() == null && m.getText() != null && !m.getText().isBlank())
                 .mapToDouble(m -> words(m.getText()) / (double) WORDS_PER_MINUTE).sum();
         if (pages.isEmpty() && unpaged == 0) {
             return;
@@ -646,7 +646,7 @@ public class PlanningService {
         ask.append("Inläst material och uppläsningstid (ca ").append(WORDS_PER_MINUTE).append(" ord/min): ");
         pages.forEach((p, min) -> ask.append("s. ").append(p).append(": ").append(roundHalf(min)).append(" min, "));
         if (unpaged > 0) {
-            ask.append("material utan sidnummer: ").append(roundHalf(unpaged)).append(" min, ");
+            ask.append("material där sidnumret inte syns: ").append(roundHalf(unpaged)).append(" min, ");
         }
         double total = pages.values().stream().mapToDouble(Double::doubleValue).sum() + unpaged;
         ask.append("totalt ").append(roundHalf(total)).append(" min\n");
@@ -658,7 +658,7 @@ public class PlanningService {
     }
 
     private static final java.util.regex.Pattern PAGES = java.util.regex.Pattern.compile(
-            "(?i)\\b(?:s\\.|sid\\.?|sidan|sidorna)\\s*(\\d+)(?:\\s*(?:[-–]|till|och)\\s*(\\d+))?");
+            "(?i)(?:\\bs\\.|\\bsid\\.?|\\bsidan|\\bsidorna|\\bläs)\\s*(\\d+)(?:\\s*(?:[-–]|till|och)\\s*(\\d+))?");
 
     /** Sidorna i ett läsmoment ("Läs s. 40–45" → 40, 45). Null om texten inte nämner sidor. */
     static int[] pagesIn(String task) {

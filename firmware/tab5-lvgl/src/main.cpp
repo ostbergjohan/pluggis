@@ -1174,13 +1174,13 @@ struct PlanRow {
   int pageFrom, pageTo;   // "Läs s. 40–45" → 40, 45 (0 = inga sidor i texten)
 };
 
-/** Sidorna i ett läsmoment: "s. 40–45", "sid 40-45", "sidan 12", "sidorna 3 och 4". */
+/** Sidorna i ett läsmoment: "s. 40–45", "sid 40-45", "sidan 12", "sidorna 3 och 4", "Läs 182–187". */
 static void parsePages(const String& task, int& from, int& to) {
   from = to = 0;
   String t = task;
   t.toLowerCase();
   int at = -1;
-  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s."}) {
+  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s.", "läs "}) {   // "Läs 182–187" utan "s."
     at = t.indexOf(key);
     if (at >= 0) { at += strlen(key); break; }
   }
@@ -1321,16 +1321,17 @@ static void openHomework(const HwInfo& h) {
   if (api("GET", "/api/homework/" + String(h.id) + "/material", "", &doc) == 200) {
     std::vector<JsonObject> mats;
     for (JsonObject m : doc.as<JsonArray>()) if (m["text"].is<const char*>() && strlen(m["text"].as<const char*>()) > 2) mats.push_back(m);
+    // Boksidans tryckta nummer (bookPage) om det är känt, annars ordningen i uppladdningen (page)
     std::sort(mats.begin(), mats.end(), [](JsonObject a, JsonObject b) {
-      int pa = a["page"] | 100000, pb = b["page"] | 100000;
+      int pa = a["bookPage"] | (a["page"] | 100000), pb = b["bookPage"] | (b["page"] | 100000);
       return pa != pb ? pa < pb : (a["id"] | 0L) < (b["id"] | 0L);
     });
     for (auto& m : mats) {
       long id = m["id"] | 0L;
-      int page = m["page"] | 0;
+      int bookPage = m["bookPage"] | 0;
       chapterIds.push_back(id);
-      chapterPage.push_back(page);
-      chapterLabel.push_back(page ? "Sida " + String(page) : "Del " + String(chapterIds.size()));
+      chapterPage.push_back(bookPage);
+      chapterLabel.push_back(bookPage ? "Sida " + String(bookPage) : "Del " + String(chapterIds.size()));
       splitSentences(clean(m["text"].as<const char*>()), id);
     }
   }
@@ -1405,18 +1406,22 @@ static void openReading(const PlanRow& r) {
     for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) return (int)i;
     return 0;
   };
-  bool pages = r.pageFrom && std::any_of(chapterPage.begin(), chapterPage.end(), [](int p) { return p > 0; });
-  if (pages) {
-    // Börja på sidan (eller närmaste sida före), sluta före första sidan efter momentets sista
-    int start = -1;
-    for (size_t c = 0; c < chapterPage.size(); c++) if (chapterPage[c] && chapterPage[c] <= r.pageFrom) start = c;
-    if (start < 0) for (size_t c = 0; c < chapterPage.size(); c++) if (chapterPage[c] >= r.pageFrom) { start = c; break; }
-    listenPos = firstSentence(start < 0 ? 0 : start);
-    listenEnd = -1;
+  // Börja på momentets första sida i boken och sluta efter den sista. Finns inte sidorna bland det inlästa
+  // materialet (eller saknas sidnummer) börjar uppläsningen från början.
+  listenPos = 0;
+  listenEnd = -1;
+  int start = -1;
+  if (r.pageFrom)
     for (size_t c = 0; c < chapterPage.size(); c++)
+      if (chapterPage[c] >= r.pageFrom && chapterPage[c] <= r.pageTo) { start = c; break; }
+  if (start >= 0) {
+    listenPos = firstSentence(start);
+    for (size_t c = start + 1; c < chapterPage.size(); c++)
       if (chapterPage[c] > r.pageTo) { listenEnd = firstSentence(c); break; }
     if (listenEnd >= 0 && listenEnd <= listenPos) listenEnd = -1;
   }
+  Serial.printf("[pluggis] läs %s: sidor %d–%d, %s\n", r.task.c_str(), r.pageFrom, r.pageTo,
+                start >= 0 ? ("börjar på " + chapterLabel[start]).c_str() : "sidorna finns inte i materialet – börjar från början");
   listenDone = false;
   fetchPos = listenPos;
   readingPlanItem = r.id;

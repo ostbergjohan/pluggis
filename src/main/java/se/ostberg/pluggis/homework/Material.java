@@ -46,6 +46,9 @@ public class Material {
     /** Ordning inom en uppladdning (sida 1, 2 …). */
     private Integer page;
 
+    /** Sidnumret som står tryckt på sidan i boken (t.ex. 182), om Claude kunde läsa det. */
+    private Integer bookPage;
+
     protected Material() {
     }
 
@@ -69,6 +72,10 @@ public class Material {
 
     public void setPage(Integer page) {
         this.page = page;
+    }
+    public Integer getBookPage() { return bookPage; }
+    public void setBookPage(Integer bookPage) {
+        this.bookPage = bookPage != null && bookPage > 0 && bookPage < 10000 ? bookPage : null;
     }
     public Long getHomeworkId() { return homeworkId; }
     public String getFilename() { return filename; }

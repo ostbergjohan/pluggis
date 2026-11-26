@@ -17,6 +17,8 @@ class PlanReadingTest {
         assertThat(PlanningService.pagesIn("Läs sidan 7")).containsExactly(7, 7);
         assertThat(PlanningService.pagesIn("Läs sidorna 3 och 4")).containsExactly(3, 4);
         assertThat(PlanningService.pagesIn("Läs s.112 till 118")).containsExactly(112, 118);
+        assertThat(PlanningService.pagesIn("Läs 182-187")).containsExactly(182, 187);
+        assertThat(PlanningService.pagesIn("Läs s. 182–187 i Utkik")).containsExactly(182, 187);
         assertThat(PlanningService.pagesIn("Gör ett snabbquiz")).isNull();
     }
 

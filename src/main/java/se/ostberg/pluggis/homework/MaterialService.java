@@ -43,7 +43,7 @@ public class MaterialService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Page(Integer file, String text) {
+    record Page(Integer file, String text, @JsonProperty("book_page") Integer bookPage) {
     }
 
     /** Högst så många filer per uppladdning (en läsning hos Claude). */
@@ -106,10 +106,14 @@ public class MaterialService {
         }
 
         java.util.Map<Integer, String> pageText = new java.util.HashMap<>();
+        java.util.Map<Integer, Integer> bookPages = new java.util.HashMap<>();   // fil → tryckt sidnummer i boken
         if (reading.pages() != null) {
             for (Page pg : reading.pages()) {
                 if (pg != null && pg.file() != null && pg.text() != null && !pg.text().isBlank()) {
                     pageText.put(pg.file(), pg.text());
+                }
+                if (pg != null && pg.file() != null && pg.bookPage() != null) {
+                    bookPages.put(pg.file(), pg.bookPage());
                 }
             }
         }
@@ -124,6 +128,7 @@ public class MaterialService {
             if (docs.size() > 1) {
                 m.setPage(i + 1);
             }
+            m.setBookPage(bookPages.get(i + 1));
             boolean keepImage = doc.kind() == UploadedDocument.Kind.IMAGE && doc.bytes() != null
                     && doc.bytes().length <= 3_000_000;
             if (keepImage) {
