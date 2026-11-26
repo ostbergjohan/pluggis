@@ -1891,6 +1891,7 @@ function askForLink() {
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   $('#view').replaceChildren(h('div', { class: 'login' },
+    h('img', { class: 'login-logo', src: 'logo-220.png', alt: 'Pluggis' }),
     h('h2', {}, 'Hej! 👋'), h('p', {}, 'Skriv in din kod till Pluggis.'), input,
     h('button', { class: 'big', onclick: go }, 'Logga in'),
     h('p', { style: 'color:var(--muted);font-size:14px' }, 'Koden har 5 tecken och finns hos den som satt upp Pluggis.')));

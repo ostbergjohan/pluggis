@@ -4,8 +4,9 @@
   --ink: #1f2328;
   --muted: #6b6f76;
   --line: #e4e1d9;
-  --accent: #2f6f5e;
-  --accent-soft: #e3efea;
+  --accent: #022153;
+  --accent-soft: #e6ebf5;
+  --yellow: #fec434;
   --blue: #2c63c9;
   --red: #c8453b;
   --gold: #b7862a;
@@ -18,7 +19,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #15171a; --panel: #1e2125; --ink: #e8e6e1; --muted: #9aa0a6; --line: #30343a;
-    --accent: #5fb39b; --accent-soft: #1f3530; --blue: #6c9bf0; --red: #e57369; --gold: #d9a94a;
+    --accent: #6f8fe0; --accent-soft: #1a2540; --blue: #6c9bf0; --red: #e57369; --gold: #d9a94a;
   }
 }
 * { box-sizing: border-box; }
@@ -322,3 +323,5 @@ label.inline { display: flex; gap: 8px; align-items: center; color: var(--ink); 
 .needs .check { align-items: center; }
 .needs .check .grow, .recent .check .grow { flex: 1; }
 .recent .check { padding: 8px 0; }
+
+.brand .logo { width: 28px; height: 28px; object-fit: contain; vertical-align: -7px; }

@@ -60,6 +60,7 @@ async function api(route) {
   if (url.pathname.match(/^\/api\/homework\/\d+\/material$/)) return json(route, [
     { id: 31, homeworkId: 7, filename: 'utkik-s40.jpg', page: 40, summary: 'Fotosyntesen – ljus, vatten och koldioxid blir socker och syre', text: 'Fotosyntesen…', hasImage: false },
     { id: 32, homeworkId: 7, filename: 'utkik-s42.jpg', page: 42, summary: 'Cellandning – socker och syre ger energi', text: 'Cellandning…', hasImage: false }]);
+  if (url.pathname === '/api/flashcards/quiz') return json(route, { deck: { id: 5, name: 'Snabbquiz: Fotosyntes' }, cardCount: 10, note: null });
   if (url.pathname === '/api/flashcards/decks') return json(route, DECKS);
   if (url.pathname.match(/\/api\/flashcards\/decks\/6\/next/)) return json(route, clozeCard);
   if (url.pathname.match(/\/api\/flashcards\/decks\/\d+\/next/)) return json(route, nextCard);
@@ -122,7 +123,7 @@ async function api(route) {
   await tab('plan'); await shot('d2-plan.png');
   await tab('kort'); await shot('d3-ova.png');
   nextCard = quizCard;
-  await page.click('text=⚡ Snabbquiz: Fotosyntesen'); await page.waitForTimeout(400);
+  await page.click('.quiz-btn:has-text("Snabbquiz")'); await page.waitForTimeout(500);
   await page.click('.choice:has-text("Ljus, vatten och koldioxid")'); await page.waitForTimeout(300);
   await shot('d4-snabbquiz.png');
   await page.setViewportSize({ width: 1000, height: 760 });

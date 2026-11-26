@@ -60,7 +60,7 @@ async function api(route) {
   if (url.pathname.match(/^\/api\/homework\/\d+\/material$/)) return json(route, [
     { id: 31, homeworkId: 7, filename: 'utkik-s40.jpg', page: 40, summary: 'Fotosyntesen – ljus, vatten och koldioxid blir socker och syre', text: 'Fotosyntesen…', hasImage: false },
     { id: 32, homeworkId: 7, filename: 'utkik-s42.jpg', page: 42, summary: 'Cellandning – socker och syre ger energi', text: 'Cellandning…', hasImage: false }]);
-  if (url.pathname === '/api/flashcards/decks/4/cards') return json(route, [
+  if (url.pathname === '/api/flashcards/decks/4/cards' || url.pathname === '/api/flashcards/decks/5/cards') return json(route, [
     { id: 1, front: 'Klorofyll', back: 'Grönt ämne som fångar ljus' }, { id: 2, front: 'Glukos', back: 'Sockret växten bildar' },
     { id: 3, front: 'Koldioxid', back: 'Gas som växten tar upp' }, { id: 4, front: 'Cellandning', back: 'Socker + syre ger energi' },
     { id: 5, front: 'Klyvöppning', back: 'Litet hål i bladet' }, { id: 6, front: 'Fotosyntes', back: 'Ljus blir socker och syre' }]);
@@ -70,6 +70,10 @@ async function api(route) {
     why: 'Ljuset ger energin som behövs för att göra socker av vatten och koldioxid – syret blir över.' }] });
   if (url.pathname.startsWith('/api/games/done')) return json(route, { ok: true });
   if (url.pathname === '/api/flashcards/decks') return json(route, DECKS);
+  if (url.pathname === '/api/flashcards/quiz') {   // varje övning görs ny: snabbquiz = lek 5, lucktext = lek 6
+    const b = JSON.parse(route.request().postData() || '{}');
+    return json(route, { deck: { id: b.mode === 'cloze' ? 6 : 5, name: b.mode === 'cloze' ? 'Lucktext: Fotosyntes' : 'Snabbquiz: Fotosyntes' }, cardCount: 10, note: null });
+  }
   if (url.pathname.match(/\/api\/flashcards\/decks\/6\/next/)) return json(route, clozeCard);
   if (url.pathname.match(/\/api\/flashcards\/decks\/\d+\/next/)) return json(route, nextCard);
   if (url.pathname.match(/\/grade$/)) return json(route, { id: 1 });
@@ -136,12 +140,12 @@ async function api(route) {
   await tab('kort'); await shot('5-ova.png');
   // Snabbquiz: välj rätt svar
   nextCard = quizCard;
-  await page.click('text=⚡ Snabbquiz: Fotosyntesen'); await page.waitForTimeout(400);
+  await page.click('.quiz-btn:has-text("Snabbquiz")'); await page.waitForTimeout(500);
   await shot('6-snabbquiz.png');
   await page.click('.choice:has-text("Ljus, vatten och koldioxid")'); await page.waitForTimeout(300);
   await shot('7-snabbquiz-ratt.png');
   // Lucktext
-  await tab('kort'); await page.click('text=✏️ Lucktext: Fotosyntesen'); await page.waitForTimeout(400);
+  await tab('kort'); await page.click('.quiz-btn:has-text("Lucktext")'); await page.waitForTimeout(500);
   await page.click('.choice:has-text("glukos")'); await page.waitForTimeout(300);
   await shot('8-lucktext.png');
   // Förklara för Pluggis
