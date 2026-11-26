@@ -135,21 +135,21 @@ public class PlanningService {
                 .thenComparing(Homework::weightOrDefault, java.util.Comparator.reverseOrder()));
         List<Homework> todo = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
+        // Allt med datum framåt planeras – även det som inte planerats förut. Bara det föräldern flyttat för hand lämnas.
         for (Homework h : open) {
             if (h.getDueDate() == null) {
                 skipped.add(h.getTitle() + " (saknar datum)");
+                log.info("Planera om allt: hoppar över läxa {} – saknar datum", h.getId());
             } else if (h.getDueDate().isBefore(today)) {
                 continue;   // passerat – inget att planera
             } else if (h.isManualPlan()) {
                 skipped.add(h.getTitle() + " (flyttad för hand – tryck Planera på läxan)");
-            } else if (repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
-                skipped.add(h.getTitle() + " (inte planerad än – tryck Planera på läxan)");
+                log.info("Planera om allt: hoppar över läxa {} – flyttad för hand", h.getId());
             } else {
                 todo.add(h);
             }
         }
         log.info("Planera om allt, elev {}: {} läxor att planera om, {} hoppas över", student, todo.size(), skipped.size());
-        skipped.forEach(x -> log.debug("Hoppar över: {}", x));
         List<String> failed = new ArrayList<>();
         long allStart = System.nanoTime();
         replanStatus.put(student, new ReplanStatus(true, todo.size(), 0, List.copyOf(skipped), List.of(), null));
