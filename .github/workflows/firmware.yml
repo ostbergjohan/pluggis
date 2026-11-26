@@ -11,9 +11,14 @@ on:
 jobs:
   tab5:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [tab5, tab5-lvgl]
+    name: ${{ matrix.dir }}
     defaults:
       run:
-        working-directory: firmware/tab5
+        working-directory: firmware/${{ matrix.dir }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,7 +27,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ hashFiles('firmware/tab5/platformio.ini') }}
+          key: pio-${{ matrix.dir }}-${{ hashFiles(format('firmware/{0}/platformio.ini', matrix.dir)) }}
       - name: Installera PlatformIO
         run: pip install -U platformio
       # Kompileringskontroll. Riktig firmware byggs lokalt med din egen include/config.h (WiFi, server, token).
