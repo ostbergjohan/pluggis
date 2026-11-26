@@ -100,8 +100,8 @@ Nya versioner hämtas automatiskt när appen öppnas.
 
 ### Ikon och färger
 
-Loggan och figuren (original och utskurna versioner i [`docs/brand/`](docs/brand/)) används som appikon,
-favicon, figur bredvid Pluggis svar i chatten, startskärm och Chat-flik på Tab5. Admin-ikonen har en gul ring
+Loggan med texten *Pluggis* är appikon och favicon, och syns på inloggningen och Tab5:s startskärm. Figuren i
+pratbubblan står bredvid Pluggis svar i chatten och på Chat-fliken på Tab5. Original i [`docs/brand/`](docs/brand/). Admin-ikonen har en gul ring
 så att den skiljs från elevens. Färgerna är mörkblått `#022153` och gult `#FEC434`.
 Har du redan lagt till appen på hemskärmen: ta bort den och lägg till igen för att få den nya ikonen.
 
