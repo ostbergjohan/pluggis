@@ -315,7 +315,10 @@ label.inline { display: flex; gap: 8px; align-items: center; color: var(--ink); 
 .subnav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 /* Översikt: Behöver dig */
-.needs { border-color: #e6c46a; background: #fdf7e6; }
+.needs { border: 1px solid var(--gold); border-left: 6px solid var(--gold); background: var(--panel); }
+.needs h2 { color: var(--gold); }
+.needs .check .task { font-weight: 600; color: var(--ink); }
+.needs .item-meta { color: var(--muted); }
 .needs .check { align-items: center; }
 .needs .check .grow, .recent .check .grow { flex: 1; }
 .recent .check { padding: 8px 0; }
