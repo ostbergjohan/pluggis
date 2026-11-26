@@ -373,14 +373,14 @@ static void buildTop() {
   // flikarna i en "segmenterad" ruta
   lv_obj_t* seg = panel(top, SURFACE, 999);
   lv_obj_set_pos(seg, 16, 14);
-  lv_obj_set_size(seg, 4 * 156 + 12, 68);
+  lv_obj_set_size(seg, 4 * 150 + 12, 68);
   static const char* names[4] = {"Öva", "Chat", "Läxor", "Plan"};
   static const char* syms[4] = {LV_SYMBOL_EDIT, SYM_CHAT, SYM_BOOK, SYM_CALENDAR};
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = box(seg);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(b, 6 + i * 156, 6);
-    lv_obj_set_size(b, 156, 56);
+    lv_obj_set_pos(b, 6 + i * 150, 6);
+    lv_obj_set_size(b, 150, 56);
     lv_obj_set_style_radius(b, 999, 0);
     lv_obj_set_style_bg_color(b, C(ACCENT), 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
@@ -394,29 +394,32 @@ static void buildTop() {
 
   // höger: status · volym · batteri · poäng (från höger till vänster)
   lv_obj_t* right = box(top);
-  lv_obj_set_size(right, 600, TOP_H);
+  lv_obj_set_size(right, W - 16 - (16 + 4 * 150 + 12) - 16, TOP_H);
   lv_obj_align(right, LV_ALIGN_RIGHT_MID, -16, 0);
   lv_obj_set_flex_flow(right, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(right, 18, 0);
+  lv_obj_set_style_pad_column(right, 14, 0);
 
   statusLbl = label(right, "", F_S, WARN);
+  lv_obj_add_flag(statusLbl, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(statusLbl, 24);
+  lv_obj_add_event_cb(statusLbl, onClick, LV_EVENT_CLICKED, pack(Act::Status, 0));
 
   lv_obj_t* vol = panel(right, SURFACE, 999);
-  lv_obj_set_size(vol, 250, 64);
+  lv_obj_set_size(vol, 214, 64);
   button(vol, 4, 4, 56, 56, LV_SYMBOL_MINUS, Kind::Ghost, Act::VolDown, 0, nullptr, 999);
-  button(vol, 190, 4, 56, 56, LV_SYMBOL_PLUS, Kind::Ghost, Act::VolUp, 0, nullptr, 999);
-  volIcon = icon(vol, LV_SYMBOL_VOLUME_MAX, INK);
-  lv_obj_set_pos(volIcon, 70, 15);
+  button(vol, 154, 4, 56, 56, LV_SYMBOL_PLUS, Kind::Ghost, Act::VolUp, 0, nullptr, 999);
+  volIcon = icon(vol, LV_SYMBOL_VOLUME_MAX, INK, F_S);
+  lv_obj_set_pos(volIcon, 66, 18);
   for (int i = 0; i < 5; i++) {
-    int bh = 10 + i * 6;
+    int bh = 8 + i * 5;
     volBars[i] = panel(vol, ACCENT, 3);
-    lv_obj_set_size(volBars[i], 8, bh);
-    lv_obj_set_pos(volBars[i], 116 + i * 13, 46 - bh);
+    lv_obj_set_size(volBars[i], 6, bh);
+    lv_obj_set_pos(volBars[i], 98 + i * 10, 42 - bh);
   }
 
   lv_obj_t* bat = box(right);
-  lv_obj_set_size(bat, 124, 40);
+  lv_obj_set_size(bat, 112, 40);
   batBox = box(bat);
   lv_obj_set_size(batBox, 50, 28);
   lv_obj_set_pos(batBox, 0, 6);
@@ -447,7 +450,7 @@ void setTop(const Top& t) {
     lv_obj_set_style_bg_opa(tabBtn[i], on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     lv_obj_set_style_text_color(lv_obj_get_child(tabBtn[i], 0), C(on ? INK : MUTED), 0);
   }
-  lv_label_set_text(statusLbl, t.status.empty() ? "" : (std::string(LV_SYMBOL_WIFI) + "  " + t.status).c_str());
+  lv_label_set_text(statusLbl, t.status.empty() ? "" : (std::string(LV_SYMBOL_WARNING) + " " + t.status).c_str());
   int bars = (t.volume + 50) / 51;
   lv_label_set_text(volIcon, t.volume == 0 ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
   lv_obj_set_style_text_color(volIcon, C(t.volume ? INK : MUTED), 0);
@@ -575,6 +578,32 @@ void toast(const std::string& text) {
   lv_anim_set_playback_duration(&a, 260);
   lv_anim_set_completed_cb(&a, toastDone);
   lv_anim_start(&a);
+}
+
+static lv_obj_t* infoBox = nullptr;
+static void closeInfo(lv_event_t*) {
+  if (infoBox) lv_obj_delete_async(infoBox);
+  infoBox = nullptr;
+}
+void info(const std::string& title, const std::string& text) {
+  if (infoBox) lv_obj_delete(infoBox);
+  infoBox = nullptr;
+  if (title.empty() && text.empty()) return;   // tom = stäng
+  infoBox = box(lv_layer_top());
+  lv_obj_add_flag(infoBox, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_size(infoBox, W, H);
+  lv_obj_set_style_bg_color(infoBox, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(infoBox, LV_OPA_60, 0);
+  lv_obj_add_event_cb(infoBox, closeInfo, LV_EVENT_CLICKED, nullptr);
+  lv_obj_t* c = panel(infoBox, SURFACE, 30);
+  lv_obj_set_size(c, W - 160, H - 140);
+  lv_obj_center(c);
+  shadow(c, 40, 10);
+  lv_obj_t* t = label(c, title, F_L, YELLOW);
+  lv_obj_set_pos(t, 36, 28);
+  textIn(c, text, 36, 90, W - 160 - 72, H - 140 - 160, INK, {F_M, F_S});
+  lv_obj_t* h = label(c, "Tryck för att stänga", F_S, MUTED);
+  lv_obj_align(h, LV_ALIGN_BOTTOM_MID, 0, -20);
 }
 
 static lv_obj_t* idle = nullptr;

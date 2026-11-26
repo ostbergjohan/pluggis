@@ -38,6 +38,8 @@ static String pendingKind;
 static long pendingHw = 0;
 static bool asleep = false, idleWarned = false;
 static bool booting = true;   // startskärmen visas tills WiFi och läxorna är på plats
+static String wsLast = "inte startad";   // senaste som hänt med WebSocket (visas när man trycker på "Ansluter")
+static uint32_t wsLastAt = 0, wsTries = 0;
 static String lastError;   // senaste felet från servern eller ett anrop – visas på startskärmen och i loggen
 
 // ---------------------------------------------------------------- skärmen (LVGL)
@@ -392,6 +394,8 @@ static void onBinary(uint8_t* data, size_t len) {
 static void onWs(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED: {
+      wsLast = "ansluten";
+      wsLastAt = millis();
       Serial.printf("[pluggis] ansluten till %s:%d som %s\n", PLUGGIS_HOST, PLUGGIS_PORT, PLUGGIS_DEVICE_ID);
       wsUp = true;
       dirtyTop = true;
@@ -404,6 +408,9 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       break;
     }
     case WStype_DISCONNECTED:
+      wsTries++;
+      wsLast = wsUp ? String("tappade kopplingen") : String("kom inte fram") + (length ? String(": ") + String((const char*)payload).substring(0, length) : String());
+      wsLastAt = millis();
       if (wsUp) Serial.println("[pluggis] frånkopplad, försöker igen");
       else Serial.printf("[pluggis] får ingen WebSocket mot %s:%d%s\n", PLUGGIS_HOST, PLUGGIS_PORT,
                          WiFi.status() == WL_CONNECTED ? "" : " (inget WiFi)");
@@ -416,6 +423,11 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_BIN:
       onBinary(payload, length);
+      break;
+    case WStype_ERROR:
+      wsLast = String("fel") + (length ? String(": ") + String((const char*)payload).substring(0, length) : String());
+      wsLastAt = millis();
+      Serial.printf("[pluggis] WebSocket-fel: %s\n", wsLast.c_str());
       break;
     default:
       break;
@@ -1872,6 +1884,22 @@ static void onAction(const ui::Action& a) {
     case ui::Act::VolDown: setVolume(volume - 32); break;
     case ui::Act::VolUp: setVolume(volume + 32); break;
     case ui::Act::Background: onBackground(); break;
+    case ui::Act::Status: {
+      bool wifi = WiFi.status() == WL_CONNECTED;
+      String t = wifi ? "WiFi: ansluten till \"" + String(PLUGGIS_WIFI_SSID) + "\" (" + WiFi.localIP().toString() + ", signal " +
+                            String(WiFi.RSSI()) + " dBm)"
+                      : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + String(PLUGGIS_WIFI_SSID) + "\"";
+      t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " som \"" + PLUGGIS_DEVICE_ID + "\"";
+      t += "\nChatten (WebSocket): " + String(wsUp ? "uppe" : "nere") + " – " + wsLast +
+           (wsLastAt ? " för " + String((millis() - wsLastAt) / 1000) + " s sedan" : String()) + ", " + String(wsTries) + " försök";
+      t += "\nLäxor hämtade: " + String(decksLoaded ? "ja" : "nej");
+      if (lastError.length()) t += "\nSenaste fel: " + lastError;
+      t += "\nLedigt minne: " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB internt, " +
+           String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024)) + " kB PSRAM";
+      Serial.printf("[pluggis] status:\n%s\n", t.c_str());
+      ui::info("Anslutning", S(t));
+      break;
+    }
     case ui::Act::TalkPress: startRecording(); break;
 
     // --- Öva

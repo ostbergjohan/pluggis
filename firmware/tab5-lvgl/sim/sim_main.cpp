@@ -245,6 +245,17 @@ int main() {
   ui::buildCoach(co);
   ui::coachTimer(true, 14 * 60 + 30, 20 * 60, "Läs s. 40–41");
   save("16-chat-tanker");
+  top.status = "Ansluter";
+  ui::setTop(top);
+  ui::info("Anslutning", "WiFi: ansluten till \"femtifem\" (192.168.1.42, signal -61 dBm)\nServer: debian:8080 som \"fred\"\n"
+           "Chatten (WebSocket): nere – kom inte fram för 3 s sedan, 12 försök\nLäxor hämtade: ja\n"
+           "Ledigt minne: 214 kB internt, 27 400 kB PSRAM");
+  save("18-anslutning");
+  ui::info("", "");
+  save("19-toppraden-ansluter");
+  ui::info("", "");
+  top.status = "";
+  ui::setTop(top);
   ui::toast("+5 poäng");
   run(500);
   save("17-notis");

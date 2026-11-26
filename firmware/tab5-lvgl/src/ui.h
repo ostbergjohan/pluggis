@@ -33,6 +33,7 @@ enum class Act : uint16_t {
   Tab,            // a = 0 Öva, 1 Chat, 2 Läxor, 3 Plan
   VolDown, VolUp,
   Background,     // tryck på en tom yta (t.ex. "Tryck för att gå tillbaka")
+  Status,         // tryck på "Ansluter"/"Inget WiFi" uppe till höger: visa varför
   TalkPress,      // håll in och prata/svara (släppet läses direkt från pekskärmen)
   // Öva
   OvaSelect,      // a = rad i läxlistan
@@ -84,6 +85,8 @@ void hideBoot();
 void buildMessage(const std::string& text, bool busy, const std::string& hint = "");
 /** Liten notis uppe till höger som glider in och försvinner ("+5"). */
 void toast(const std::string& text);
+/** En ruta med text över allt annat (t.ex. anslutningsstatus); stängs med ett tryck (eller info("", "")). */
+void info(const std::string& title, const std::string& text);
 /** "Stänger av om 30 s" över allt annat. */
 void idleWarning(bool show);
 /** Håll-in-knappen på skärmen just nu: byt text och färg utan att bygga om skärmen (trycket pågår). */
