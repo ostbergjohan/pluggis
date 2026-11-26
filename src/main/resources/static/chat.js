@@ -888,7 +888,8 @@ const Practice = {
   async begin(what, homeworkId, passive) {
     if (this.timer && this.what === what) return;   // samma övning pågår redan
     this.end(false);
-    this.what = what; this.homeworkId = homeworkId || null; this.active = 0; this.last = Date.now();
+    this.paused = null;
+    this.what = what; this.homeworkId = homeworkId || null; this.passive = passive || null; this.active = 0; this.last = Date.now();
     this.timer = setInterval(() => {
       // Aktiv tid: appen syns och eleven har tryckt nyligen – eller lyssnar just nu
       if ((passive && passive()) || (document.visibilityState === 'visible' && Date.now() - this.last < 120000)) this.active++;
@@ -912,7 +913,7 @@ const Practice = {
   },
   /** När appen stängs: skicka tiden ändå (utan fråga). */
   flush() {
-    if (!this.timer || !this.id) return;
+    if (!this.timer || !this.id) { if (this.timer) { clearInterval(this.timer); this.timer = null; } return; }
     clearInterval(this.timer); this.timer = null;
     try {
       fetch(`/api/practice/${this.id}/end?deviceId=${enc(S.deviceId)}`, { method: 'POST', keepalive: true,
@@ -923,6 +924,20 @@ const Practice = {
 };
 ['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => { Practice.last = Date.now(); }, { passive: true, capture: true }));
 window.addEventListener('pagehide', () => Practice.flush());
+// iPhone: appen i bakgrunden (byter app, låser skärmen) – skicka tiden direkt, iOS kan stänga appen sedan.
+// Kommer eleven tillbaka till samma övning börjar räkningen om.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && Practice.timer) {
+    const p = Practice;
+    if (p.passive && p.passive()) return;   // lyssnar fortfarande (ljudet spelar vidare)
+    p.paused = { what: p.what, homeworkId: p.homeworkId, passive: p.passive, view: $('#view').firstElementChild };
+    p.flush();
+  } else if (document.visibilityState === 'visible' && Practice.paused) {
+    const q = Practice.paused;
+    Practice.paused = null;
+    if (q.view && q.view === $('#view').firstElementChild) Practice.begin(q.what, q.homeworkId, q.passive);   // samma övning syns fortfarande
+  }
+});
 
 /** "Bocka av 'Öva glosor 1–15'?" – ett tryck efter en övning. */
 function offerTick(item) {
