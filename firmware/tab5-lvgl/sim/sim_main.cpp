@@ -222,9 +222,14 @@ int main() {
   p.items = {{"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true},
              {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
              {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false},
-             {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false}};
+             {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false},
+             {"Prov: Vikingatiden – handel, resor och vardagsliv", "Läs s. 112–118 om handelsresorna österut och gör tankekartan över de viktigaste orterna", 0xb7862a, 20, false},
+             {"Engelska", "Repetera glosorna med boken framme, sedan utan, som på provet", 0x1f8a9e, 15, false}};
   ui::buildPlan(p);
   save("14-plan");
+  p.items.erase(p.items.begin(), p.items.begin() + 3);
+  ui::buildPlan(p);
+  save("14b-plan-lang-text");
 
   // Chat
   top.tab = 1;

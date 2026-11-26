@@ -753,9 +753,7 @@ void buildOva(const Ova& m) {
 
 // ---------------------------------------------------------------- ett kort
 static lv_obj_t* header(lv_obj_t* c, const std::string& left, const std::string& right, int value = -1, int max = 0) {
-  lv_obj_t* l = label(c, left, F_S, MUTED);
-  lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
-  lv_obj_set_width(l, W - 2 * PAD - 360);
+  lv_obj_t* l = oneLine(c, left, F_S, MUTED, W - 2 * PAD - 360);
   lv_obj_set_pos(l, PAD + 8, 14);
   if (!right.empty()) {
     lv_obj_t* r = label(c, right, F_S, INK);
@@ -1027,9 +1025,7 @@ void buildGame(const Game& m) {
     snprintf(nb, sizeof(nb), "%d", num);
     lv_obj_t* n = label(row, nb, F_MB, GOOD);
     lv_obj_align(n, LV_ALIGN_LEFT_MID, 18, 0);
-    lv_obj_t* l = label(row, m.placed[k], F_S, INK);
-    lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(l, W - 2 * PAD - 80);
+    lv_obj_t* l = oneLine(row, m.placed[k], F_S, INK, W - 2 * PAD - 80);
     lv_obj_align(l, LV_ALIGN_LEFT_MID, 60, 0);
     y += 56;
   }
@@ -1156,20 +1152,30 @@ void buildPlan(const Plan& m) {
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(list, 10, 0);
   lv_obj_set_style_pad_bottom(list, GAP, 0);
+  // Varje moment: bock till vänster, ämne och minuter på första raden, uppgiften (högst två rader) under
+  const int RW = W - 2 * PAD, TX = 92, TW = RW - TX - 28;
+  const int lh = lv_font_get_line_height(F_M) + 6;
   for (size_t k = 0; k < m.items.size(); k++) {
     auto& r = m.items[k];
+    lv_point_t sz;
+    lv_text_get_size(&sz, r.task.c_str(), F_M, 0, 6, TW, LV_TEXT_FLAG_NONE);
+    int taskH = std::min<int>(sz.y, 2 * lh);
+    int rowH = 18 + 30 + 6 + taskH + 18;
     lv_obj_t* b = box(list);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(b, W - 2 * PAD, 80);
+    lv_obj_set_size(b, RW, rowH);
     lv_obj_set_style_radius(b, 22, 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(b, C(r.done ? 0x0B3346 : SURFACE), 0);
     lv_obj_set_style_bg_color(b, C(SURFACE2), LV_STATE_PRESSED);
     lv_obj_add_style(b, &stTrans, 0);
     lv_obj_add_event_cb(b, onClick, LV_EVENT_CLICKED, pack(Act::PlanRow, k));
+    lv_obj_t* strip = panel(b, r.color, 999);
+    lv_obj_set_size(strip, 8, rowH - 28);
+    lv_obj_align(strip, LV_ALIGN_LEFT_MID, 12, 0);
     lv_obj_t* cb = panel(b, r.done ? GOOD : BG, 12);
     lv_obj_set_size(cb, 48, 48);
-    lv_obj_align(cb, LV_ALIGN_LEFT_MID, 18, 0);
+    lv_obj_align(cb, LV_ALIGN_LEFT_MID, 30, 0);
     if (!r.done) {
       lv_obj_set_style_border_width(cb, 3, 0);
       lv_obj_set_style_border_color(cb, C(MUTED), 0);
@@ -1177,21 +1183,18 @@ void buildPlan(const Plan& m) {
       lv_obj_t* ok = label(cb, LV_SYMBOL_OK, F_MB, BG);
       lv_obj_center(ok);
     }
-    int x = 86;
-    if (!r.subject.empty()) {
-      lv_obj_t* sc = chip(b, r.subject, r.color, INK);
-      lv_obj_align(sc, LV_ALIGN_LEFT_MID, x, 0);
-      lv_obj_update_layout(sc);
-      x += lv_obj_get_width(sc) + 18;
-    }
     char mn[16];
     snprintf(mn, sizeof(mn), "%d min", r.minutes);
     lv_obj_t* ml = label(b, mn, F_S, MUTED);
-    lv_obj_align(ml, LV_ALIGN_RIGHT_MID, -24, 0);
+    lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, -24, 18);
+    if (!r.subject.empty()) {
+      lv_obj_t* sl = oneLine(b, r.subject, F_S, lv_color_to_u32(lv_color_lighten(C(r.color), 110)) & 0xFFFFFF, TW - 140);
+      lv_obj_set_pos(sl, TX, 18);
+    }
     lv_obj_t* tl = label(b, r.task, F_M, r.done ? MUTED : INK);
     lv_label_set_long_mode(tl, LV_LABEL_LONG_DOT);
-    lv_obj_set_width(tl, W - 2 * PAD - x - 140);
-    lv_obj_align(tl, LV_ALIGN_LEFT_MID, x, 0);
+    lv_obj_set_size(tl, TW, taskH);
+    lv_obj_set_pos(tl, TX, 18 + 30 + 6);
     if (r.done) lv_obj_set_style_text_decor(tl, LV_TEXT_DECOR_STRIKETHROUGH, 0);
   }
 }
