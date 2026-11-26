@@ -76,9 +76,17 @@ public class PlanningController {
 
     @PostMapping("/replan-all")
     public Map<String, Object> replanAll() {
+        if (planning.replanRunning()) {
+            return Map.of("started", false);
+        }
         Runnable job = se.ostberg.pluggis.student.StudentContext.wrap(() -> planning.replanAll());
         Thread.ofVirtual().name("replan-all").start(job);
         return Map.of("started", true);
+    }
+
+    @GetMapping("/replan-all")
+    public PlanningService.ReplanStatus replanStatus() {
+        return planning.replanStatus();
     }
 
     @GetMapping("/progress")

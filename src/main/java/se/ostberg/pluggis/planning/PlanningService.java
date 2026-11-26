@@ -107,26 +107,67 @@ public class PlanningService {
         return m != null && m > 0 ? m : props.maxMinutesPerDay();
     }
 
+    /** Hur "Planera om allt" går för en elev – visas i admin medan det pågår och efteråt. */
+    public record ReplanStatus(boolean running, int total, int done, List<String> skipped, List<String> failed,
+                               java.time.Instant finishedAt) {
+        static ReplanStatus idle() {
+            return new ReplanStatus(false, 0, 0, List.of(), List.of(), null);
+        }
+    }
+
+    private final java.util.Map<Long, ReplanStatus> replanStatus = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public ReplanStatus replanStatus() {
+        return replanStatus.getOrDefault(se.ostberg.pluggis.student.StudentContext.currentOrDefault(), ReplanStatus.idle());
+    }
+
+    public boolean replanRunning() {
+        return replanStatus().running();
+    }
+
     /** Gör om alla befintliga planer för aktuell elev (t.ex. efter ändrade pluggtider). Returnerar antal. */
     public int replanAll() {
+        Long student = se.ostberg.pluggis.student.StudentContext.currentOrDefault();
         LocalDate today = todayDate();
-        int n = 0;
         List<Homework> open = new ArrayList<>(homework.openSchoolwork());
         // Närmast deadline först; samma dag → viktigast först
         open.sort(java.util.Comparator.comparing(Homework::getDueDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
                 .thenComparing(Homework::weightOrDefault, java.util.Comparator.reverseOrder()));
+        List<Homework> todo = new ArrayList<>();
+        List<String> skipped = new ArrayList<>();
         for (Homework h : open) {
-            if (h.getDueDate() == null || h.getDueDate().isBefore(today) || h.isManualPlan()
-                    || repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
-                continue;
-            }
-            try {
-                plan(h.getId());
-                n++;
-            } catch (RuntimeException e) {
-                log.warn("Kunde inte planera om läxa {}: {}", h.getId(), e.toString());
+            if (h.getDueDate() == null) {
+                skipped.add(h.getTitle() + " (saknar datum)");
+            } else if (h.getDueDate().isBefore(today)) {
+                continue;   // passerat – inget att planera
+            } else if (h.isManualPlan()) {
+                skipped.add(h.getTitle() + " (flyttad för hand – tryck Planera på läxan)");
+            } else if (repo.findByHomeworkIdOrderByPlanDateAscIdAsc(h.getId()).isEmpty()) {
+                skipped.add(h.getTitle() + " (inte planerad än – tryck Planera på läxan)");
+            } else {
+                todo.add(h);
             }
         }
+        List<String> failed = new ArrayList<>();
+        replanStatus.put(student, new ReplanStatus(true, todo.size(), 0, List.copyOf(skipped), List.of(), null));
+        int n = 0;
+        try {
+            for (Homework h : todo) {
+                try {
+                    plan(h.getId());
+                    n++;
+                } catch (RuntimeException e) {
+                    log.warn("Kunde inte planera om läxa {}: {}", h.getId(), e.toString());
+                    failed.add(h.getTitle() + " (" + e.getMessage() + ")");
+                }
+                replanStatus.put(student, new ReplanStatus(true, todo.size(), n + failed.size(), List.copyOf(skipped),
+                        List.copyOf(failed), null));
+            }
+        } finally {
+            replanStatus.put(student, new ReplanStatus(false, todo.size(), n + failed.size(), List.copyOf(skipped),
+                    List.copyOf(failed), java.time.Instant.now()));
+        }
+        log.info("Planerade om {} av {} läxor ({} hoppades över)", n, todo.size(), skipped.size());
         return n;
     }
 

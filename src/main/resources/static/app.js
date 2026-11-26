@@ -663,17 +663,39 @@ function groupByDay(items) {
 // ----- Plan -----
 
 views.plan = async (main) => {
+  const replanInfo = h('div');
   const replanBtn = h('button', { class: 'secondary', onclick: async () => {
-    const r = await run(() => api('/api/plan/replan-all', { method: 'POST' }), replanBtn,
-      'Planerar om – tar en halv minut, sidan uppdateras sen');
-    if (r !== undefined) {
-      replanBtn.disabled = true; replanBtn.textContent = '⏳ Planerar om…';
-      setTimeout(() => { if (location.hash === '#plan') route(); }, 30000);
-    }
+    const r = await run(() => api('/api/plan/replan-all', { method: 'POST' }), replanBtn);
+    if (r !== undefined) watchReplan();
   } }, '🔄 Planera om allt');
+  // Visar hur det går (Claude tar en stund per läxa) och vad som hoppades över
+  const showReplan = (st) => {
+    const lines = [];
+    if (st.skipped && st.skipped.length) lines.push(h('div', {}, 'Hoppades över: ', st.skipped.join(' · ')));
+    if (st.failed && st.failed.length) lines.push(h('div', { style: 'color:var(--danger, #c0392b)' }, 'Gick inte: ', st.failed.join(' · ')));
+    replanInfo.replaceChildren(...(lines.length ? [h('div', { class: 'item-meta', style: 'margin:-4px 0 12px' }, ...lines)] : []));
+  };
+  const watchReplan = async () => {
+    replanBtn.disabled = true;
+    for (;;) {
+      let st;
+      try { st = await api('/api/plan/replan-all'); } catch { break; }
+      replanBtn.textContent = st.total ? `⏳ Planerar om ${Math.min(st.done + 1, st.total)} av ${st.total}…` : '⏳ Planerar om…';
+      showReplan(st);
+      if (!st.running) {
+        replanBtn.disabled = false; replanBtn.textContent = '🔄 Planera om allt';
+        toast(st.total ? `Planerade om ${st.done - (st.failed || []).length} av ${st.total}` : 'Inget att planera om');
+        if (location.hash === '#plan') { route(); setTimeout(() => showReplan(st), 50); }
+        return;
+      }
+      await new Promise(res => setTimeout(res, 2000));
+    }
+    replanBtn.disabled = false; replanBtn.textContent = '🔄 Planera om allt';
+  };
   main.append(h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap' },
       h('h1', {}, 'Plan'), replanBtn),
-    h('p', { class: 'sub' }, 'Tre veckor framåt. Bocka av när det är gjort. Dra ⠿ för att flytta ett moment till en annan dag eller ändra ordning (eller ⋯ i mobilen). "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.'));
+    h('p', { class: 'sub' }, 'Tre veckor framåt. Bocka av när det är gjort. Dra ⠿ för att flytta ett moment till en annan dag eller ändra ordning (eller ⋯ i mobilen). "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.'), replanInfo);
+  api('/api/plan/replan-all').then(st => { if (st.running) watchReplan(); else if (st.finishedAt) showReplan(st); }).catch(() => {});
   const [today, upcoming, , st] = await Promise.all([api('/api/plan/today'), api('/api/plan/upcoming?days=20'), loadHomework(true),
     api('/api/student').catch(() => ({}))]);
   const max = st.maxMinutesPerDay || 40;
