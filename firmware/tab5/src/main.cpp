@@ -470,7 +470,49 @@ static void drawButtons() {
 
 static void drawOva();
 
+// ---------------------------------------------------------------- startskärm (tills WiFi och läxorna är på plats)
+static bool booting = true;
+static uint32_t bootStart = 0;
+
+static void drawBoot() {
+  auto& d = *G;
+  d.fillScreen(BG);
+  int cx = W / 2, cy = H / 2 - 40;
+  // snurrande ring av punkter
+  int n = 12, r = 54, step = (millis() / 90) % n;
+  for (int i = 0; i < n; i++) {
+    float a = (float)i / n * 2 * PI - PI / 2;
+    int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r);
+    int k = (i - step + n) % n;   // 0 = ledande punkt
+    uint32_t c = k == 0 ? ACCENT : k < 4 ? 0x3B6FC4 : PANEL;
+    d.fillCircle(x, y, k == 0 ? 11 : 8, c);
+  }
+  d.setTextDatum(middle_center);
+  d.setFont(F_BIG);
+  d.setTextSize(2);
+  d.setTextColor(INK);
+  d.drawString("Pluggis", cx, cy - 170);
+  d.setTextSize(1);
+  d.setFont(F_MID);
+  bool wifi = WiFi.status() == WL_CONNECTED;
+  String line = !wifi ? String("Ansluter till WiFi \"") + PLUGGIS_WIFI_SSID + "\" ..." : String("Hämtar läxor ...");
+  d.setTextColor(MUTED);
+  d.drawString(line, cx, cy + 120);
+  if (!wifi && millis() - bootStart > 30000) {
+    d.setFont(F_SMALL);
+    d.setTextColor(WARN);
+    d.drawString("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet når hit.", cx, cy + 180);
+  } else if (wifi && millis() - bootStart > 30000) {
+    d.setFont(F_SMALL);
+    d.setTextColor(WARN);
+    d.drawString(String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?", cx, cy + 180);
+  }
+  d.setTextDatum(top_left);
+  present();
+}
+
 static void redraw() {
+  if (booting) { drawBoot(); return; }
   if (dirtyAll) {
     G->fillScreen(BG);
     dirtyTop = true;
@@ -2544,6 +2586,7 @@ void setup() {
   M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
 
   lastActivity = millis();
+  bootStart = millis();
   connectWifi();
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
   String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
@@ -2608,6 +2651,26 @@ void loop() {
 
   static wl_status_t lastWifi = WL_IDLE_STATUS;
   if (WiFi.status() != lastWifi) { lastWifi = WiFi.status(); dirtyTop = true; }
+
+  static bool firstOva = false;
+  if (!firstOva && WiFi.status() == WL_CONNECTED) {
+    firstOva = true;
+    if (screen == Screen::OvaList) showScreen(Screen::OvaList, true);
+  }
+  if (booting) {
+    // klar när WiFi är uppe och läxorna hämtats (eller det gått att svara att något är fel)
+    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; dirtyAll = true; }
+    else {
+      static uint32_t lastBootFrame = 0;
+      if (millis() - lastBootFrame > 90) { lastBootFrame = millis(); drawBoot(); }
+      // försök hämta läxorna igen om första försöket misslyckades
+      static uint32_t lastRetry = 0;
+      if (WiFi.status() == WL_CONNECTED && firstOva && !decksLoaded && millis() - lastRetry > 5000) { lastRetry = millis(); showScreen(Screen::OvaList, true); }
+      ws.loop();
+      delay(2);
+      return;
+    }
+  }
 
   // Pekskärmen
   auto t = M5.Touch.getDetail();
@@ -2678,11 +2741,6 @@ void loop() {
     dirtyAll = true;
   }
   examSpeak();
-  static bool firstOva = false;
-  if (!firstOva && WiFi.status() == WL_CONNECTED) {
-    firstOva = true;
-    if (screen == Screen::OvaList) showScreen(Screen::OvaList, true);
-  }
   if (wsUp && !meLoaded) {
     meLoaded = true;
     JsonDocument me;
