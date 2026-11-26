@@ -340,6 +340,8 @@ static lv_obj_t* chip(lv_obj_t* p, const std::string& t, uint32_t bg, uint32_t i
 static int32_t ovaScroll = 0;   // hur långt läxlistan på Öva är rullad (behålls när skärmen byggs om)
 static lv_obj_t* ovaList = nullptr;
 static lv_obj_t *timerBox = nullptr, *timerBar = nullptr, *timerLbl = nullptr;
+static lv_obj_t *wifiPass = nullptr, *wifiSsid = nullptr, *wifiStatusLbl = nullptr, *wifiSpin = nullptr;
+static std::string wifiTyped;   // behålls om skärmen byggs om medan man skriver
 
 /** Tömmer ytan under toppraden inför en ny skärm. */
 static lv_obj_t* fresh(Act background = Act::None) {
@@ -347,6 +349,7 @@ static lv_obj_t* fresh(Act background = Act::None) {
   ovaList = nullptr;
   timerBox = timerBar = timerLbl = nullptr;
   talkBtn = talkLbl = nullptr;
+  wifiPass = wifiSsid = wifiStatusLbl = wifiSpin = nullptr;
   lv_obj_clean(content);
   lv_obj_remove_event_cb(content, onClick);
   if (background != Act::None) {
@@ -450,7 +453,9 @@ void setTop(const Top& t) {
     lv_obj_set_style_bg_opa(tabBtn[i], on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     lv_obj_set_style_text_color(lv_obj_get_child(tabBtn[i], 0), C(on ? INK : MUTED), 0);
   }
-  lv_label_set_text(statusLbl, t.status.empty() ? "" : (std::string(LV_SYMBOL_WARNING) + " " + t.status).c_str());
+  // Alltid en WiFi-ikon (tryck för anslutningen och för att byta nätverk); text bara när något är fel
+  lv_label_set_text(statusLbl, t.status.empty() ? LV_SYMBOL_WIFI : (std::string(LV_SYMBOL_WARNING) + " " + t.status).c_str());
+  lv_obj_set_style_text_color(statusLbl, C(t.status.empty() ? MUTED : WARN), 0);
   int bars = (t.volume + 50) / 51;
   lv_label_set_text(volIcon, t.volume == 0 ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
   lv_obj_set_style_text_color(volIcon, C(t.volume ? INK : MUTED), 0);
@@ -506,7 +511,8 @@ void init() {
 
 // ---------------------------------------------------------------- startskärm
 static lv_obj_t *bootLine, *bootWarn;
-void showBoot(const std::string& line, const std::string& warn) {
+static lv_obj_t* bootWifi = nullptr;
+void showBoot(const std::string& line, const std::string& warn, bool wifiButton) {
   if (!boot) {
     boot = panel(root, BG, 0);
     lv_obj_set_size(boot, W, H);
@@ -522,21 +528,28 @@ void showBoot(const std::string& line, const std::string& warn) {
     lv_obj_t* s = spinner(boot, 80);
     lv_obj_align(s, LV_ALIGN_CENTER, 0, 80);
     bootLine = label(boot, "", F_M, MUTED, LV_TEXT_ALIGN_CENTER);
-    lv_obj_align(bootLine, LV_ALIGN_CENTER, 0, 170);
+    lv_obj_align(bootLine, LV_ALIGN_CENTER, 0, 150);
     bootWarn = label(boot, "", F_S, WARN, LV_TEXT_ALIGN_CENTER);
     lv_label_set_long_mode(bootWarn, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(bootWarn, W - 200);
     lv_obj_align(bootWarn, LV_ALIGN_CENTER, 0, 210);
   }
+  if (wifiButton && !bootWifi) {
+    bootWifi = button(boot, W / 2 - 170, H - 92, 340, 78, "Välj WiFi", Kind::Primary, Act::WifiOpen, 0, LV_SYMBOL_WIFI);
+  } else if (!wifiButton && bootWifi) {
+    lv_obj_delete(bootWifi);
+    bootWifi = nullptr;
+  }
   lv_label_set_text(bootLine, line.c_str());
   lv_label_set_text(bootWarn, warn.c_str());
-  lv_obj_align(bootLine, LV_ALIGN_CENTER, 0, 170);
-  lv_obj_align(bootWarn, LV_ALIGN_CENTER, 0, 230);
+  lv_obj_align(bootLine, LV_ALIGN_CENTER, 0, 150);
+  lv_obj_align(bootWarn, LV_ALIGN_TOP_MID, 0, H / 2 + 180);
 }
 
 void hideBoot() {
   if (boot) lv_obj_delete(boot);
   boot = nullptr;
+  bootWifi = nullptr;
 }
 
 // ---------------------------------------------------------------- meddelande, notis, avstängning
@@ -585,7 +598,7 @@ static void closeInfo(lv_event_t*) {
   if (infoBox) lv_obj_delete_async(infoBox);
   infoBox = nullptr;
 }
-void info(const std::string& title, const std::string& text) {
+void info(const std::string& title, const std::string& text, const std::string& buttonText, Act act) {
   if (infoBox) lv_obj_delete(infoBox);
   infoBox = nullptr;
   if (title.empty() && text.empty()) return;   // tom = stäng
@@ -602,8 +615,12 @@ void info(const std::string& title, const std::string& text) {
   lv_obj_t* t = label(c, title, F_L, YELLOW);
   lv_obj_set_pos(t, 36, 28);
   textIn(c, text, 36, 90, W - 160 - 72, H - 140 - 160, INK, {F_M, F_S});
+  if (!buttonText.empty()) {
+    lv_obj_t* b = button(c, W - 160 - 36 - 300, H - 140 - 100, 300, 76, buttonText, Kind::Primary, act, 0, LV_SYMBOL_WIFI);
+    lv_obj_add_event_cb(b, closeInfo, LV_EVENT_CLICKED, nullptr);
+  }
   lv_obj_t* h = label(c, "Tryck för att stänga", F_S, MUTED);
-  lv_obj_align(h, LV_ALIGN_BOTTOM_MID, 0, -20);
+  lv_obj_align(h, LV_ALIGN_BOTTOM_LEFT, 36, -36);
 }
 
 static lv_obj_t* idle = nullptr;
@@ -626,6 +643,172 @@ void idleWarning(bool show) {
   lv_obj_align(a, LV_ALIGN_CENTER, 0, -28);
   lv_obj_t* b = label(c, "Tryck för att fortsätta", F_M, BG);
   lv_obj_align(b, LV_ALIGN_CENTER, 0, 32);
+}
+
+// ---------------------------------------------------------------- WiFi
+
+std::string wifiPassword() { return wifiPass ? lv_textarea_get_text(wifiPass) : wifiTyped; }
+std::string wifiSsidInput() { return wifiSsid ? lv_textarea_get_text(wifiSsid) : ""; }
+
+void wifiStatus(const std::string& text, Tone tone, bool busy) {
+  if (wifiStatusLbl) {
+    lv_label_set_text(wifiStatusLbl, text.c_str());
+    lv_obj_set_style_text_color(wifiStatusLbl, C(toneHex(tone)), 0);
+  }
+  if (wifiSpin) {
+    if (busy) lv_obj_remove_flag(wifiSpin, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(wifiSpin, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+/** Signalstyrka som 1–4 staplar. */
+static void signalBars(lv_obj_t* p, int rssi, int x, int y) {
+  int n = rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -78 ? 2 : 1;
+  for (int i = 0; i < 4; i++) {
+    lv_obj_t* b = panel(p, i < n ? INK : LINE, 2);
+    lv_obj_set_size(b, 8, 10 + i * 8);
+    lv_obj_set_pos(b, x + i * 13, y + 34 - (10 + i * 8));
+  }
+}
+
+static void onTextareaFocus(lv_event_t* e) {
+  lv_obj_t* kb = (lv_obj_t*)lv_event_get_user_data(e);
+  lv_keyboard_set_textarea(kb, (lv_obj_t*)lv_event_get_target(e));
+}
+
+static void onShowPassword(lv_event_t* e) {
+  lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
+  if (wifiPass) lv_textarea_set_password_mode(wifiPass, !lv_obj_has_state(sw, LV_STATE_CHECKED));
+}
+
+static lv_obj_t* textarea(lv_obj_t* p, int x, int y, int w, const char* placeholder) {
+  lv_obj_t* t = lv_textarea_create(p);
+  lv_obj_set_pos(t, x, y);
+  lv_obj_set_size(t, w, 76);
+  lv_textarea_set_one_line(t, true);
+  lv_textarea_set_placeholder_text(t, placeholder);
+  lv_obj_set_style_text_font(t, F_M, 0);
+  lv_obj_set_style_bg_color(t, C(BG), 0);
+  lv_obj_set_style_text_color(t, C(INK), 0);
+  lv_obj_set_style_border_color(t, C(LINE), 0);
+  lv_obj_set_style_border_color(t, C(YELLOW), LV_STATE_FOCUSED);
+  lv_obj_set_style_border_width(t, 3, 0);
+  lv_obj_set_style_radius(t, 18, 0);
+  lv_obj_set_style_pad_hor(t, 20, 0);
+  lv_obj_set_style_pad_ver(t, 16, 0);
+  lv_obj_set_style_text_color(t, C(MUTED), LV_PART_TEXTAREA_PLACEHOLDER);
+  lv_obj_set_style_bg_color(t, C(YELLOW), LV_PART_CURSOR);
+  return t;
+}
+
+void buildWifi(const Wifi& m) {
+  bool password = !m.ssid.empty() || m.manual;
+  if (wifiPass) wifiTyped = lv_textarea_get_text(wifiPass);
+  if (!password) wifiTyped.clear();
+  lv_obj_t* c = fresh();
+  wifiPass = wifiSsid = wifiStatusLbl = wifiSpin = nullptr;
+
+  button(c, PAD, 14, 200, 72, "Tillbaka", Kind::Ghost, Act::WifiBack, 0, LV_SYMBOL_LEFT);
+  lv_obj_t* t = label(c, password ? (m.manual ? "Dolt nätverk" : "Lösenord för " + m.ssid) : std::string("Välj WiFi"), F_L, INK);
+  lv_label_set_long_mode(t, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(t, W - 2 * PAD - 460, lv_font_get_line_height(F_L));
+  lv_obj_set_pos(t, PAD + 230, 26);
+
+  wifiSpin = spinner(c, 40);
+  lv_obj_set_pos(wifiSpin, W - PAD - 40, 30);
+  wifiStatusLbl = label(c, m.status, F_S, toneHex(m.statusTone), LV_TEXT_ALIGN_RIGHT);
+  lv_label_set_long_mode(wifiStatusLbl, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(wifiStatusLbl, 360, lv_font_get_line_height(F_S));
+  lv_obj_set_pos(wifiStatusLbl, W - PAD - 60 - 360, 36);
+  if (!(m.scanning || m.busy)) lv_obj_add_flag(wifiSpin, LV_OBJ_FLAG_HIDDEN);
+
+  if (!password) {
+    // listan med nätverk, starkast först
+    lv_obj_t* list = box(c);
+    lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(list, LV_DIR_VER);
+    lv_obj_set_pos(list, PAD, 104);
+    lv_obj_set_size(list, W - 2 * PAD - 300 - GAP, CH - 104);
+    lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(list, 10, 0);
+    lv_obj_set_style_pad_bottom(list, GAP, 0);
+    int lw = W - 2 * PAD - 300 - GAP;
+    if (m.nets.empty()) {
+      label(list, m.scanning ? "Söker efter nätverk ..." : "Hittade inga nätverk. Tryck Sök igen.", F_M, MUTED);
+    }
+    for (size_t i = 0; i < m.nets.size(); i++) {
+      auto& n = m.nets[i];
+      lv_obj_t* b = box(list);
+      lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+      lv_obj_set_size(b, lw, 84);
+      lv_obj_set_style_radius(b, 20, 0);
+      lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+      lv_obj_set_style_bg_color(b, C(n.current ? 0x1A4390 : SURFACE), 0);
+      lv_obj_set_style_bg_color(b, C(SURFACE2), LV_STATE_PRESSED);
+      if (n.current) {
+        lv_obj_set_style_border_width(b, 3, 0);
+        lv_obj_set_style_border_color(b, C(YELLOW), 0);
+      }
+      lv_obj_add_style(b, &stTrans, 0);
+      lv_obj_add_event_cb(b, onClick, LV_EVENT_CLICKED, pack(Act::WifiPick, i));
+      signalBars(b, n.rssi, 24, 25);
+      lv_obj_t* nl = oneLine(b, n.ssid, F_MB, INK, lw - 300);
+      lv_obj_set_pos(nl, 92, 22);
+      std::string right = n.current ? std::string(LV_SYMBOL_OK) + " Ansluten" : n.secure ? std::string("Lösenord") : std::string("Öppet");
+      lv_obj_t* rl = label(b, right, F_S, n.current ? GOOD : MUTED);
+      lv_obj_align(rl, LV_ALIGN_RIGHT_MID, -24, 0);
+    }
+    // höger: sök igen och dolt nätverk
+    int bx = W - PAD - 300;
+    button(c, bx, 104, 300, 100, "Sök igen", Kind::Secondary, Act::WifiScan, 0, LV_SYMBOL_REFRESH);
+    button(c, bx, 104 + 100 + GAP, 300, 100, "Dolt nätverk", Kind::Secondary, Act::WifiManual, 0, LV_SYMBOL_EDIT);
+    lv_obj_t* hint = label(c, "Tab5 sparar nätverket och använder det nästa gång. Bara 2,4 GHz.", F_S, MUTED);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, 300);
+    lv_obj_set_pos(hint, bx, 104 + 2 * (100 + GAP) + 10);
+    return;
+  }
+
+  // lösenordsvyn: ruta(or) överst, tangentbordet under
+  lv_obj_t* kb = lv_keyboard_create(c);
+  lv_obj_set_size(kb, W, 360);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_set_style_bg_color(kb, C(SURFACE), 0);
+  lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(kb, 8, 0);
+  lv_obj_set_style_pad_gap(kb, 8, 0);
+  lv_obj_set_style_text_font(kb, F_MB, LV_PART_ITEMS);
+  lv_obj_set_style_text_color(kb, C(INK), LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(kb, C(SURFACE2), LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(kb, C(LINE), (lv_style_selector_t)LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(kb, C(ACCENT2), (lv_style_selector_t)LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_radius(kb, 12, LV_PART_ITEMS);
+  lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+  lv_obj_add_event_cb(kb, onClick, LV_EVENT_READY, pack(Act::WifiConnect, 0));   // ✓ på tangentbordet
+
+  int y = 104, fw = W - 2 * PAD - 300 - GAP;
+  if (m.manual) {
+    wifiSsid = textarea(c, PAD, y, fw, "Nätverkets namn");
+    lv_obj_add_event_cb(wifiSsid, onTextareaFocus, LV_EVENT_FOCUSED, kb);
+    y += 76 + 12;
+  }
+  wifiPass = textarea(c, PAD, y, fw, "Lösenord");
+  lv_textarea_set_password_mode(wifiPass, true);
+  lv_textarea_set_text(wifiPass, wifiTyped.c_str());
+  lv_obj_add_event_cb(wifiPass, onTextareaFocus, LV_EVENT_FOCUSED, kb);
+  lv_keyboard_set_textarea(kb, m.manual ? wifiSsid : wifiPass);
+  lv_obj_add_state(m.manual ? wifiSsid : wifiPass, LV_STATE_FOCUSED);
+
+  // visa lösenordet
+  lv_obj_t* sw = lv_switch_create(c);
+  lv_obj_set_size(sw, 84, 44);
+  lv_obj_set_pos(sw, W - PAD - 300, y + 16);
+  lv_obj_set_style_bg_color(sw, C(SURFACE2), 0);
+  lv_obj_set_style_bg_color(sw, C(ACCENT), (lv_style_selector_t)LV_PART_INDICATOR | LV_STATE_CHECKED);
+  lv_obj_add_event_cb(sw, onShowPassword, LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_t* sl = label(c, "Visa", F_S, MUTED);
+  lv_obj_set_pos(sl, W - PAD - 300 + 98, y + 24);
+  button(c, W - PAD - 130, y, 130, 76, "Anslut", Kind::Primary, Act::WifiConnect, 0, nullptr, 18);
 }
 
 // ---------------------------------------------------------------- Öva

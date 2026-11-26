@@ -41,6 +41,16 @@ static bool booting = true;   // startskärmen visas tills WiFi och läxorna är
 static String wsLast = "inte startad";   // senaste som hänt med WebSocket (visas när man trycker på "Ansluter")
 static uint32_t wsLastAt = 0, wsTries = 0;
 static long practicePlanItem = 0;      // planens moment vars övning pågår (bockas av när övningen är klar)
+// ---- WiFi: nätverket som valts på skärmen sparas i Preferences och går före config.h
+static String wifiSsidSaved();
+static String wifiPassSaved();
+static std::vector<ui::WifiNet> wifiNets;
+static bool wifiScanning = false, wifiManual = false;
+static String wifiPick;                 // nätverket vars lösenord skrivs nu
+static String wifiTrySsid, wifiTryPass; // försöket som pågår (sparas först när det lyckats)
+static uint32_t wifiTryAt = 0;
+static String wifiMsg = "";
+static ui::Tone wifiMsgTone = ui::Tone::Muted;
 static String lastError;   // senaste felet från servern eller ett anrop – visas på startskärmen och i loggen
 
 // ---------------------------------------------------------------- skärmen (LVGL)
@@ -52,7 +62,7 @@ static int touchX = 0, touchY = 0;
 static void redraw();
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
-enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game };
+enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi };
 static Screen screen = Screen::OvaList;   // Tab5 startar på Öva
 enum class Game { None, Explain, Exam, Match, Order };
 static Game game = Game::None;
@@ -1703,20 +1713,21 @@ static int timerLeftNow() {
 
 static void drawBoot() {
   bool wifi = WiFi.status() == WL_CONNECTED;
-  String line = !wifi ? String("Ansluter till WiFi \"") + PLUGGIS_WIFI_SSID + "\" ..." : String("Hämtar läxor ...");
+  String line = !wifi ? String("Ansluter till WiFi \"") + wifiSsidSaved() + "\" ..." : String("Hämtar läxor ...");
   String warn;
   if (millis() - bootStart > 30000) {
-    warn = !wifi ? String("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet är 2,4 GHz. (WiFi-status ") +
+    warn = !wifi ? String("Hittar inget WiFi. Tryck Välj WiFi och välj nätverk (bara 2,4 GHz). (WiFi-status ") +
                        String((int)WiFi.status()) + ", " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB ledigt)"
                  : String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?" +
                        (lastError.length() ? "\n" + lastError : String());
   }
-  ui::showBoot(S(line), S(warn));
+  ui::showBoot(S(line), S(warn), !wifi && millis() - bootStart > 15000);
 }
 
 static void drawTop() {
   ui::Top t;
-  t.tab = screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2 : screen == Screen::Plan ? 3 : 0;
+  t.tab = screen == Screen::Wifi ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
+        : screen == Screen::Plan ? 3 : 0;
   t.status = WiFi.status() != WL_CONNECTED ? "Inget WiFi" : !wsUp ? "Ansluter" : "";
   t.volume = volume;
   t.battery = batteryLevel;
@@ -1930,6 +1941,110 @@ static void drawPlan() {
   ui::buildPlan(m);
 }
 
+// ---------------------------------------------------------------- WiFi-skärmen
+static void drawWifi() {
+  ui::Wifi m;
+  m.scanning = wifiScanning;
+  m.nets = wifiNets;
+  m.busy = wifiTryAt != 0;
+  m.ssid = S(wifiPick);
+  m.manual = wifiManual;
+  m.status = S(wifiMsg);
+  m.statusTone = wifiMsgTone;
+  ui::buildWifi(m);
+}
+
+static void wifiSay(const String& text, ui::Tone tone, bool busy) {
+  wifiMsg = text;
+  wifiMsgTone = tone;
+  if (screen == Screen::Wifi) ui::wifiStatus(S(text), tone, busy);
+}
+
+static void wifiScan() {
+  if (wifiScanning) return;
+  wifiScanning = true;
+  wifiSay("Söker ...", ui::Tone::Muted, true);
+  // Medan WiFi försöker ansluta får man inte söka: stoppa försöket (det sparade nätet tas upp igen om 20 s)
+  if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); delay(50); }
+  dirtyOva = true;
+  int r = WiFi.scanNetworks(true);   // i bakgrunden; resultatet hämtas i pumpWifi()
+  if (r == WIFI_SCAN_FAILED) {
+    wifiScanning = false;
+    wifiSay("Kunde inte söka efter nätverk", ui::Tone::Bad, false);
+  }
+}
+
+static void openWifi() {
+  wifiPick = "";
+  wifiManual = false;
+  wifiMsg = WiFi.status() == WL_CONNECTED ? "Ansluten till " + WiFi.SSID() : String("Inte ansluten");
+  wifiMsgTone = WiFi.status() == WL_CONNECTED ? ui::Tone::Good : ui::Tone::Warn;
+  showScreen(Screen::Wifi);
+  dirtyAll = true;
+  wifiScan();
+}
+
+/** Försök med ett nytt nätverk. Sparas först när det lyckats; annars tillbaka till det gamla. */
+static void wifiConnect(const String& ssid, const String& pass) {
+  Serial.printf("[pluggis] ansluter till WiFi \"%s\"\n", ssid.c_str());
+  wifiTrySsid = ssid;
+  wifiTryPass = pass;
+  wifiTryAt = millis();
+  wifiSay("Ansluter till " + ssid + " ...", ui::Tone::Muted, true);
+  WiFi.disconnect();
+  delay(100);
+  WiFi.begin(ssid.c_str(), pass.c_str());
+}
+
+static void pumpWifi() {
+  if (wifiScanning) {
+    int n = WiFi.scanComplete();
+    if (n == WIFI_SCAN_FAILED) {
+      wifiScanning = false;
+      wifiSay("Kunde inte söka efter nätverk", ui::Tone::Bad, false);
+      dirtyOva = screen == Screen::Wifi && !wifiPick.length() && !wifiManual;
+    } else if (n >= 0) {
+      wifiNets.clear();
+      String cur = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String();
+      for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        if (!ssid.length()) continue;   // dolda nätverk syns inte (använd "Dolt nätverk")
+        auto dup = std::find_if(wifiNets.begin(), wifiNets.end(), [&](const ui::WifiNet& w) { return w.ssid == ssid.c_str(); });
+        if (dup != wifiNets.end()) { dup->rssi = std::max(dup->rssi, (int)WiFi.RSSI(i)); continue; }
+        wifiNets.push_back({S(ssid), (int)WiFi.RSSI(i), WiFi.encryptionType(i) != WIFI_AUTH_OPEN, ssid == cur});
+      }
+      std::sort(wifiNets.begin(), wifiNets.end(), [](const ui::WifiNet& a, const ui::WifiNet& b) {
+        return a.current != b.current ? a.current : a.rssi > b.rssi;
+      });
+      WiFi.scanDelete();
+      wifiScanning = false;
+      Serial.printf("[pluggis] hittade %d WiFi-nätverk\n", (int)wifiNets.size());
+      wifiSay(wifiNets.empty() ? String("Hittade inga nätverk") : String(wifiNets.size()) + " nätverk",
+              wifiNets.empty() ? ui::Tone::Warn : ui::Tone::Muted, false);
+      // bygg om listan bara om den syns (inte mitt i ett lösenord)
+      if (screen == Screen::Wifi && !wifiPick.length() && !wifiManual) dirtyOva = true;
+    }
+  }
+  if (!wifiTryAt) return;
+  if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == wifiTrySsid) {
+    prefs.putString("wifiSsid", wifiTrySsid);
+    prefs.putString("wifiPass", wifiTryPass);
+    Serial.printf("[pluggis] ansluten till \"%s\" – sparat\n", wifiTrySsid.c_str());
+    ui::toast("Ansluten till " + std::string(wifiTrySsid.c_str()));
+    wifiTryAt = 0;
+    wifiPick = "";
+    wifiManual = false;
+    dirtyTop = true;
+    showScreen(Screen::OvaList, true);   // hämta läxorna på nya nätet
+  } else if (millis() - wifiTryAt > 20000) {
+    Serial.printf("[pluggis] kom inte in på \"%s\"\n", wifiTrySsid.c_str());
+    wifiTryAt = 0;
+    wifiSay("Kom inte in på " + wifiTrySsid + ". Fel lösenord?", ui::Tone::Bad, false);
+    WiFi.disconnect();
+    WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());   // tillbaka till det sparade nätet
+  }
+}
+
 static void drawScreen() {
   switch (screen) {
     case Screen::Coach: drawCoach(); break;
@@ -1939,6 +2054,7 @@ static void drawScreen() {
     case Screen::HwList: drawHwList(); break;
     case Screen::HwDetail: drawHwDetail(); break;
     case Screen::Plan: drawPlan(); break;
+    case Screen::Wifi: drawWifi(); break;
   }
 }
 
@@ -2027,11 +2143,33 @@ static void onAction(const ui::Action& a) {
     case ui::Act::VolDown: setVolume(volume - 32); break;
     case ui::Act::VolUp: setVolume(volume + 32); break;
     case ui::Act::Background: onBackground(); break;
+    case ui::Act::WifiOpen: openWifi(); break;
+    case ui::Act::WifiScan: wifiScan(); break;
+    case ui::Act::WifiPick:
+      if (a.a >= (int)wifiNets.size()) break;
+      if (!wifiNets[a.a].secure) { wifiConnect(String(wifiNets[a.a].ssid.c_str()), ""); break; }
+      wifiPick = wifiNets[a.a].ssid.c_str();
+      wifiManual = false;
+      wifiMsg = "";
+      dirtyOva = true;
+      break;
+    case ui::Act::WifiManual: wifiManual = true; wifiPick = ""; wifiMsg = ""; dirtyOva = true; break;
+    case ui::Act::WifiConnect: {
+      String ssid = wifiManual ? String(ui::wifiSsidInput().c_str()) : wifiPick;
+      ssid.trim();
+      if (!ssid.length()) { ui::wifiStatus("Skriv nätverkets namn", ui::Tone::Warn, false); break; }
+      wifiConnect(ssid, String(ui::wifiPassword().c_str()));
+      break;
+    }
+    case ui::Act::WifiBack:
+      if (wifiPick.length() || wifiManual) { wifiPick = ""; wifiManual = false; wifiMsg = ""; dirtyOva = true; }
+      else showScreen(Screen::OvaList, true);
+      break;
     case ui::Act::Status: {
       bool wifi = WiFi.status() == WL_CONNECTED;
-      String t = wifi ? "WiFi: ansluten till \"" + String(PLUGGIS_WIFI_SSID) + "\" (" + WiFi.localIP().toString() + ", signal " +
+      String t = wifi ? "WiFi: ansluten till \"" + WiFi.SSID() + "\" (" + WiFi.localIP().toString() + ", signal " +
                             String(WiFi.RSSI()) + " dBm)"
-                      : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + String(PLUGGIS_WIFI_SSID) + "\"";
+                      : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + wifiSsidSaved() + "\"";
       t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " som \"" + PLUGGIS_DEVICE_ID + "\"";
       t += "\nChatten (WebSocket): " + String(wsUp ? "uppe" : "nere") + " – " + wsLast +
            (wsLastAt ? " för " + String((millis() - wsLastAt) / 1000) + " s sedan" : String()) + ", " + String(wsTries) + " försök";
@@ -2040,7 +2178,7 @@ static void onAction(const ui::Action& a) {
       t += "\nLedigt minne: " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB internt, " +
            String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024)) + " kB PSRAM";
       Serial.printf("[pluggis] status:\n%s\n", t.c_str());
-      ui::info("Anslutning", S(t));
+      ui::info("Anslutning", S(t), "Byt WiFi", ui::Act::WifiOpen);
       break;
     }
     case ui::Act::TalkPress: startRecording(); break;
@@ -2274,6 +2412,14 @@ static void setupLvgl() {
 }
 
 // ---------------------------------------------------------------- start
+static String wifiSsidSaved() {
+  String s = prefs.getString("wifiSsid", "");
+  return s.length() ? s : String(PLUGGIS_WIFI_SSID);
+}
+static String wifiPassSaved() {
+  return prefs.getString("wifiSsid", "").length() ? prefs.getString("wifiPass", "") : String(PLUGGIS_WIFI_PASS);
+}
+
 static void connectWifi() {
 #if defined(BOARD_SDIO_ESP_HOSTED_CLK)
   WiFi.setPins(BOARD_SDIO_ESP_HOSTED_CLK, BOARD_SDIO_ESP_HOSTED_CMD, BOARD_SDIO_ESP_HOSTED_D0,
@@ -2285,7 +2431,7 @@ static void connectWifi() {
 #endif
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(PLUGGIS_WIFI_SSID, PLUGGIS_WIFI_PASS);
+  WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());
 }
 
 void setup() {
@@ -2377,13 +2523,14 @@ void loop() {
 
   // Kommer WiFi inte upp: börja om anslutningen var 20:e sekund
   static uint32_t wifiTry = millis();
-  if (WiFi.status() == WL_CONNECTED) wifiTry = millis();
+  if (WiFi.status() == WL_CONNECTED || wifiTryAt || wifiScanning) wifiTry = millis();
   else if (millis() - wifiTry > 20000) {
     wifiTry = millis();
     Serial.println("[pluggis] inget WiFi – försöker igen");
     WiFi.disconnect();
-    WiFi.begin(PLUGGIS_WIFI_SSID, PLUGGIS_WIFI_PASS);
+    WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());
   }
+  pumpWifi();
 
   static wl_status_t lastWifi = WL_IDLE_STATUS;
   if (WiFi.status() != lastWifi) {
@@ -2408,6 +2555,9 @@ void loop() {
       static uint32_t lastRetry = 0;
       if (WiFi.status() == WL_CONNECTED && firstOva && !decksLoaded && millis() - lastRetry > 5000) { lastRetry = millis(); showScreen(Screen::OvaList, true); }
       lv_timer_handler();
+      ui::Action ba;
+      while (ui::poll(ba))
+        if (ba.act == ui::Act::WifiOpen) { booting = false; ui::hideBoot(); openWifi(); }
       delay(2);
       return;
     }

@@ -23,6 +23,14 @@ med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med 
 
 Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hello). Inte än: kameran (fota med telefonen) och Dual Button.
 
+## Byta WiFi på skärmen
+
+Tryck på WiFi-ikonen uppe till höger → **Byt WiFi** (eller **Välj WiFi** på startskärmen om den inte kommer upp
+på nätet). Tab5 söker efter nätverk; tryck på ett och skriv lösenordet på skärmens tangentbord (**Visa** visar det
+du skrivit). **Dolt nätverk** för ett nät som inte syns i listan. Nätverket sparas i Tab5 först när anslutningen
+lyckats och går sedan före `PLUGGIS_WIFI_SSID`/`PLUGGIS_WIFI_PASS` i `config.h`. Blir det fel lösenord går Tab5
+tillbaka till det nät den hade. Bara 2,4 GHz.
+
 ## Se skärmarna utan Tab5 (simulator)
 
 `./sim/run.sh` bygger gränssnittet för datorn och ritar alla skärmar med testdata till `sim/out/*.png`

@@ -33,7 +33,14 @@ enum class Act : uint16_t {
   Tab,            // a = 0 Öva, 1 Chat, 2 Läxor, 3 Plan
   VolDown, VolUp,
   Background,     // tryck på en tom yta (t.ex. "Tryck för att gå tillbaka")
-  Status,         // tryck på "Ansluter"/"Inget WiFi" uppe till höger: visa varför
+  Status,         // tryck på WiFi-ikonen/"Ansluter" uppe till höger: visa anslutningen
+  // WiFi
+  WifiOpen,       // öppna WiFi-skärmen (från statusrutan eller startskärmen)
+  WifiScan,       // sök efter nätverk igen
+  WifiPick,       // a = nätverk i listan
+  WifiManual,     // dolt nätverk: skriv namnet själv
+  WifiConnect,    // anslut med lösenordet i rutan
+  WifiBack,       // tillbaka (från lösenordet till listan, från listan till Öva)
   TalkPress,      // håll in och prata/svara (släppet läses direkt från pekskärmen)
   // Öva
   OvaSelect,      // a = rad i läxlistan
@@ -77,7 +84,7 @@ struct Top {
 void setTop(const Top& t);
 
 // ---------------------------------------------------------------- startskärm
-void showBoot(const std::string& line, const std::string& warn);
+void showBoot(const std::string& line, const std::string& warn, bool wifiButton = false);
 void hideBoot();
 
 // ---------------------------------------------------------------- gemensamt
@@ -86,11 +93,35 @@ void buildMessage(const std::string& text, bool busy, const std::string& hint = 
 /** Liten notis uppe till höger som glider in och försvinner ("+5"). */
 void toast(const std::string& text);
 /** En ruta med text över allt annat (t.ex. anslutningsstatus); stängs med ett tryck (eller info("", "")). */
-void info(const std::string& title, const std::string& text);
+void info(const std::string& title, const std::string& text, const std::string& button = "", Act act = Act::None);
 /** "Stänger av om 30 s" över allt annat. */
 void idleWarning(bool show);
 /** Håll-in-knappen på skärmen just nu: byt text och färg utan att bygga om skärmen (trycket pågår). */
 void setTalking(bool on);
+
+// ---------------------------------------------------------------- WiFi
+struct WifiNet {
+  std::string ssid;
+  int rssi = -100;           // signal i dBm
+  bool secure = true;        // kräver lösenord
+  bool current = false;      // det nätverk Tab5 är ansluten till nu
+};
+struct Wifi {
+  bool scanning = false;
+  std::vector<WifiNet> nets;
+  std::string status;        // "Ansluten till femtifem", "Ansluter …", "Fel lösenord?"
+  Tone statusTone = Tone::Muted;
+  bool busy = false;         // ansluter just nu
+  // lösenordsvyn (visas när ssid inte är tomt, eller manual)
+  std::string ssid;
+  bool manual = false;       // dolt nätverk: namnet skrivs i en egen ruta
+};
+void buildWifi(const Wifi& m);
+/** Det eleven skrivit i lösenordsrutan (och namnrutan för ett dolt nätverk). */
+std::string wifiPassword();
+std::string wifiSsidInput();
+/** Byter statusraden på WiFi-skärmen utan att bygga om (tangentbordet och texten ligger kvar). */
+void wifiStatus(const std::string& text, Tone tone, bool busy);
 
 // ---------------------------------------------------------------- Öva
 struct OvaRow {

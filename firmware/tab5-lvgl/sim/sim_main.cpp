@@ -257,6 +257,24 @@ int main() {
   ui::info("", "");
   top.status = "";
   ui::setTop(top);
+  // WiFi
+  ui::Wifi wf;
+  wf.status = "6 nätverk";
+  wf.nets = {{"femtifem", -48, true, true}, {"Telia-7C21", -63, true, false}, {"Granne_2.4G", -71, true, false},
+             {"Gäst", -74, false, false}, {"TP-Link_9A", -82, true, false}, {"Skrivare-HP", -88, true, false}};
+  top.tab = -1;
+  ui::setTop(top);
+  ui::buildWifi(wf);
+  save("20-wifi");
+  wf.ssid = "Telia-7C21";
+  wf.status = "";
+  ui::buildWifi(wf);
+  save("21-wifi-losenord");
+  ui::showBoot("Ansluter till WiFi \"femtifem\" ...", "Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet är 2,4 GHz. (WiFi-status 6, 214 kB ledigt)", true);
+  save("22-start-utan-wifi");
+  ui::hideBoot();
+  top.tab = 1;
+  ui::setTop(top);
   ui::toast("+5 poäng");
   run(500);
   save("17-notis");
