@@ -423,6 +423,11 @@ Grundtanken är att **belöna ansträngning mer än rätt svar** – det är van
 
 Fliken **Kostnad** i admin visar vad Claude kostar: denna månad, idag, staplar för de senaste 30 dagarna, per funktion (coach, planering, foto, flashkort …) och per elev. Varje anrop sparas per dag med tokens och kostnad enligt API-prislistan (`pluggis.costs` i `application.yml`, växelkurs med `PLUGGIS_USD_SEK`, standard 10 kr/USD). Anrop som gått via abonnemanget (Claude Code) kostar inget extra och visas separat som "sparat". Fliken visar också hur mycket av Azures 500 000 gratis tecken per månad som gått åt. Siffrorna är en uppskattning – den exakta fakturan finns i Claude Console.
 
+## Tack
+
+Coachens ADHD-anpassade svarsform bygger på reglerna i [i-have-adhd](https://github.com/ayghri/i-have-adhd)
+(MIT), omskrivna för en röstcoach på svenska.
+
 ## Säkerhet och integritet
 
 Det här hanterar en minderårigs röst, bilder och skolarbete.
