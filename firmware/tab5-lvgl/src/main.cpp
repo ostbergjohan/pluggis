@@ -1538,7 +1538,8 @@ static void drawBoot() {
   String line = !wifi ? String("Ansluter till WiFi \"") + PLUGGIS_WIFI_SSID + "\" ..." : String("Hämtar läxor ...");
   String warn;
   if (millis() - bootStart > 30000) {
-    warn = !wifi ? String("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet når hit.")
+    warn = !wifi ? String("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet är 2,4 GHz. (WiFi-status ") +
+                       String((int)WiFi.status()) + ", " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB ledigt)"
                  : String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?";
   }
   ui::showBoot(S(line), S(warn));
@@ -2095,7 +2096,6 @@ void setup() {
   M5.Display.setBrightness(200);
   prefs.begin("pluggis", false);
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
-  connectWifi();   // först, innan skärmen tar minne
   setupLvgl();
   fetchLock = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
@@ -2112,6 +2112,8 @@ void setup() {
   M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
 
   lastActivity = millis();
+  bootStart = millis();
+  connectWifi();   // sist, som i den gamla firmware: WiFi-chippet (ESP32-C6) behöver hinna starta efter M5.begin()
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
   String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
   ws.begin(PLUGGIS_HOST, PLUGGIS_PORT, url.c_str());
@@ -2170,6 +2172,16 @@ void loop() {
   touchDown = t.isPressed();
   if (touchDown) { touchX = t.x; touchY = t.y; }
   if (swallowTouch && !touchDown) swallowTouch = false;
+
+  // Kommer WiFi inte upp: börja om anslutningen var 20:e sekund
+  static uint32_t wifiTry = millis();
+  if (WiFi.status() == WL_CONNECTED) wifiTry = millis();
+  else if (millis() - wifiTry > 20000) {
+    wifiTry = millis();
+    Serial.println("[pluggis] inget WiFi – försöker igen");
+    WiFi.disconnect();
+    WiFi.begin(PLUGGIS_WIFI_SSID, PLUGGIS_WIFI_PASS);
+  }
 
   static wl_status_t lastWifi = WL_IDLE_STATUS;
   if (WiFi.status() != lastWifi) {
