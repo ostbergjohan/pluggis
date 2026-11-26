@@ -42,7 +42,7 @@ static constexpr uint32_t PANEL = 0x0D2C63;
 static constexpr uint32_t INK = 0xF2F5F8;
 static constexpr uint32_t MUTED = 0x8FA1B3;
 static constexpr uint32_t ACCENT = 0x2F62C8;   // knappar och vald flik
-static constexpr uint32_t YELLOW = 0xFEC434;   // loggans gula: framsteg, markeringar
+static constexpr uint32_t PL_YELLOW = 0xFEC434;   // loggans gula: framsteg, markeringar
 static constexpr uint32_t GOOD = 0x34C77B;
 static constexpr uint32_t BAD = 0xF0605D;
 static constexpr uint32_t WARN = 0xF5B544;
@@ -491,7 +491,7 @@ static void drawBoot() {
     float a = (float)i / n * 2 * PI - PI / 2;
     int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r);
     int k = (i - step + n) % n;   // 0 = ledande punkt
-    uint32_t c = k == 0 ? YELLOW : k < 4 ? 0xB8962E : PANEL;
+    uint32_t c = k == 0 ? PL_YELLOW : k < 4 ? 0xB8962E : PANEL;
     d.fillCircle(x, y, k == 0 ? 8 : 6, c);
   }
   d.setTextDatum(middle_center);
@@ -1112,7 +1112,7 @@ static void drawOva() {
       listRow[k] = r;
       bool sel = listTop + k == makeIdx;
       d.fillRoundRect(r.x, r.y, r.w, r.h, 14, sel ? 0x1A4390 : PANEL);
-      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, YELLOW); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, YELLOW); }
+      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, PL_YELLOW); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, PL_YELLOW); }
       d.fillRoundRect(r.x, r.y, 10, r.h, 5, subjectColor(m.subject, m.title));
       String when = !m.due.length() ? String() : m.startNow ? "börja nu" : days < 0 ? "försenad" : dateLabel(m.due);
       d.setFont(F_SMALL);
