@@ -98,6 +98,13 @@ Nya versioner hämtas automatiskt när appen öppnas.
 Över vanlig `http` blir det en genväg som öppnas i ett eget Chrome-fönster; full "installerad app" kräver https
 (t.ex. via Tailscale med HTTPS). Allt fungerar likadant.
 
+### Ikon och färger
+
+Loggan och figuren (original och utskurna versioner i [`docs/brand/`](docs/brand/)) används som appikon,
+favicon, figur bredvid Pluggis svar i chatten, startskärm och Chat-flik på Tab5. Admin-ikonen har en gul ring
+så att den skiljs från elevens. Färgerna är mörkblått `#022153` och gult `#FEC434`.
+Har du redan lagt till appen på hemskärmen: ta bort den och lägg till igen för att få den nya ikonen.
+
 ## Kom igång
 
 **Nycklar, tokens och konton som behövs** (måste/valfritt, var du får dem, vad de kostar): se [docs/konfiguration.md](docs/konfiguration.md).
