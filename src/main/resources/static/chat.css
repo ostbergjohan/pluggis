@@ -25,7 +25,7 @@ button { font: inherit; color: inherit; }
   padding: calc(10px + var(--safe-t)) 14px 10px; background: var(--panel); border-bottom: 1px solid var(--line);
 }
 .title { font-weight: 700; font-size: 19px; display: flex; gap: 6px; align-items: center; }
-.logo { width: 30px; height: 30px; object-fit: contain; }
+.logo { width: 34px; height: 34px; object-fit: contain; border-radius: 7px; }
 /* Pluggis figur bredvid sina svar (bara på det första i en rad av svar) */
 .msg.bot { position: relative; margin-left: 40px; }
 .msg.bot::before { content: ''; position: absolute; left: -40px; bottom: -2px; width: 32px; height: 32px;
