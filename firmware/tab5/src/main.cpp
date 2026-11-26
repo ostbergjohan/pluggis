@@ -14,6 +14,7 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <deque>
+#include "brand.h"   // loggan och figuren (PNG)
 #include <vector>
 #include <algorithm>
 #include <time.h>
@@ -36,11 +37,12 @@ static long pendingHw = 0;
 static bool asleep = false, idleWarned = false;
 
 // ---------------------------------------------------------------- utseende
-static constexpr uint32_t BG = 0x101820;      // mörkblå bakgrund
-static constexpr uint32_t PANEL = 0x1C2733;
+static constexpr uint32_t BG = 0x021A44;      // mörkblått som loggan
+static constexpr uint32_t PANEL = 0x0D2C63;
 static constexpr uint32_t INK = 0xF2F5F8;
 static constexpr uint32_t MUTED = 0x8FA1B3;
-static constexpr uint32_t ACCENT = 0x4F8EF7;   // Pluggis-blå
+static constexpr uint32_t ACCENT = 0x2F62C8;   // knappar och vald flik
+static constexpr uint32_t YELLOW = 0xFEC434;   // loggans gula: framsteg, markeringar
 static constexpr uint32_t GOOD = 0x34C77B;
 static constexpr uint32_t BAD = 0xF0605D;
 static constexpr uint32_t WARN = 0xF5B544;
@@ -366,13 +368,14 @@ static bool dirtyDots = false;
 static void drawDots() {
   auto& d = *G;
   int y = mainTop() + 8 + (heardText.length() ? 64 : 0) + 20;
-  d.fillRect(48, y, 700, 56, BG);
+  int dx = 48 + AVATAR_PNG_W + 24;
+  d.fillRect(dx, y, 700, 56, BG);
   d.setFont(F_BIG);
   d.setTextColor(ACCENT);
   int dots = ((millis() - thinkingSince) / 400) % 4;
   String t = "Pluggis tänker";
   for (int i = 0; i < dots; i++) t += " .";
-  d.drawString(t, 48, y);
+  d.drawString(t, dx, y);
 }
 
 static void drawMain() {
@@ -406,10 +409,13 @@ static void drawMain() {
       drawWrapped("Du: " + heardText, x, y, w, 70, MUTED, F_SMALL);
       y += 64;
     }
+    // Pluggis figur till vänster om svaret
+    d.drawPng(AVATAR_PNG, AVATAR_PNG_LEN, x, y + 4);
+    int tx = x + AVATAR_PNG_W + 24;
     if (thinking) {
       drawDots();
     } else {
-      drawWrapped(sayText, x, y, w, bottom - y, INK, F_BIG);
+      drawWrapped(sayText, tx, y, x + w - tx, bottom - y, INK, F_BIG);
     }
   }
   if (pointsBanner.length() && millis() < pointsBannerUntil) {
@@ -477,35 +483,31 @@ static uint32_t bootStart = 0;
 static void drawBoot() {
   auto& d = *G;
   d.fillScreen(BG);
-  int cx = W / 2, cy = H / 2 - 40;
+  int cx = W / 2, cy = H / 2 + 120;
+  d.drawPng(LOGO_PNG, LOGO_PNG_LEN, cx - LOGO_PNG_W / 2, 36);
   // snurrande ring av punkter
-  int n = 12, r = 54, step = (millis() / 90) % n;
+  int n = 12, r = 34, step = (millis() / 90) % n;
   for (int i = 0; i < n; i++) {
     float a = (float)i / n * 2 * PI - PI / 2;
     int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r);
     int k = (i - step + n) % n;   // 0 = ledande punkt
-    uint32_t c = k == 0 ? ACCENT : k < 4 ? 0x3B6FC4 : PANEL;
-    d.fillCircle(x, y, k == 0 ? 11 : 8, c);
+    uint32_t c = k == 0 ? YELLOW : k < 4 ? 0xB8962E : PANEL;
+    d.fillCircle(x, y, k == 0 ? 8 : 6, c);
   }
   d.setTextDatum(middle_center);
-  d.setFont(F_BIG);
-  d.setTextSize(2);
-  d.setTextColor(INK);
-  d.drawString("Pluggis", cx, cy - 170);
-  d.setTextSize(1);
   d.setFont(F_MID);
   bool wifi = WiFi.status() == WL_CONNECTED;
   String line = !wifi ? String("Ansluter till WiFi \"") + PLUGGIS_WIFI_SSID + "\" ..." : String("Hämtar läxor ...");
   d.setTextColor(MUTED);
-  d.drawString(line, cx, cy + 120);
+  d.drawString(line, cx, cy + 70);
   if (!wifi && millis() - bootStart > 30000) {
     d.setFont(F_SMALL);
     d.setTextColor(WARN);
-    d.drawString("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet når hit.", cx, cy + 180);
+    d.drawString("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet når hit.", cx, cy + 115);
   } else if (wifi && millis() - bootStart > 30000) {
     d.setFont(F_SMALL);
     d.setTextColor(WARN);
-    d.drawString(String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?", cx, cy + 180);
+    d.drawString(String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?", cx, cy + 115);
   }
   d.setTextDatum(top_left);
   present();
@@ -1109,8 +1111,8 @@ static void drawOva() {
       Button r = {20, y, LIST_W, 64, "", PANEL};
       listRow[k] = r;
       bool sel = listTop + k == makeIdx;
-      d.fillRoundRect(r.x, r.y, r.w, r.h, 14, sel ? 0x24364B : PANEL);
-      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, ACCENT); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, ACCENT); }
+      d.fillRoundRect(r.x, r.y, r.w, r.h, 14, sel ? 0x1A4390 : PANEL);
+      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, YELLOW); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, YELLOW); }
       d.fillRoundRect(r.x, r.y, 10, r.h, 5, subjectColor(m.subject, m.title));
       String when = !m.due.length() ? String() : m.startNow ? "börja nu" : days < 0 ? "försenad" : dateLabel(m.due);
       d.setFont(F_SMALL);
