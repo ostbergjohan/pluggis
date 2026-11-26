@@ -30,6 +30,8 @@ import java.util.function.Consumer;
 @Component
 public class ClaudeClient {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ClaudeClient.class);
+
     private final RestClient rest;
     private final ObjectMapper mapper;
     private final MeterRegistry meters;
@@ -108,13 +110,18 @@ public class ClaudeClient {
     public ClaudeResponse create(ObjectNode request, String purpose) {
         Timer.Sample sample = Timer.start(meters);
         String outcome = "error";
+        long start = System.nanoTime();
+        boolean[] subscription = {false};
         try {
-            boolean[] subscription = {false};
             ClaudeResponse response = viaClaudeCode(purpose) ? runClaudeCode(request, purpose, subscription) : api(request);
             outcome = "ok";
             recordUsage(response, purpose);
             saveUsage(request, response, purpose, subscription[0]);
+            logCall(request, response, purpose, subscription[0] ? "abonnemang" : "api", start);
             return response;
+        } catch (RuntimeException e) {
+            logFailure(request, purpose, start, e);
+            throw e;
         } finally {
             sample.stop(meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome));
         }
@@ -174,11 +181,40 @@ public class ClaudeClient {
             outcome = "ok";
             recordUsage(response, purpose);
             saveUsage(request, response, purpose, false);
+            logCall(request, response, purpose, "api, strömmat", start);
             return response;
+        } catch (RuntimeException e) {
+            logFailure(request, purpose, start, e);
+            throw e;
         } finally {
             meters.timer("pluggis.claude.request", "purpose", purpose, "outcome", outcome)
                     .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
+    }
+
+    /** En rad per anrop: jobb, modell, väg, tid och tokens – aldrig innehållet. */
+    private void logCall(ObjectNode request, ClaudeResponse response, String purpose, String via, long start) {
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        var u = response == null ? null : response.usage();
+        String stop = response == null ? null : response.stopReason();
+        String msg = "Claude {} ({}, {}): {} ms, {} in / {} ut tokens{}, stopp {}";
+        Object[] args = {purpose, request.path("model").asText("?"), via, ms,
+                u == null ? "?" : u.inputTokens() + u.cacheReadInputTokens() + u.cacheCreationInputTokens(),
+                u == null ? "?" : u.outputTokens(),
+                u == null || u.cacheReadInputTokens() == 0 ? "" : " (" + u.cacheReadInputTokens() + " från cache)",
+                stop};
+        if ("max_tokens".equals(stop)) {
+            log.warn(msg + " – svaret klipptes av, höj max_tokens", args);
+        } else {
+            log.info(msg, args);
+        }
+    }
+
+    private void logFailure(ObjectNode request, String purpose, long start, RuntimeException e) {
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        String err = String.valueOf(e.getMessage());
+        log.warn("Claude {} ({}) misslyckades efter {} ms: {}", purpose, request.path("model").asText("?"), ms,
+                err.length() > 300 ? err.substring(0, 300) + "…" : err);
     }
 
     private void recordUsage(ClaudeResponse response, String purpose) {

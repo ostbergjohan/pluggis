@@ -148,7 +148,10 @@ public class PlanningService {
                 todo.add(h);
             }
         }
+        log.info("Planera om allt, elev {}: {} läxor att planera om, {} hoppas över", student, todo.size(), skipped.size());
+        skipped.forEach(x -> log.debug("Hoppar över: {}", x));
         List<String> failed = new ArrayList<>();
+        long allStart = System.nanoTime();
         replanStatus.put(student, new ReplanStatus(true, todo.size(), 0, List.copyOf(skipped), List.of(), null));
         int n = 0;
         try {
@@ -167,7 +170,8 @@ public class PlanningService {
             replanStatus.put(student, new ReplanStatus(false, todo.size(), n + failed.size(), List.copyOf(skipped),
                     List.copyOf(failed), java.time.Instant.now()));
         }
-        log.info("Planerade om {} av {} läxor ({} hoppades över)", n, todo.size(), skipped.size());
+        log.info("Planera om allt, elev {}: klart på {} s – {} gjorda, {} misslyckade, {} hoppades över",
+                student, (System.nanoTime() - allStart) / 1_000_000_000, n, failed.size(), skipped.size());
         return n;
     }
 
@@ -186,17 +190,29 @@ public class PlanningService {
                 .filter(PlanItem::isDone).toList();
         List<LocalDate> days = PlanDays.available(today, h.getDueDate(), studyDays());
 
+        long start = System.nanoTime();
+        log.info("Planerar läxa {} ({}, {} till {}): {} pluggdagar, {} moment redan klara, max {} min/dag",
+                homeworkId, h.getKind(), h.getKind() == Homework.Kind.TEST ? "prov" : "inlämning", h.getDueDate(),
+                days.size(), done.size(), maxMinutesPerDay());
+        if (days.isEmpty()) {
+            log.warn("Läxa {}: inga pluggdagar kvar före {} – kolla pluggdagarna under Planering", homeworkId, h.getDueDate());
+        }
         List<PlanDays.Draft> drafts;
         String note = null;
+        String source = "Claude";
         try {
             GeneratedPlan generated = askClaude(h, days, done);
             drafts = validate(generated, days);
             note = generated.note();
+            if (drafts.isEmpty()) {
+                log.warn("Läxa {}: Claudes plan hade inga giltiga moment (fel datum eller tom) – använder reservplan", homeworkId);
+            }
         } catch (RuntimeException e) {
             log.warn("Kunde inte göra plan med Claude för läxa {}: {} – använder reservplan", homeworkId, e.toString());
             drafts = List.of();
         }
         if (drafts.isEmpty()) {
+            source = "reservplan";
             drafts = PlanDays.fallback(h, remainingSteps(h, done), days, h.getDeckId() != null);
         }
 
@@ -217,6 +233,11 @@ public class PlanningService {
                 .map(d -> new PlanItem(homeworkId, d.date(), d.task(), d.minutes(), d.type()))
                 .toList());
         changed();
+        log.info("Läxa {} planerad ({}): {} moment, {} min, {} dagar, på {} ms{}", homeworkId, source, saved.size(),
+                saved.stream().mapToInt(PlanItem::getMinutes).sum(),
+                saved.stream().map(PlanItem::getPlanDate).distinct().count(),
+                (System.nanoTime() - start) / 1_000_000,
+                fitted.overflowMinutes() > 0 ? ", " + fitted.overflowMinutes() + " min fick inte plats" : "");
         return new PlanResult(h, saved, note);
     }
 
