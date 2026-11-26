@@ -90,6 +90,7 @@ Bra att veta:
 | `PLUGGIS_COACH_MODEL` | `claude-haiku-5-5` | Modell för röstcoachen |
 | `PLUGGIS_COACH_EFFORT` / `PLUGGIS_COACH_THINKING` | `low` / `disabled` | Snabbhet för coachen |
 | `PLUGGIS_VISION_MODEL`, `PLUGGIS_PLANNING_MODEL`, `PLUGGIS_FLASHCARDS_MODEL` | `claude-sonnet-5-5` | Foto, planer, flashkort |
+| `PLUGGIS_EXAM_MODEL` | `claude-opus-5-5` | Testprov (frågor och rättning) |
 | `PLUGGIS_CLAUDE_TIMEOUT` | `120` | Sekunder innan ett anrop via abonnemanget ges upp |
 | `PLUGGIS_USD_SEK` | `10.0` | Växelkurs för kostnadsfliken |
 
