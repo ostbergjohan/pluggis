@@ -17,6 +17,7 @@ public class Prompts {
     private final String flashcards;
     private final String studyPlan;
     private final String material;
+    private final String pageNumbers;
     private final String quiz;
     private final String explain;
     private final String exam;
@@ -30,6 +31,7 @@ public class Prompts {
         this.flashcards = load("prompts/flashcards.md");
         this.studyPlan = load("prompts/study-plan.md");
         this.material = load("prompts/material.md");
+        this.pageNumbers = load("prompts/page-numbers.md");
         this.quiz = load("prompts/quiz.md");
         this.explain = load("prompts/explain.md");
         this.exam = load("prompts/exam.md");
@@ -88,5 +90,10 @@ public class Prompts {
         } catch (IOException e) {
             throw new UncheckedIOException("Kunde inte läsa " + path, e);
         }
+    }
+
+    /** Läser av tryckta sidnummer på sparade foton. */
+    public String pageNumbers() {
+        return pageNumbers;
     }
 }

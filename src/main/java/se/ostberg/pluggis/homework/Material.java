@@ -46,8 +46,11 @@ public class Material {
     /** Ordning inom en uppladdning (sida 1, 2 …). */
     private Integer page;
 
-    /** Sidnumret som står tryckt på sidan i boken (t.ex. 182), om Claude kunde läsa det. */
+    /** Sidnumret som står tryckt på sidan i boken (t.ex. 182), om Claude kunde läsa det eller föräldern angett det. */
     private Integer bookPage;
+
+    /** Sista sidan när fotot är ett uppslag (t.ex. 183 för 182–183), annars null. */
+    private Integer bookPageTo;
 
     protected Material() {
     }
@@ -74,8 +77,16 @@ public class Material {
         this.page = page;
     }
     public Integer getBookPage() { return bookPage; }
+    public Integer getBookPageTo() { return bookPageTo; }
+
     public void setBookPage(Integer bookPage) {
-        this.bookPage = bookPage != null && bookPage > 0 && bookPage < 10000 ? bookPage : null;
+        setBookPages(bookPage, null);
+    }
+
+    /** Sidorna i boken: en sida (to = null) eller ett uppslag (t.ex. 182–183). Ogiltiga värden blir null. */
+    public void setBookPages(Integer from, Integer to) {
+        this.bookPage = from != null && from > 0 && from < 10000 ? from : null;
+        this.bookPageTo = this.bookPage != null && to != null && to > this.bookPage && to < this.bookPage + 10 ? to : null;
     }
     public Long getHomeworkId() { return homeworkId; }
     public String getFilename() { return filename; }

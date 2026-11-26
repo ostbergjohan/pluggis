@@ -1137,7 +1137,8 @@ struct Sent {
 static std::vector<Sent> sents;
 static std::vector<String> chapterLabel;
 static std::vector<long> chapterIds;
-static std::vector<int> chapterPage;   // sidnumret för varje del (0 = okänt)
+static std::vector<int> chapterPage;     // första sidan i boken för varje del (0 = okänt)
+static std::vector<int> chapterPageTo;   // sista sidan (samma som första, eller t.ex. 183 för uppslaget 182–183)
 static int listenEnd = -1;             // läs bara upp hit (meningens index, ej med); -1 = till slutet
 static long readingPlanItem = 0;       // planens moment som läses upp just nu (bockas av när sidorna är klara)
 
@@ -1310,6 +1311,7 @@ static void openHomework(const HwInfo& h) {
   chapterLabel.clear();
   chapterIds.clear();
   chapterPage.clear();
+  chapterPageTo.clear();
   listenEnd = -1;
   readingPlanItem = 0;
   listening = listenDone = false;
@@ -1329,9 +1331,12 @@ static void openHomework(const HwInfo& h) {
     for (auto& m : mats) {
       long id = m["id"] | 0L;
       int bookPage = m["bookPage"] | 0;
+      int bookPageTo = m["bookPageTo"] | bookPage;
       chapterIds.push_back(id);
       chapterPage.push_back(bookPage);
-      chapterLabel.push_back(bookPage ? "Sida " + String(bookPage) : "Del " + String(chapterIds.size()));
+      chapterPageTo.push_back(bookPageTo);
+      chapterLabel.push_back(!bookPage ? "Del " + String(chapterIds.size())
+                             : bookPageTo > bookPage ? "Sida " + String(bookPage) + "–" + String(bookPageTo) : "Sida " + String(bookPage));
       splitSentences(clean(m["text"].as<const char*>()), id);
     }
   }
@@ -1411,9 +1416,10 @@ static void openReading(const PlanRow& r) {
   listenPos = 0;
   listenEnd = -1;
   int start = -1;
+  // Första delen som täcker någon av momentets sidor (ett uppslag 181–182 täcker 182)
   if (r.pageFrom)
     for (size_t c = 0; c < chapterPage.size(); c++)
-      if (chapterPage[c] >= r.pageFrom && chapterPage[c] <= r.pageTo) { start = c; break; }
+      if (chapterPage[c] && chapterPage[c] <= r.pageTo && chapterPageTo[c] >= r.pageFrom) { start = c; break; }
   if (start >= 0) {
     listenPos = firstSentence(start);
     for (size_t c = start + 1; c < chapterPage.size(); c++)

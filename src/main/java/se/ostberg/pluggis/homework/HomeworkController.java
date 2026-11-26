@@ -158,6 +158,22 @@ public class HomeworkController {
         return materials.forHomework(id);
     }
 
+    /** Läs av tryckta sidnummer på läxans sparade foton (Claude). ?overwrite=true läser om även de som har nummer. */
+    @PostMapping("/{id}/material/pages")
+    public List<Material> readPages(@PathVariable long id, @RequestParam(defaultValue = "false") boolean overwrite) {
+        return materials.readBookPages(id, overwrite);
+    }
+
+    public record PagesRequest(Integer bookPage, Integer bookPageTo) {
+    }
+
+    /** Sidorna i boken för ett material, satta för hand (t.ex. 182–183 för ett uppslag). */
+    @PutMapping("/material/{materialId}/pages")
+    public ResponseEntity<Material> setPages(@PathVariable long materialId, @RequestBody PagesRequest body) {
+        return materials.setBookPages(materialId, body.bookPage(), body.bookPageTo())
+                .map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/material/{materialId}")
     public ResponseEntity<Void> deleteMaterial(@PathVariable long materialId) {
         return materials.delete(materialId) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();

@@ -1606,7 +1606,7 @@ function listenPlayer(x, material) {
   // Boksidans tryckta nummer (bookPage) om det är känt, annars ordningen i uppladdningen (page)
   const chapters = material.filter(m => (m.text || '').trim())
     .sort((a, b) => (a.bookPage ?? a.page ?? 1e9) - (b.bookPage ?? b.page ?? 1e9) || a.id - b.id)
-    .map((m, i) => ({ id: m.id, label: m.bookPage ? `Sida ${m.bookPage}` : m.page ? `Del ${m.page}` : (m.filename || `Del ${i + 1}`), sents: sentences(m.text) }))
+    .map((m, i) => ({ id: m.id, label: m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo ? '–' + m.bookPageTo : ''}` : m.page ? `Del ${m.page}` : (m.filename || `Del ${i + 1}`), sents: sentences(m.text) }))
     .filter(c => c.sents.length);
   if (!chapters.length) return null;
   const listened = new Set(x.listenedIds || []);

@@ -43,7 +43,8 @@ public class MaterialService {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Page(Integer file, String text, @JsonProperty("book_page") Integer bookPage) {
+    record Page(Integer file, String text, @JsonProperty("book_page") Integer bookPage,
+                @JsonProperty("book_page_to") Integer bookPageTo) {
     }
 
     /** Högst så många filer per uppladdning (en läsning hos Claude). */
@@ -107,6 +108,7 @@ public class MaterialService {
 
         java.util.Map<Integer, String> pageText = new java.util.HashMap<>();
         java.util.Map<Integer, Integer> bookPages = new java.util.HashMap<>();   // fil → tryckt sidnummer i boken
+        java.util.Map<Integer, Integer> bookPagesTo = new java.util.HashMap<>(); // fil → högra sidan i ett uppslag
         if (reading.pages() != null) {
             for (Page pg : reading.pages()) {
                 if (pg != null && pg.file() != null && pg.text() != null && !pg.text().isBlank()) {
@@ -114,6 +116,9 @@ public class MaterialService {
                 }
                 if (pg != null && pg.file() != null && pg.bookPage() != null) {
                     bookPages.put(pg.file(), pg.bookPage());
+                    if (pg.bookPageTo() != null) {
+                        bookPagesTo.put(pg.file(), pg.bookPageTo());
+                    }
                 }
             }
         }
@@ -128,7 +133,7 @@ public class MaterialService {
             if (docs.size() > 1) {
                 m.setPage(i + 1);
             }
-            m.setBookPage(bookPages.get(i + 1));
+            m.setBookPages(bookPages.get(i + 1), bookPagesTo.get(i + 1));
             boolean keepImage = doc.kind() == UploadedDocument.Kind.IMAGE && doc.bytes() != null
                     && doc.bytes().length <= 3_000_000;
             if (keepImage) {
@@ -201,6 +206,68 @@ public class MaterialService {
     public java.util.Optional<Image> image(long materialId) {
         return materials.findById(materialId).filter(Material::isHasImage)
                 .flatMap(m -> images.findById(m.getId()).map(i -> new Image(m.imageType(), i.getData())));
+    }
+
+    /** Föräldern anger sidorna i boken för ett material (null rensar). */
+    @Transactional
+    public java.util.Optional<Material> setBookPages(long materialId, Integer from, Integer to) {
+        return materials.findById(materialId).map(m -> {
+            m.setBookPages(from, to);
+            log.info("Material {}: sidor i boken satta för hand till {}", materialId, pagesLabel(m));
+            return materials.save(m);
+        });
+    }
+
+    /**
+     * Läser av tryckta sidnummer på läxans sparade foton (för material som laddades upp innan sidnumren
+     * lästes av). Claude ser bara bilderna, tio åt gången. Sidor som redan har nummer lämnas om inte overwrite.
+     */
+    public List<Material> readBookPages(long homeworkId, boolean overwrite) {
+        List<Material> todo = forHomework(homeworkId).stream()
+                .filter(Material::isHasImage)
+                .filter(m -> overwrite || m.getBookPage() == null)
+                .toList();
+        int found = 0;
+        for (int start = 0; start < todo.size(); start += MAX_FILES) {
+            List<Material> batch = todo.subList(start, Math.min(todo.size(), start + MAX_FILES));
+            ObjectNode req = claude.newRequest(props.anthropic().vision(), prompts.pageNumbers());
+            req.put("max_tokens", 1000);
+            ObjectNode msg = req.putArray("messages").addObject();
+            msg.put("role", "user");
+            ArrayNode content = msg.putArray("content");
+            List<Material> sent = new ArrayList<>();
+            for (Material m : batch) {
+                var img = image(m.getId());
+                if (img.isEmpty()) {
+                    continue;
+                }
+                sent.add(m);
+                content.addObject().put("type", "text").put("text", "Fil " + sent.size());
+                UploadedDocument.of(img.get().data(), "sida.jpg", img.get().type()).addTo(content, mapper);
+            }
+            if (sent.isEmpty()) {
+                continue;
+            }
+            Reading r = JsonExtract.parse(claude.create(req, "material").text(), mapper, Reading.class);
+            if (r == null || r.pages() == null) {
+                continue;
+            }
+            for (Page pg : r.pages()) {
+                if (pg == null || pg.file() == null || pg.file() < 1 || pg.file() > sent.size() || pg.bookPage() == null) {
+                    continue;
+                }
+                Material m = sent.get(pg.file() - 1);
+                m.setBookPages(pg.bookPage(), pg.bookPageTo());
+                materials.save(m);
+                found++;
+            }
+        }
+        log.info("Läxa {}: sidnummer avlästa på {} av {} foton", homeworkId, found, todo.size());
+        return forHomework(homeworkId);
+    }
+
+    static String pagesLabel(Material m) {
+        return m.getBookPage() == null ? "inga" : m.getBookPage() + (m.getBookPageTo() != null ? "–" + m.getBookPageTo() : "");
     }
 
     @Transactional(readOnly = true)

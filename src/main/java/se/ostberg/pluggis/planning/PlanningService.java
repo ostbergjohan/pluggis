@@ -620,7 +620,12 @@ public class PlanningService {
         }
         for (var m : materials.findByHomeworkIdOrderByCreatedAtAsc(h.getId())) {
             if (m.getBookPage() != null && m.getText() != null && !m.getText().isBlank()) {
-                out.merge(m.getBookPage(), words(m.getText()) / (double) WORDS_PER_MINUTE, Double::sum);
+                // Ett uppslag (182–183): tiden delas lika på sidorna
+                int to = m.getBookPageTo() != null ? m.getBookPageTo() : m.getBookPage();
+                double each = words(m.getText()) / (double) WORDS_PER_MINUTE / (to - m.getBookPage() + 1);
+                for (int p = m.getBookPage(); p <= to; p++) {
+                    out.merge(p, each, Double::sum);
+                }
             }
         }
         return out;

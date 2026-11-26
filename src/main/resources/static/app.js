@@ -614,13 +614,40 @@ function homeworkItem(x, rerender) {
         matBox.replaceChildren(h('div', { class: 'empty' }, 'Inget material än. Ladda upp en skärmdump, Word-fil, PDF eller text så läser Claude vad som ingår.'));
         return;
       }
-      matBox.replaceChildren(...list.map(m => {
+      // Sidorna i boken (t.ex. 182, eller 182–183 för ett uppslag) – så hittar "Läs s. 182–187" i planen rätt
+      const pagesLabel = m => m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo ? '–' + m.bookPageTo : ''} · ` : (m.page ? `Del ${m.page} · ` : '');
+      const readPages = list.some(m => m.hasImage) ? h('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap' },
+        h('button', { class: 'small', onclick: async (e) => {
+          const r = await run(() => api(`/api/homework/${x.id}/material/pages`, { method: 'POST' }), e.target);
+          if (r !== undefined) {
+            const n = r.filter(m => m.bookPage).length;
+            toast(n ? `Sidnummer finns nu på ${n} av ${r.length} delar` : 'Hittade inga sidnummer på fotona – ange dem för hand');
+            showMaterial();
+          }
+        } }, '🔢 Läs av sidnummer'),
+        h('span', { class: 'item-meta' }, 'Claude läser sidnumret på fotona. Rätta eller fyll i för hand vid varje sida (uppslag: t.ex. 182–183).')) : null;
+      const pageInputs = m => {
+        const from = h('input', { type: 'number', min: 1, max: 9999, value: m.bookPage ?? '', placeholder: 'sida', style: 'width:72px', 'aria-label': 'Första sidan i boken' });
+        const to = h('input', { type: 'number', min: 1, max: 9999, value: m.bookPageTo ?? '', placeholder: 'till', style: 'width:72px', 'aria-label': 'Sista sidan (uppslag)' });
+        const save = async () => {
+          const a = from.value ? Number(from.value) : null, b = to.value ? Number(to.value) : null;
+          if (b && (!a || b <= a)) return toast('Sista sidan ska vara större än första', true);
+          const r = await run(() => api(`/api/homework/material/${m.id}/pages`, { method: 'PUT', body: { bookPage: a, bookPageTo: b } }));
+          if (r !== undefined) { toast('Sidorna sparade'); showMaterial(); }
+        };
+        from.onchange = save;
+        to.onchange = save;
+        return h('div', { style: 'display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap' },
+          h('span', { class: 'item-meta' }, 'Sida i boken:'), from, '–', to);
+      };
+      matBox.replaceChildren(...(readPages ? [readPages] : []), ...list.map(m => {
         const thumb = m.hasImage ? h('img', { class: 'mat-thumb', alt: m.filename || 'sida' }) : null;
         if (thumb) authImage(`/api/homework/material/${m.id}/image`).then(u => { thumb.src = u; thumb.onclick = () => window.open(u, '_blank'); }).catch(() => thumb.remove());
         const textBox = h('pre', { class: 'mat-text', style: 'display:none' }, m.text || '');
         return h('div', { class: 'check' },
           thumb || h('span', { class: 'tag' }, { IMAGE: 'Bild', PDF: 'PDF', WORD: 'Word', TEXT: 'Text' }[m.kind] || m.kind),
-          h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'task' }, (m.page ? `Sida ${m.page} · ` : '') + (m.filename || 'fil')),
+          h('div', { style: 'flex:1;min-width:0' }, h('div', { class: 'task' }, pagesLabel(m) + (m.filename || 'fil')),
+            pageInputs(m),
             m.summary ? h('div', { class: 'item-meta' }, m.summary) : null,
             m.text ? h('button', { class: 'small', style: 'margin-top:4px', onclick: (e) => {
               const show = textBox.style.display === 'none';
