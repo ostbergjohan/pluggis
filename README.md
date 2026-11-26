@@ -27,6 +27,10 @@ påminnelser, poäng och svensk uppläsning.
 | Ljud: KB-Whisper (tal till text) + Piper (text till tal), uppläsning mening för mening | ✅ |
 | Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
 | Google Kalender: planen som pass i elevens kalender | ✅ |
+| Planen från materialet: lästid per sida, bara läxor med innehåll planeras | ✅ |
+| Från planen: 🎧 Lyssna på läsmomentets sidor, ▶ Starta övningen (appen och Tab5) | ✅ |
+| Sidnummer i boken på materialet (Claude läser av dem, rättas för hand, uppslag 182–183) | ✅ |
+| Skrivbordsskärm M5Stack Tab5 med LVGL: Öva, Chat, Läxor, Plan, välj WiFi på skärmen ([firmware/tab5-lvgl](firmware/tab5-lvgl)) | ✅ |
 
 ## Så ser elevchatten ut
 
@@ -158,6 +162,7 @@ curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/$D/rewards/p
 
 ```
 Elevchatten (mobil) ── WebSocket + REST ──▶ Spring Boot "pluggis"
+Tab5 (skrivbordet)  ── WebSocket + REST ──▶  │
 Föräldravyn (webb)  ── REST ─────────────▶  ├─ coach/     Claude-loop med verktyg + historik
 iOS-genväg ── POST /api/homework/photo ──▶  ├─ homework/  läxor, material, fotoavläsning
                                             ├─ planning/  pluggplan, omplanering, block per ämne
@@ -273,6 +278,10 @@ material (foto, skärmdump, Word, PDF), öva själv (fliken **Öva**: flashkort,
 - Med koden når eleven bara sitt eget: chatt, plan, läxor, uppladdning, kortlekar (öva, inte ändra) och poäng – inte inställningar,
   poängbonus, utbetalningar, kalender, loggar eller syskonens data.
 - Tryck på Pluggis-namnet i chatten för att logga ut (t.ex. på en delad telefon).
+- **Från planen:** läsmoment ("Läs s. 182–187") har en **🎧 Lyssna**-knapp som öppnar läxan och läser upp just de
+  sidorna. Uppläsningen stannar efter sista sidan och momentet bockas av. Övningar i planen ("Gör ett snabbquiz",
+  lucktext, Förklara för Pluggis, testprov, matcha par, rätt ordning) har **▶ Starta**; efteråt frågar appen om
+  momentet ska bockas av. Finns sidorna inte bland det inlästa materialet läses det upp från början.
 - **Lyssna på materialet:** högst upp på en läxa/ett prov finns en spelare som läser upp allt inläst material sida för
   sida (▶/⏸, ⏮ förra meningen, ⏭ nästa sida, framstegsstapel). Var eleven är sparas på läxan, så att det går att
   fortsätta senare – även på en annan enhet – och sidor som lyssnats klart får ✓. *🎧 Lyssna härifrån* på varje sida
@@ -307,11 +316,23 @@ Andra vägar in:
    `flashcards=true`). Flera sidor läses av Claude tillsammans; foton förminskas i webbläsaren innan de skickas.
    Word-text läses lokalt och sparas även om Claude inte svarar. Gamla .doc stöds inte – spara som .docx.
 
+**Sidnummer i boken:** när Claude läser ett foto av en boksida läses också det tryckta sidnumret av (ett uppslag
+blir t.ex. 182–183). Det är så "Läs s. 182–187" i planen hittar rätt sida, och planeringen vet hur lång tid sidorna
+tar. Under **Material** på en läxa i föräldravyn finns **🔢 Läs av sidnummer** för foton som laddades upp innan
+(Claude ser bara de sparade bilderna), och vid varje del går sidorna att rätta eller fylla i för hand.
+`POST /api/homework/{id}/material/pages` (`?overwrite=true` läser om alla) och
+`PUT /api/homework/material/{id}/pages` med `{"bookPage":182,"bookPageTo":183}`.
+
 Kalendern ger oftast bara titel och datum – saknas innehållet frågar coachen vad som ingår. Från skärmdump och text läser Claude ut läxa/prov, datum och innehåll.
 
 **Planering:** när innehållet finns (`set_homework_content` via coachen, eller
 `POST /api/plan/homework/{id}/content`) gör Claude en plan med små moment (max ~20 min) på
-pluggdagarna fram till datumet. Inför prov är det nya materialet klart 1–2 dagar innan och sista
+pluggdagarna fram till datumet. **Utan innehåll ingen plan:** en läxa eller ett prov utan "vad som ingår", delsteg
+och inläst material planeras inte (gamla moment tas bort, och *Planera om allt* visar den som överhoppad) – den kommer
+med när innehåll eller material läggs in.
+**Lästid ur materialet:** Claude får uppläsningstiden för varje boksida (ca 140 ord/min) och väljer lagom många
+sidor per läsmoment. Läsmomentens minuter räknas sedan om efter sidorna (med marginal, minst 15 och högst 30 min).
+Sidor skrivs alltid som "s. 40–45" och övningar med sina namn, så att de går att trycka på i appen och på Tab5. Inför prov är det nya materialet klart 1–2 dagar innan och sista
 dagarna är repetition och flashkort. Avbockade moment ger poäng och ligger kvar vid omplanering.
 **Max minuter per dag och pluggdagar** ställs per elev under **Inställningar → Planering** (max gäller allt
 plugg den dagen, alla läxor och prov tillsammans). Kryssa i *Gör om befintliga planer* så planeras allt om.
@@ -437,6 +458,25 @@ Fliken **Kostnad** i admin visar vad Claude kostar: denna månad, idag, staplar 
 
 Coachens ADHD-anpassade svarsform bygger på reglerna i [i-have-adhd](https://github.com/ayghri/i-have-adhd)
 (MIT), omskrivna för en röstcoach på svenska.
+
+## Skrivbordsskärmen (M5Stack Tab5)
+
+En Tab5 på skrivbordet pratar med servern som elevchatten: **Öva** (sex övningar per läxa), **Chat** (håll in och
+prata med coachen), **Läxor** (lyssna på materialet) och **Plan** (bocka av, 🎧 Lyssna och ▶ Starta som i appen).
+Två versioner finns: [firmware/tab5-lvgl](firmware/tab5-lvgl) med gränssnitt i LVGL 9 (den som används) och den
+äldre [firmware/tab5](firmware/tab5). Båda byggs av GitHub Actions.
+
+- Kopiera `include/config.example.h` till `include/config.h` och fyll i server och token. Använd serverns
+  **IP-adress**, inte datorns namn – Tab5 kan oftast inte slå upp namn som `debian` på hemnätet.
+- **WiFi väljs på skärmen:** WiFi-ikonen uppe till höger → *Byt WiFi* (eller *Välj WiFi* på startskärmen). Tab5
+  söker, man trycker på ett nät och skriver lösenordet på skärmens tangentbord. Det sparas i Tab5 först när det
+  fungerar och går sedan före `config.h`. Bara 2,4 GHz.
+- **Felsökning:** tryck på WiFi-ikonen eller *Ansluter* för WiFi, IP, server, om chatten är uppe, senaste fel och
+  ledigt minne. Startskärmen visar själv varför den fastnar. Servern loggar nekade skärmar (fel token) och okända
+  enhets-id (`docker compose logs pluggis | grep -i enhet`).
+- Skärmarna går att se utan Tab5: `firmware/tab5-lvgl/sim/run.sh` ritar dem till PNG.
+
+Mer i [firmware/tab5-lvgl/README.md](firmware/tab5-lvgl/README.md).
 
 ## Säkerhet och integritet
 

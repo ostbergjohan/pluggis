@@ -619,6 +619,45 @@ views.chatt = () => {
 const WIDE = window.matchMedia ? window.matchMedia('(min-width: 1100px)') : { matches: false };
 WIDE.addEventListener && WIDE.addEventListener('change', () => { if (S.tab === 'chatt') show('chatt'); });
 
+// ---- Från planen: läsmoment läses upp, övningar startas ----
+/** Sidorna i ett läsmoment: "Läs s. 40–45", "sidan 12", "Läs 182–187" → {from, to} (samma regler som servern). */
+function pagesIn(task) {
+  const m = /(?:\bs\.|\bsid\.?|\bsidan|\bsidorna|\bläs)\s*(\d+)(?:\s*(?:[-–]|till|och)\s*(\d+))?/i.exec(task || '');
+  if (!m) return null;
+  const from = Number(m[1]), to = m[2] ? Number(m[2]) : from;
+  return { from, to: Math.max(from, to) };
+}
+
+/** Övningen ett moment gäller ("Gör ett snabbquiz" → quiz), samma namn som open_practice. */
+function exerciseFor(task) {
+  const t = (task || '').toLowerCase();
+  if (t.includes('testprov')) return 'exam';
+  if (t.includes('quiz')) return 'quiz';
+  if (t.includes('lucktext')) return 'cloze';
+  if (t.includes('förklara för pluggis') || t.includes('förklara i pluggis')) return 'explain';
+  if (t.includes('matcha')) return 'match';
+  if (t.includes('rätt ordning')) return 'order';
+  return null;
+}
+
+/** Knapp på ett moment i planen: 🎧 Lyssna (läsmoment) eller ▶ Starta (övning). Null om inget passar. */
+function planAction(item) {
+  if (item.done || !item.homeworkId) return null;
+  const stop = (e) => { e.stopPropagation(); e.preventDefault(); };
+  if (item.type === 'READ') {
+    return h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => {
+      stop(e);
+      const p = pagesIn(item.task);
+      S.readRange = { homeworkId: item.homeworkId, from: p ? p.from : 0, to: p ? p.to : 0, planItemId: item.id, task: item.task };
+      S.openHomework = item.homeworkId;
+      show('laxor');
+    } }, '🎧 Lyssna');
+  }
+  const kind = exerciseFor(item.task);
+  if (!kind) return null;
+  return h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => { stop(e); openPractice(kind, item.homeworkId); } }, '▶ Starta');
+}
+
 function todayAside() {
   const aside = h('aside', { class: 'side' }, h('div', { class: 'side-title' }, 'Idag'), h('div', { class: 'empty' }, '…'));
   (async () => {
@@ -645,7 +684,7 @@ function todayAside() {
           const it = t.item;
           const tick = h('button', { class: 'tick', 'aria-label': 'Klar', disabled: it.done || null }, it.done ? '✓' : '');
           const row = h('div', { class: 'row in-block' + (it.done ? ' done' : ''), style: `--c:${b.color}` }, tick,
-            h('div', { class: 'grow' }, h('div', { class: 'task' }, it.task), h('div', { class: 'meta' }, `${it.minutes} min`,
+            h('div', { class: 'grow' }, h('div', { class: 'task' }, it.task, planAction(it)), h('div', { class: 'meta' }, `${it.minutes} min`,
               t.overdue ? ' · ligger efter' : '')));
           tick.addEventListener('click', async () => {
             if (it.done) return;
@@ -740,10 +779,9 @@ views.plan = async () => {
 
   function planRow(item, homeworkTitle, overdue) {
     const tick = h('button', { class: 'tick', 'aria-label': 'Klar', disabled: item.done || null }, item.done ? '✓' : '');
-    const examBtn = !item.done && /testprov/i.test(item.task)
-      ? h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => { e.stopPropagation(); startExam(item.homeworkId, e.target); } }, '📝 Starta') : null;
+    const action = planAction(item);   // 🎧 Lyssna på läsmoment, ▶ Starta på övningar (även testprov)
     const row = h('div', { class: 'row' + (item.done ? ' done' : '') }, tick,
-      h('div', { class: 'grow' }, h('div', { class: 'task' }, item.task, examBtn),
+      h('div', { class: 'grow' }, h('div', { class: 'task' }, item.task, action),
         h('div', { class: 'meta' }, `${item.minutes} min`, homeworkTitle ? ` · ${homeworkTitle}` : '',
           overdue ? ' · ' : '', overdue ? h('span', { class: 'tag late' }, 'ligger efter') : '')));
     tick.addEventListener('click', async () => {
@@ -1606,7 +1644,8 @@ function listenPlayer(x, material) {
   // Boksidans tryckta nummer (bookPage) om det är känt, annars ordningen i uppladdningen (page)
   const chapters = material.filter(m => (m.text || '').trim())
     .sort((a, b) => (a.bookPage ?? a.page ?? 1e9) - (b.bookPage ?? b.page ?? 1e9) || a.id - b.id)
-    .map((m, i) => ({ id: m.id, label: m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo ? '–' + m.bookPageTo : ''}` : m.page ? `Del ${m.page}` : (m.filename || `Del ${i + 1}`), sents: sentences(m.text) }))
+    .map((m, i) => ({ id: m.id, from: m.bookPage || 0, to: m.bookPageTo || m.bookPage || 0,
+      label: m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo ? '–' + m.bookPageTo : ''}` : m.page ? `Del ${m.page}` : (m.filename || `Del ${i + 1}`), sents: sentences(m.text) }))
     .filter(c => c.sents.length);
   if (!chapters.length) return null;
   const listened = new Set(x.listenedIds || []);
@@ -1617,6 +1656,20 @@ function listenPlayer(x, material) {
   let playing = false, run = 0, sinceSave = 0, finished = false;
   const total = chapters.reduce((n, c) => n + c.sents.length, 0);
   const posOf = () => chapters.slice(0, ci).reduce((n, c) => n + c.sents.length, 0) + si;
+  // Från ett läsmoment i planen: börja på momentets första boksida och stanna efter den sista. Finns sidorna
+  // inte bland materialet börjar uppläsningen från början. Momentet bockas av när sidorna är upplästa.
+  let range = null;
+  if (S.readRange && S.readRange.homeworkId === x.id) {
+    const r = S.readRange;
+    S.readRange = null;
+    const start = r.from ? chapters.findIndex(c => c.from && c.from <= r.to && c.to >= r.from) : -1;
+    ci = start >= 0 ? start : 0;
+    si = 0;
+    let end = chapters.length;
+    if (start >= 0) { const after = chapters.findIndex((c, k) => k > start && c.from > r.to); if (after >= 0) end = after; }
+    range = { end, planItemId: r.planItemId, label: start >= 0 && r.from ? `s. ${r.from}${r.to > r.from ? '–' + r.to : ''}` : 'materialet' };
+    setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  }
   const resumable = ci > 0 || si > 0;
 
   const title = h('div', { class: 'listen-title' });
@@ -1638,7 +1691,8 @@ function listenPlayer(x, material) {
     playBtn.setAttribute('aria-label', playing ? 'Pausa' : 'Spela');
     now.textContent = finished ? '' : c.sents[si] || '';
     now.hidden = !playing && !resumable && posOf() === 0;
-    hint.textContent = playing ? 'Lyssnar …'
+    hint.textContent = playing ? (range ? `Lyssnar på ${range.label} …` : 'Lyssnar …')
+      : range ? `Från planen: tryck ▶ för att lyssna på ${range.label}`
       : finished ? 'Tryck ▶ för att lyssna igen från början.'
       : posOf() > 0 ? `Fortsätt där du slutade – ${Math.round(100 * posOf() / total)} % lyssnat`
       : `Lyssna på allt material: ${chapters.length} ${chapters.length === 1 ? 'del' : 'sidor'}, ca ${Math.max(1, Math.round(total * 6 / 60))} min`;
@@ -1703,6 +1757,22 @@ function listenPlayer(x, material) {
       si++;
       if (si >= c.sents.length) {
         listened.add(c.id);
+        if (range && ci + 1 >= range.end) {
+          // Planens sidor är upplästa: stanna, spara var eleven är och bocka av momentet
+          const r = range;
+          range = null;
+          playing = false;
+          if (ci + 1 < chapters.length) { ci++; si = 0; } else finished = true;
+          await save(); paint();
+          if (r.planItemId) {
+            try {
+              await api(`/api/plan/items/${r.planItemId}/done?deviceId=${enc(S.deviceId)}`, { method: 'POST' });
+              refreshPoints();
+              toast(`Klart! ${r.label} uppläst och bockat i planen` + pts(' +3 poäng'));
+            } catch { toast(`Klart! ${r.label} uppläst 🎧`); }
+          }
+          return;
+        }
         if (ci + 1 >= chapters.length) { finished = true; playing = false; await save(); paint(); toast('Allt material uppläst! 🎧'); return; }
         ci++; si = 0;
         await save();
