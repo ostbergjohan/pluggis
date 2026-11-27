@@ -110,12 +110,12 @@ function rel(iso) {
   if (n === null) return 'inget datum';
   if (n === 0) return 'idag'; if (n === 1) return 'imorgon'; if (n === -1) return 'igår';
   if (n < 0) return `${-n} dagar sedan`;
-  return n < 7 ? new Intl.DateTimeFormat('sv-SE', { weekday: 'long' }).format(parseDay(iso)) : `om ${n} dagar`;
+  return n < 7 ? new Intl.DateTimeFormat(I18N.locale(), { weekday: 'long' }).format(parseDay(iso)) : `om ${n} dagar`;
 }
 const dayName = (iso) => {
   const n = daysUntil(iso);
   if (n === 0) return 'Idag'; if (n === 1) return 'Imorgon'; if (n === -1) return 'Igår';
-  return new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'short' }).format(parseDay(iso));
+  return new Intl.DateTimeFormat(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'short' }).format(parseDay(iso));
 };
 
 // ---- Uppläsning ----
@@ -153,7 +153,7 @@ function unlockAudio() {
   }
   if (S.voice === 'telefon' && window.speechSynthesis && !S.phoneUnlocked) {
     // iOS släpper bara fram uppläsning som först startats av ett tryck
-    const u = new SpeechSynthesisUtterance('.'); u.volume = 0.01; u.lang = 'sv-SE';
+    const u = new SpeechSynthesisUtterance('.'); u.volume = 0.01; u.lang = I18N.speechLang();
     speechSynthesis.speak(u);
     S.phoneUnlocked = true;
   }
@@ -174,7 +174,7 @@ async function testServerVoice() {
 
 function svVoice() {
   if (!window.speechSynthesis) return null;
-  const voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith('sv'));
+  const voices = speechSynthesis.getVoices().filter(v => v.lang && v.lang.toLowerCase().startsWith(I18N.lang));
   return voices.find(v => /alva|klara|premium|enhanced|förbättrad/i.test(v.name)) || voices[0] || null;
 }
 if (window.speechSynthesis) speechSynthesis.addEventListener?.('voiceschanged', () => {});
@@ -203,7 +203,7 @@ function speakPhone(text) {
   if (!window.speechSynthesis || !text) return;
   text = forSpeech(text);
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'sv-SE'; u.rate = 1.0; u.volume = 1;
+  u.lang = I18N.speechLang(); u.rate = 1.0; u.volume = 1;
   const v = svVoice(); if (v) u.voice = v;
   // iOS-bugg: cancel() direkt följt av speak() tappar ibland repliken – vänta en stund
   if (speechSynthesis.speaking || speechSynthesis.pending) {
@@ -502,7 +502,7 @@ function addMsg(kind, text, save = true) {
   if (save) remember({ k: kind, t: text });
   const list = $('#msgs');
   if (!list) return;
-  list.append(h('div', { class: 'msg ' + kind }, text));
+  list.append(h('div', { class: 'msg ' + kind, 'data-noi18n': kind === 'bot' ? '' : null }, text));
   scrollDown();
 }
 function addCard(c, save = true) {
@@ -599,7 +599,7 @@ views.chatt = () => {
   }
   function listen() {
     const rec = new Recognition();
-    rec.lang = 'sv-SE'; rec.interimResults = false;
+    rec.lang = I18N.speechLang(); rec.interimResults = false;
     mic.classList.add('rec'); mic.textContent = '●';
     rec.onresult = (e) => { input.value = e.results[0][0].transcript; sendText(); };
     rec.onerror = () => toast('Hörde inte – testa igen', true);
@@ -623,7 +623,7 @@ views.chatt = () => {
       h('button', { class: 'round send', title: 'Skicka', onclick: sendText }, '➤')));
 
   for (const e of S.history) {
-    if (e.k === 'card') addCardTo(msgs, e.c); else msgs.append(h('div', { class: 'msg ' + e.k }, e.t));
+    if (e.k === 'card') addCardTo(msgs, e.c); else msgs.append(h('div', { class: 'msg ' + e.k, 'data-noi18n': e.k === 'bot' ? '' : null }, e.t));
   }
   if (!S.history.length) {
     msgs.append(h('div', { class: 'msg bot' },
@@ -1654,7 +1654,7 @@ async function readAloud(text, btn, lang = '') {
         const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l));
         if (v) u.voice = v;
       } else {
-        u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v;
+        u.lang = I18N.speechLang(); const v = svVoice(); if (v) u.voice = v;
       }
       if (i === parts.length - 1) u.onend = () => { if (readingBtn === btn) { btn.textContent = btn.dataset.label; readingBtn = null; } };
       speechSynthesis.speak(u);
@@ -1760,7 +1760,7 @@ function listenPlayer(x, material) {
       const u = new SpeechSynthesisUtterance(forSpeech(text));
       const l = voiceLang(text, hwLang);
       if (l) { u.lang = PHONE_LANG[l]; const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.toLowerCase().startsWith(l)); if (v) u.voice = v; }
-      else { u.lang = 'sv-SE'; const v = svVoice(); if (v) u.voice = v; }
+      else { u.lang = I18N.speechLang(); const v = svVoice(); if (v) u.voice = v; }
       u.onend = () => resolve(true); u.onerror = () => resolve(false);
       speechSynthesis.speak(u);
     });
@@ -2006,6 +2006,7 @@ async function start() {
     S.serverVoice = !!me.serverVoice;
     S.points = me.pointsEnabled !== false;
     S.version = me.version || null;
+    I18N.setLang(me.language);   // elevens språk (sv/en), sätts i föräldravyn
     paintPoints();
     if (S.voice === 'pluggis' && !S.serverVoice) S.voice = 'telefon';
     store.set('pluggis.chat.device', S.deviceId);
