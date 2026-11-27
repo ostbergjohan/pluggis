@@ -2,7 +2,7 @@
 
 Samma firmware som [`../tab5`](../tab5) – samma server, protokoll, övningar och `config.h` – men gränssnittet är
 omgjort med LVGL. Båda finns kvar sida vid sida, så att det går att flasha den gamla igen om något strular.
-Kopiera din `include/config.h` från `../tab5/include/` hit innan du bygger.
+Kopiera `include/config.example.h` till `include/config.h` och fyll i innan du bygger.
 
 Firmware för skrivbordsskärmen (PlatformIO/Arduino). Pratar med servern enligt [docs/protokoll.md](../../docs/protokoll.md).
 
@@ -46,8 +46,11 @@ kalender, glödlampa, frågetecken, länk, ordning, pokal, klocka). Kommandot st
 ## Flasha
 
 1. Installera [PlatformIO](https://platformio.org/install/cli) (eller VS Code + PlatformIO).
-2. `cp include/config.example.h include/config.h` och fyll i WiFi, serverns adress, elevens enhets-id
-   (admin → Inställningar → Elever) och `PLUGGIS_DEVICE_TOKEN` från `.env`. `config.h` checkas aldrig in.
+2. `cp include/config.example.h include/config.h` och fyll i WiFi, serverns IP-adress och **elevens kod**
+   (`PLUGGIS_CODE`, samma 5 tecken som i elevchatten – admin → Inställningar → Elever). Koden räcker: servern vet
+   vilken elev den hör till, och skärmen når bara den elevens läxor, plan och poäng. Byts koden i admin (*Ny kod*)
+   måste den bytas här också. En äldre `config.h` med `PLUGGIS_DEVICE_ID` + `PLUGGIS_TOKEN` fungerar fortfarande.
+   `config.h` checkas aldrig in.
 3. Koppla Tab5 med USB-C. Gå till nedladdningsläge: håll reset-knappen ~2 s tills den gröna lampan blinkar snabbt.
 4. `pio run -t upload`, och `pio device monitor` för loggen.
 5. I admin: Inställningar → Tab5 (hårdvara) för att visa enhetens status.

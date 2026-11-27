@@ -466,7 +466,8 @@ prata med coachen), **Läxor** (lyssna på materialet) och **Plan** (bocka av, �
 Två versioner finns: [firmware/tab5-lvgl](firmware/tab5-lvgl) med gränssnitt i LVGL 9 (den som används) och den
 äldre [firmware/tab5](firmware/tab5). Båda byggs av GitHub Actions.
 
-- Kopiera `include/config.example.h` till `include/config.h` och fyll i server och token. Använd serverns
+- Kopiera `include/config.example.h` till `include/config.h` och fyll i serverns adress och **elevens kod**
+  (`PLUGGIS_CODE`, samma som i elevchatten). Koden räcker – Tab5 når bara den elevens data, precis som mobilen. Använd serverns
   **IP-adress**, inte datorns namn – Tab5 kan oftast inte slå upp namn som `debian` på hemnätet.
 - **WiFi väljs på skärmen:** WiFi-ikonen uppe till höger → *Byt WiFi* (eller *Välj WiFi* på startskärmen). Tab5
   söker, man trycker på ett nät och skriver lösenordet på skärmens tangentbord. Det sparas i Tab5 först när det

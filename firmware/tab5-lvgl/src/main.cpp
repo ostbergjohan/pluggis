@@ -28,6 +28,19 @@
 #include "config.example.h"
 #endif
 
+// Inloggning: elevens kod (PLUGGIS_CODE) räcker – servern vet vilken elev den hör till. En äldre config.h med
+// enhets-id och föräldertoken (PLUGGIS_DEVICE_ID + PLUGGIS_TOKEN) fungerar fortfarande.
+#if defined(PLUGGIS_CODE)
+#define PLUGGIS_AUTH PLUGGIS_CODE
+#ifndef PLUGGIS_DEVICE_ID
+#define PLUGGIS_DEVICE_ID "elevkod"   // servern byter till elevens eget enhets-id
+#endif
+#define PLUGGIS_AUTH_NAME "PLUGGIS_CODE"
+#else
+#define PLUGGIS_AUTH PLUGGIS_TOKEN
+#define PLUGGIS_AUTH_NAME "PLUGGIS_TOKEN"
+#endif
+
 #ifndef PLUGGIS_IDLE_MINUTES
 #define PLUGGIS_IDLE_MINUTES 5   // stäng av efter så många minuter utan aktivitet (0 = aldrig)
 #endif
@@ -95,6 +108,7 @@ static bool cardAnswered = false, cardCorrect = false;
 static int cardBox = 0;
 
 static int weekPoints = -1;
+static String studentName;      // elevens namn från /api/chat/me (visas i statusrutan)
 static bool pointsOn = false;    // poäng av/på för eleven (admin) – hämtas från /api/chat/me
 static bool meLoaded = false;
 
@@ -512,12 +526,12 @@ static int api(const char* method, const String& path, const String& body, JsonD
                (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
   if (!http.begin(client, url)) return -1;
   http.setTimeout(timeoutMs);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+  http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
   http.addHeader("Content-Type", "application/json");
   int code = strcmp(method, "GET") == 0 ? http.GET() : http.sendRequest(method, body);
   if (code <= 0 || code >= 400) {
     String what = code <= 0 ? String("ingen kontakt med ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + " (" + http.errorToString(code) + ")"
-                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla PLUGGIS_TOKEN i config.h"
+                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla " PLUGGIS_AUTH_NAME " i config.h"
                 : String("svarade ") + String(code);
     Serial.printf("[pluggis] %s %s: %s\n", method, path.c_str(), what.c_str());
     lastError = String(method) + " " + path + ": " + what;
@@ -826,7 +840,7 @@ static String transcribeRecording() {
     String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID;
     if (http.begin(client, url)) {
       http.setTimeout(20000);
-      http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+      http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
       http.addHeader("Content-Type", "audio/wav");
       int code = http.POST((uint8_t*)recBuf, 44 + bytes);
       if (code == 200) {
@@ -1232,7 +1246,7 @@ static int apiBinary(const String& path, const String& body, uint8_t** out, size
                (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
   if (!http.begin(client, url)) return -1;
   http.setTimeout(15000);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+  http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(body);
   if (code == 200) {
@@ -2170,7 +2184,12 @@ static void onAction(const ui::Action& a) {
       String t = wifi ? "WiFi: ansluten till \"" + WiFi.SSID() + "\" (" + WiFi.localIP().toString() + ", signal " +
                             String(WiFi.RSSI()) + " dBm)"
                       : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + wifiSsidSaved() + "\"";
+#if defined(PLUGGIS_CODE)
+      t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " med elevkod " + PLUGGIS_CODE +
+           (studentName.length() ? " (" + studentName + ")" : String());
+#else
       t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " som \"" + PLUGGIS_DEVICE_ID + "\"";
+#endif
       t += "\nChatten (WebSocket): " + String(wsUp ? "uppe" : "nere") + " – " + wsLast +
            (wsLastAt ? " för " + String((millis() - wsLastAt) / 1000) + " s sedan" : String()) + ", " + String(wsTries) + " försök";
       t += "\nLäxor hämtade: " + String(decksLoaded ? "ja" : "nej");
@@ -2463,7 +2482,7 @@ void setup() {
                 PLUGGIS_DEVICE_ID);
   connectWifi();   // sist, som i den gamla firmware: WiFi-chippet (ESP32-C6) behöver hinna starta efter M5.begin()
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
-  String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
+  String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_AUTH;
   ws.begin(PLUGGIS_HOST, PLUGGIS_PORT, url.c_str());
   ws.onEvent(onWs);
   ws.setReconnectInterval(3000);
@@ -2613,7 +2632,11 @@ void loop() {
   if (wsUp && !meLoaded) {
     meLoaded = true;
     JsonDocument me;
-    if (api("GET", "/api/chat/me", "", &me) == 200) pointsOn = me["pointsEnabled"] | false;
+    if (api("GET", "/api/chat/me", "", &me) == 200) {
+      pointsOn = me["pointsEnabled"] | false;
+      studentName = me["name"] | "";
+      Serial.printf("[pluggis] inloggad som %s (%s)\n", studentName.c_str(), (const char*)(me["deviceId"] | ""));
+    }
     dirtyTop = true;
   }
   tickPractice();

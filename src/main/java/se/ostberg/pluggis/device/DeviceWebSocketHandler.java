@@ -71,6 +71,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
                 // Eleven pratar alltid som sin egen enhet, aldrig som ett syskons
                 studentId = kid.get();
                 deviceId = students.byId(studentId).map(se.ostberg.pluggis.student.Student::getDeviceId).orElse(deviceId);
+                log.debug("Enhet från {} loggar in med elevkod som {}", from, deviceId);
             } else if (!props.tokenRequired()) {
                 studentId = students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
             } else {
@@ -80,8 +81,8 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         if (deviceId == null || deviceId.isBlank()) {
             log.warn("Enhet nekad från {}: {} (deviceId {})", from,
                     token == null || token.isBlank() ? "token saknas" : "fel token", query.getFirst(DEVICE_ID));
-            tell(session, "Servern nekade skärmen: fel token. PLUGGIS_TOKEN i config.h ska vara samma som "
-                    + "PLUGGIS_DEVICE_TOKEN i .env.");
+            tell(session, "Servern nekade skärmen: fel kod. PLUGGIS_CODE i config.h ska vara elevens kod "
+                    + "(admin -> Inställningar -> Elever).");
             session.close(CloseStatus.POLICY_VIOLATION.withReason("deviceId eller token saknas/fel"));
             return;
         }

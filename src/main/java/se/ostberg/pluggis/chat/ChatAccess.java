@@ -35,6 +35,7 @@ public class ChatAccess {
             Pattern.compile("GET /api/devices/[^/]+/rewards"),
             Pattern.compile("GET /api/devices/[^/]+/rewards/events"),
             Pattern.compile("POST /api/speech/preview"),
+            Pattern.compile("POST /api/speech/transcribe"),   // Tab5 med elevkod: håll in och prata
             Pattern.compile("GET /api/flashcards/decks"),
             Pattern.compile("GET /api/flashcards/decks/\\d+/next"),
             Pattern.compile("GET /api/flashcards/decks/\\d+/cards"),
