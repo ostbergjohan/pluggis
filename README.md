@@ -13,8 +13,9 @@ rewritten for a Swedish voice coach (see [Thanks](#thanks)).
 
 ## How it works
 
-1. **Homework and tests come in** from the school's InfoMentor calendar, a screenshot of the weekly plan, a file or
-   pasted text.
+1. **Homework and tests come in** from the school's calendar – InfoMentor or any other service that offers a
+   calendar subscription (iCal/webcal link or an .ics file: Google Classroom, Microsoft Teams/Outlook, Schoolsoft,
+   Unikum, Vklass …) – or from a screenshot of the weekly plan, a file or pasted text.
 2. **Photograph the pages from the book** (or upload Word, PDF or a screenshot) on the homework or test. Claude reads
    them – text, book page numbers, sections and concepts – and they become the **material**: what's included, what
    gets read aloud, and what every exercise is made from.
@@ -46,7 +47,7 @@ A student can be switched to **English** (see [Language](#language)).
 | Points for studying with streaks and optional weekly pocket money (weekly cap) | ✅ |
 | Day-by-day study plan based on what's included (pages, chapters, concepts), replanning | ✅ |
 | Reminders in the chat (at study time + evening nudge, "test tomorrow") | ✅ |
-| Homework in via InfoMentor's calendar subscription (webcals), .ics file, screenshot, Word, PDF or pasted text | ✅ |
+| Homework in via any school calendar subscription (iCal/webcal – InfoMentor, Google Classroom, Teams …), .ics file, screenshot, Word, PDF or pasted text | ✅ |
 | Material on homework/tests (screenshot, Word, PDF, text) → contents, new plan, optional flashcards | ✅ |
 | Student chat on the phone: chat, plan, homework, material, flashcards and points | ✅ |
 | Parent view: homework, plan (drag and drop), flashcards, points, cost, statistics, several students | ✅ |
@@ -336,8 +337,10 @@ Statistics are also available as JSON: `GET /api/devices/{id}/stats?days=14`.
 
 ## Homework in, planning and reminders
 
-**The school uses InfoMentor**, which has a calendar subscription (`webcals://im2-api.infomentor.se/…`).
-Under **the student's tab → Calendar** (or the shortcut **Homework & tests → 📅 Calendar**) paste the link, choose
+**Any calendar subscription works** – anything that gives an iCal link (`webcal://`, `webcals://` or `https://…ics`),
+e.g. InfoMentor (`webcals://im2-api.infomentor.se/…`, what Pluggis was built with), Google Classroom, Microsoft
+Teams/Outlook, Schoolsoft, Unikum or Vklass. Pluggis keeps only what looks like homework and tests (unless you choose
+everything). Under **the student's tab → Calendar** (or the shortcut **Homework & tests → 📅 Calendar**) paste the link, choose
 "only homework and tests" and press **Save and sync**. It is then synced every hour; changed dates give a new plan.
 The link is personal – treat it like a password (it is only stored in Pluggis' database).
 

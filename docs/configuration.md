@@ -23,7 +23,7 @@ Changed something in `.env` or `secrets/`? Run `docker compose up -d` and it's r
 | [Student codes](#3-student-codes) | Created by Pluggis | Admin → System → Students | – |
 | [Azure voices](#4-azure-voices-optional) `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | No | `.env` | Free (F0) |
 | [Google Calendar](#5-google-calendar-optional): the service account's JSON key + calendar ID | No | `secrets/` + admin | Free |
-| [InfoMentor calendar](#6-infomentor-calendar-optional) (webcals link) | No | Admin → the student's tab → Calendar | – |
+| [School calendar](#6-the-schools-calendar-optional) (InfoMentor or any iCal/webcal link) | No | Admin → the student's tab → Calendar | – |
 
 **Smallest possible `.env`:**
 
@@ -151,12 +151,13 @@ Puts the plan as sessions in the student's Google Calendar.
 If you want to see the student's calendar yourself, the student also needs to share it with your account. To remove
 the key, delete the file from `secrets/` and the key under the service account's *Keys* in Google Cloud.
 
-## 6. InfoMentor calendar (optional)
+## 6. The school's calendar (optional)
 
-Homework and tests are fetched from the school's calendar subscription.
+Homework and tests are fetched from the school's calendar subscription – InfoMentor or any other service with an
+iCal/webcal link (Google Classroom, Microsoft Teams/Outlook, Schoolsoft, Unikum, Vklass …).
 
-- **Where:** admin → the student's tab → 📅 Calendar. Paste the `webcals://…` link from InfoMentor and press
-  *Save and sync*.
+- **Where:** admin → the student's tab → 📅 Calendar. Paste the `webcal://`, `webcals://` or `https://…ics` link and
+  press *Save and sync*. An exported `.ics` file can be uploaded instead.
 - **Sync:** every hour.
 - **Personal link:** treat it like a password. It's only stored in Pluggis' database and shouldn't go into `.env`
   or git.
@@ -207,4 +208,4 @@ In the parent view, **Cost** shows the status of the API key, the Claude Code to
 | `AZURE_SPEECH_KEY` | *Regenerate key* in the Azure portal → `.env` |
 | The Google key | Delete the key under the service account's *Keys* → create a new one → `secrets/` |
 | Student code | *New code* under admin → System → Students |
-| The InfoMentor link | Create a new subscription link in InfoMentor → paste it in admin |
+| The calendar link | Create a new subscription link in the school's service → paste it in admin |
