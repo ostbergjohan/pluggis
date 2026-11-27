@@ -20,7 +20,8 @@ static const EnText EN_EXACT[] = {
   {"Kunde inte söka efter nätverk", "Couldn't search for networks"}, {"Hittade inga nätverk", "No networks found"},
   {"Ansluter ...", "Connecting ..."}, {"Skriv nätverkets namn", "Type the network name"}, {"Inte ansluten", "Not connected"},
   // inställningar
-  {"Inställningar", "Settings"}, {"Starta om", "Restart"}, {"Tryck Byt WiFi", "Tap Change WiFi"}, {"Byt WiFi", "Change WiFi"},
+  {"Inställningar", "Settings"}, {"Starta om", "Restart"}, {"Stäng av", "Turn off"}, {"Stänger av ...", "Turning off ..."},
+  {"Tab5 får ström från USB-sladden och kan inte stängas av. Dra ur sladden eller håll in strömknappen.", "The Tab5 is powered by the USB cable and can't turn off. Unplug the cable or hold the power button."}, {"Tryck Byt WiFi", "Tap Change WiFi"}, {"Byt WiFi", "Change WiFi"},
   {"Server", "Server"}, {"Ändra", "Change"}, {"Elev", "Student"}, {"Ingen elev vald", "No student chosen"},
   {"Skriv elevens kod (föräldravyn: Inställningar > Elever)", "Enter the student's code (parent view: System > Students)"},
   {"Byt elev", "Change student"}, {"Stäng av efter, minuter (Av = aldrig)", "Switch off after, minutes (Off = never)"},

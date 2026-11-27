@@ -52,6 +52,7 @@ enum class Act : uint16_t {
   SetFwCheck,     // leta efter ny firmware
   SetFwUpdate,    // installera den nya firmwaren
   SetRestart,
+  SetPowerOff,
   SetBack,
   EntryOk, EntryBack,   // textrutan (elevkod, serveradress)
   TalkPress,      // håll in och prata/svara (släppet läses direkt från pekskärmen)

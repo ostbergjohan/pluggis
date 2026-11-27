@@ -989,7 +989,7 @@ void buildSettings(const Settings& m) {
   button(c, PAD, 14, 200, 72, "Tillbaka", Kind::Ghost, Act::SetBack, 0, LV_SYMBOL_LEFT);
   lv_obj_t* t = label(c, "Inställningar", F_L, INK);
   lv_obj_set_pos(t, PAD + 230, 26);
-  button(c, W - PAD - 250, 14, 250, 72, "Starta om", Kind::Ghost, Act::SetRestart, 0, LV_SYMBOL_REFRESH, 20);
+  button(c, W - PAD - 250, 14, 250, 72, "Stäng av", Kind::Ghost, Act::SetPowerOff, 0, LV_SYMBOL_POWER, 20);
   button(c, W - PAD - 250 - GAP - 250, 14, 250, 72, "Detaljer", Kind::Ghost, Act::SetDetails, 0, LV_SYMBOL_LIST, 20);
 
   const int y0 = 104, CW = (W - 2 * PAD - GAP) / 2, CHH = 120;

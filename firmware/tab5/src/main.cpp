@@ -157,6 +157,7 @@ static const Note MEL_DONE[] = {{392, 120}, {523, 120}, {659, 120}, {784, 200}, 
 static const Note MEL_TICK[] = {{880, 40}};
 // Pluggis egen lugna starttrudelutt (spelas en gång när Tab5 är redo)
 static void quietRestart();
+static void powerOffNow();
 static const Note MEL_HELLO[] = {{392, 220}, {494, 220}, {587, 260}, {0, 80}, {784, 520}};
 static const Note* mel = nullptr;
 static int melN = 0, melI = 0;
@@ -3010,6 +3011,9 @@ static void onAction(const ui::Action& a) {
       M5.Display.setBrightness(cfg.bright);
       prefs.putInt("bright", cfg.bright);
       break;
+    case ui::Act::SetPowerOff:
+      powerOffNow();
+      break;
     case ui::Act::SetRestart:
       ui::buildMessage("Startar om ...", true);
       lv_refr_now(lvDisp);
@@ -3402,6 +3406,33 @@ static void goToSleep() {
   asleep = true;
   idleWarned = false;
   ui::idleWarning(false);
+}
+
+// Knappen "Stäng av": helt avstängd, så att ljudchippet startar rent nästa gång.
+static void powerOffNow() {
+  if (fz.on) { focusPracticeEnd(); fz = FocusState(); }
+  stopPlayback();
+  sayStop();
+  ui::buildMessage("Stänger av ...", true);
+  lv_refr_now(lvDisp);
+  delay(400);
+  M5.Speaker.stop();
+  M5.Speaker.end();
+  M5.Mic.end();
+  M5.Display.setBrightness(0);
+  delay(200);
+  M5.Power.powerOff();
+  // Kommer vi hit sitter den på USB-ström och går inte att stänga av
+  delay(1500);
+  M5.Speaker.begin();
+  M5.Speaker.setVolume(volume);
+  M5.Speaker.setChannelVolume(7, 110);
+  M5.Display.setBrightness(cfg.bright);
+  ui::buildMessage("Tab5 får ström från USB-sladden och kan inte stängas av. Dra ur sladden eller håll in strömknappen.", false);
+  lv_refr_now(lvDisp);
+  delay(4000);
+  markActive();
+  dirtyAll = true;
 }
 
 static void checkIdle(bool touched) {
