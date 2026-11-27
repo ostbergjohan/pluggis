@@ -267,6 +267,11 @@ Varje elev har egna läxor, plan, material, flashkort, kalender, namn, ton och p
 - Tekniskt: Hibernate `@TenantId` (kolumnen `student_key`) filtrerar läxor, plan, material och flashkort
   per elev; pass, poäng och samtal hör till elevens enhets-id.
 
+### Ljust och mörkt
+
+Elevchatten och föräldravyn följer telefonens eller datorns inställning. Knappen **◐** uppe till höger byter
+mellan *följer enheten* (◐), *ljust* (☀) och *mörkt* (☾); valet sparas i webbläsaren. Tab5 är alltid i Pluggis blå.
+
 ### Elevchatt i mobilen
 
 Elevchatten (`/`, eller `/chat.html`) är en egen, mobilanpassad sida för eleven (byggd för iPhone): chatta med Pluggis (text eller

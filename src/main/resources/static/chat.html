@@ -2,6 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
+  <script>try { const t = localStorage.getItem('pluggis.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -21,6 +22,7 @@
     <div class="chips">
       <button class="chip" id="points" title="Poäng den här veckan">– p</button>
       <button class="chip icon" id="speak" title="Läs upp svaren" aria-pressed="false">🔇</button>
+      <button class="chip icon theme-btn" id="theme" title="Ljust eller mörkt">◐</button>
       <span class="dot" id="conn" title="Anslutning"></span>
     </div>
   </header>

@@ -2,6 +2,7 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
+  <script>try { const t = localStorage.getItem('pluggis.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Pluggis admin">
@@ -24,6 +25,7 @@
       <a href="#elev" data-view="elev">Eleven</a>
       <a href="#system" data-view="system">System</a>
     </nav>
+    <button class="ghost small theme-btn" id="theme" title="Ljust eller mörkt">◐</button>
     <div class="device-status" id="deviceStatus" title="Tab5-status" data-tab5 hidden>●</div>
   </header>
 

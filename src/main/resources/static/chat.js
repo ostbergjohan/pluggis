@@ -1992,3 +1992,24 @@ async function start() {
 document.addEventListener('touchend', () => { if (S.voice !== 'av') unlockAudio(); }, { passive: true });
 document.addEventListener('click', () => { if (S.voice !== 'av') unlockAudio(); });
 start();
+
+// ---- Ljust/mörkt: ◐ följer telefonen/datorn, ☀ ljust, ☾ mörkt. Sparas i webbläsaren (samma för appen och admin). ----
+(function themeToggle() {
+  const btn = document.getElementById('theme');
+  if (!btn) return;
+  const order = ['auto', 'light', 'dark'];
+  const names = { auto: 'Följer telefonen/datorn', light: 'Ljust', dark: 'Mörkt' };
+  const get = () => { try { return localStorage.getItem('pluggis.theme') || 'auto'; } catch { return 'auto'; } };
+  const paint = (t) => {
+    if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+    btn.textContent = { auto: '◐', light: '☀', dark: '☾' }[t];
+    btn.title = `Tema: ${names[t]} – tryck för att byta`;
+  };
+  paint(get());
+  btn.addEventListener('click', () => {
+    const t = order[(order.indexOf(get()) + 1) % order.length];
+    try { localStorage.setItem('pluggis.theme', t); } catch { /* bara den här gången */ }
+    paint(t);
+    toast(names[t]);
+  });
+})();

@@ -9,12 +9,18 @@
   color: var(--ink); background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
+/* Mörkt: följer telefonen/datorn om inget valts, eller valt med ◐/☀/☾ (data-theme på <html>) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #111315; --panel: #1c1f22; --ink: #ecebe7; --muted: #9aa0a6; --line: #2c3035;
     --accent: #6f8fe0; --accent-soft: #1a2540; --me: #24418f; --bot: #1f2326;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #111315; --panel: #1c1f22; --ink: #ecebe7; --muted: #9aa0a6; --line: #2c3035;
+  --accent: #6f8fe0; --accent-soft: #1a2540; --me: #24418f; --bot: #1f2326;
+}
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; margin: 0; }
 body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
@@ -373,6 +379,13 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .focus-chip { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 18px; padding: 7px 13px; font-size: 14px; }
 .focus-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
+/* Mörkt: följer telefonen/datorn om inget valts, eller valt med ◐/☀/☾ (data-theme på <html>) */
 @media (prefers-color-scheme: dark) {
-  .listen-play, .tabbar button.on span { color: #fff; }
+  :root:not([data-theme="light"]) .listen-play, :root:not([data-theme="light"]) .tabbar button.on span { color: #fff; }
 }
+:root[data-theme="dark"] .listen-play, :root[data-theme="dark"] .tabbar button.on span { color: #fff; }
+
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+.theme-btn { min-width: 36px; }

@@ -16,12 +16,18 @@
   color: var(--ink);
   background: var(--bg);
 }
+/* Mörkt: följer telefonen/datorn om inget valts, eller valt med ◐/☀/☾ (data-theme på <html>) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #15171a; --panel: #1e2125; --ink: #e8e6e1; --muted: #9aa0a6; --line: #30343a;
     --accent: #6f8fe0; --accent-soft: #1a2540; --blue: #6c9bf0; --red: #e57369; --gold: #d9a94a;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #15171a; --panel: #1e2125; --ink: #e8e6e1; --muted: #9aa0a6; --line: #30343a;
+  --accent: #6f8fe0; --accent-soft: #1a2540; --blue: #6c9bf0; --red: #e57369; --gold: #d9a94a;
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; }
 a { color: var(--accent); }
@@ -98,10 +104,14 @@ label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px
 .tag.done { background: var(--line); color: var(--muted); }
 .tag.other { background: var(--line); color: var(--muted); font-style: italic; }
 .tag.late { background: #f5ecd8; color: var(--gold); }
+/* Mörkt: följer telefonen/datorn om inget valts, eller valt med ◐/☀/☾ (data-theme på <html>) */
 @media (prefers-color-scheme: dark) {
-  .tag.test { background: #3a2422; }
-  .tag.late { background: #3a3020; }
+  :root:not([data-theme="light"]) .tag.test { background: #3a2422; }
+  :root:not([data-theme="light"]) .tag.late { background: #3a3020; }
 }
+:root[data-theme="dark"] .tag.test { background: #3a2422; }
+:root[data-theme="dark"] .tag.late { background: #3a3020; }
+
 
 .check { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .check:last-child { border-bottom: 0; }
@@ -335,3 +345,7 @@ label.inline { display: flex; gap: 8px; align-items: center; color: var(--ink); 
 .login-box button.primary { margin-top: 10px; padding: 12px; font-size: 16px; }
 .login-logo { width: 96px; height: 96px; border-radius: 22px; align-self: center; }
 .login-msg { color: var(--red); min-height: 1.2em; font-size: 14px; }
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+.theme-btn { min-width: 36px; }
