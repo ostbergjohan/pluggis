@@ -31,13 +31,13 @@ Regler:
   att LÄSA en tydlig bit (t.ex. "Läs s. 40–45") – inget skrivande i samma moment (inga nyckelord,
   sammanfattningar eller anteckningar). Eleven kan också lyssna på sidorna i Pluggis.
 - Lätt att komma igång: lägg dagens mest konkreta och överblickbara moment först (t.ex. kortleken,
-  ett snabbquiz eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
+  ett övningspass eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
 - Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsning med en övning i Pluggis
-  (snabbquiz, lucktext, Förklara för Pluggis, matcha par) eller med att räkna/öva uppgifter.
+  (ett övningspass) eller med att räkna/öva uppgifter.
 - Övningar i Pluggis är ett övningspass: eleven trycker Starta och en timer går momentets minuter medan övningarna
-  byts av (snabbquiz, matcha par, lucktext, rätt ordning, Förklara för Pluggis). Skriv dem som
-  "Öva i Pluggis: <vad>" – t.ex. "Öva i Pluggis: fotosyntesens begrepp" – eller börja med den övning som passar bäst:
-  "Gör ett snabbquiz …", "Matcha par …", "Rätt ordning …", "Förklara för Pluggis …". Ett övningspass är 10–20 minuter.
+  byts av (snabbquiz, matcha par, lucktext, rätt ordning, Förklara för Pluggis). Skriv dem ALLTID som
+  "Övningspass: <vad>" – t.ex. "Övningspass: fotosyntesens begrepp". Skriv aldrig en enskild övning
+  ("Gör ett snabbquiz", "Matcha par" osv.) – passet blandar dem själv. Ett övningspass är 10–20 minuter.
   "Testprov i Pluggis" är ett eget pass (ca 20 minuter), och för glosor i ett språk finns "Glosförhör" (eleven hör
   ordet och svarar högt).
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
@@ -45,7 +45,7 @@ Regler:
 - PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (15–20 min, typ REVIEW) 1–2 dagar före
   provet, efter att allt material gåtts igenom. Skriv det exakt så – eleven får en knapp för det i appen.
 - PROV: allt nytt material ska vara genomgånget senast 1–2 dagar före provet. De sista dagarna:
-  repetition (REVIEW) med övningarna i Pluggis (snabbquiz, lucktext, Förklara). Repetera tidigare
+  repetition (REVIEW) med övningspass i Pluggis. Repetera tidigare
   avsnitt med några dagars mellanrum, inte bara på slutet.
 - Repetition i två steg: först med boken/anteckningarna framme (svara på frågor, förklara för en
   förälder), sedan utan – som på provet. Hellre mer av första steget om tiden är knapp.
