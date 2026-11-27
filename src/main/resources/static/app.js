@@ -1422,7 +1422,27 @@ function subscriptionBox(st, refresh) {
     const r = await run(() => api('/api/claude/subscription/check', { method: 'POST' }), e.target, 'Kollat');
     if (r) refresh();
   } }, '🔄 Kolla nu');
-  return h('div', {}, box, h('div', { class: 'item-meta' }, 'Ett litet anrop via abonnemanget visar läget just nu.', btn));
+  return h('div', {}, box, usageBars(sub.usage), h('div', { class: 'item-meta' }, 'Ett litet anrop via abonnemanget visar läget just nu.', btn));
+}
+
+/** 5-timmarsgränsen och veckogränsen i procent, med när de nollställs. */
+function usageBars(u) {
+  if (!u) return null;
+  if (u.error && !u.fiveHour && !u.sevenDay) {
+    return h('p', { class: 'item-meta' }, `Procent av gränsen går inte att hämta just nu (${u.error}).`);
+  }
+  const when = (iso) => iso ? new Date(iso).toLocaleString(I18N.locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  const row = (label, w) => {
+    if (!w) return null;
+    const p = Math.max(0, Math.min(100, w.percent || 0));
+    const color = p >= 90 ? '#d64541' : p >= 75 ? '#e8a317' : '#2e9e5b';
+    return h('div', { style: 'margin:8px 0' },
+      h('div', { style: 'display:flex;justify-content:space-between;font-size:14px' },
+        h('span', {}, h('strong', {}, label), `  ${p} %`), h('span', { class: 'item-meta' }, w.resetsAt ? `nollställs ${when(w.resetsAt)}` : '')),
+      h('div', { style: 'height:10px;border-radius:5px;background:var(--line, #e5e5e5);overflow:hidden;margin-top:4px' },
+        h('div', { style: `height:100%;width:${p}%;background:${color}` })));
+  };
+  return h('div', { style: 'margin:6px 0 10px' }, row('5 timmar', u.fiveHour), row('Vecka', u.sevenDay), row('Vecka (Opus)', u.sevenDayOpus));
 }
 
 function backupPanel() {

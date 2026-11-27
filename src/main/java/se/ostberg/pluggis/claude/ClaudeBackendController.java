@@ -20,9 +20,12 @@ public class ClaudeBackendController {
     private final ClaudeClient claude;
     private final ClaudeCodeRunner runner;
 
-    public ClaudeBackendController(ClaudeClient claude, ClaudeCodeRunner runner) {
+    private final SubscriptionUsage usage;
+
+    public ClaudeBackendController(ClaudeClient claude, ClaudeCodeRunner runner, SubscriptionUsage usage) {
         this.claude = claude;
         this.runner = runner;
+        this.usage = usage;
     }
 
     @GetMapping
@@ -37,7 +40,18 @@ public class ClaudeBackendController {
         m.put("claudeCode", runner.stats());
         m.put("fallbacks", claude.fallbacks());
         m.put("problems", problems(runner.mode()));
-        m.put("subscription", SubscriptionLimit.snapshot());
+        Map<String, Object> sub = new LinkedHashMap<>(SubscriptionLimit.snapshot());
+        if (!"api".equals(runner.mode())) {
+            Map<String, Object> u = usage.get(false);
+            if (u != null) {
+                sub.put("usage", u);
+                int max = SubscriptionUsage.highest(u);
+                if (max >= 80 && !Boolean.TRUE.equals(sub.get("reached"))) {
+                    sub.put("near", true);
+                }
+            }
+        }
+        m.put("subscription", sub);
         return m;
     }
 
@@ -59,6 +73,7 @@ public class ClaudeBackendController {
             var msg = req.putArray("messages").addObject();
             msg.put("role", "user");
             msg.put("content", "ok?");
+            usage.get(true);
             runner.run(req);
         } catch (RuntimeException e) {
             // gränsen nådd eller annat fel: läget är uppdaterat ändå (eller felet syns i statusen)

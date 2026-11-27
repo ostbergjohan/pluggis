@@ -267,6 +267,8 @@ I18N.add({
   'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
   'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
   'Inställningar': 'Settings',
+  'Procent av gränsen går inte att hämta just nu ({0}).': "The percentage of the limit can't be fetched right now ({0}).",
+  'nollställs {0}': 'resets {0}', '5 timmar': '5 hours', 'Vecka': 'Week', 'Vecka (Opus)': 'Week (Opus)',
   'Claude och kostnad ›': 'Claude and cost ›',
   '· {0} % använt': '· {0} % used', '· kollat {0}': '· checked {0}', '· nollställs {0}': '· resets {0}',
   '. Välj Hybrid så tar API-nyckeln över om gränsen nås.': '. Choose Hybrid and the API key takes over if the limit is reached.',
