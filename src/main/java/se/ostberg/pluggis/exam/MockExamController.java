@@ -40,7 +40,8 @@ public class MockExamController {
             return ResponseEntity.unprocessableEntity().body(Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             log.warn("Testprov kunde inte skapas: {}", e.toString());
-            return ResponseEntity.status(503).body(Map.of("error", "Pluggis kunde inte göra ett testprov just nu – prova igen om en stund"));
+            String limit = se.ostberg.pluggis.claude.SubscriptionLimit.userMessage(e);
+            return ResponseEntity.status(503).body(Map.of("error", limit != null ? limit : "Pluggis kunde inte göra ett testprov just nu – prova igen om en stund"));
         }
     }
 

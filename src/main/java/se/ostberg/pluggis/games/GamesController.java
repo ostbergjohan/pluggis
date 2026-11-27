@@ -119,7 +119,8 @@ public class GamesController {
             return ResponseEntity.ok(new OrderGame(ok, g.note()));
         } catch (Exception e) {
             log.warn("Rätt ordning kunde inte skapas: {}", e.toString());
-            return ResponseEntity.status(503).body(Map.of("error", "Pluggis kunde inte göra övningen just nu – prova igen om en stund"));
+            String limit = se.ostberg.pluggis.claude.SubscriptionLimit.userMessage(e);
+            return ResponseEntity.status(503).body(Map.of("error", limit != null ? limit : "Pluggis kunde inte göra övningen just nu – prova igen om en stund"));
         }
     }
 

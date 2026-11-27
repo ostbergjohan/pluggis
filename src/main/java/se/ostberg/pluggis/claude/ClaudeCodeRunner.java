@@ -397,8 +397,9 @@ public class ClaudeCodeRunner {
             throw new IllegalStateException("Claude Code är inte inloggat – kontrollera CLAUDE_CODE_OAUTH_TOKEN "
                     + "(skapa en ny med \"claude setup-token\")");
         }
+        rateLimitEvents(stdout);
         if (stdout.contains("\"rate_limit\"")) {
-            throw new IllegalStateException("Abonnemangets gräns är nådd just nu – försök igen senare");
+            throw SubscriptionLimit.reached(result.path("result").asText("") + " " + stdout.substring(Math.max(0, stdout.length() - 2000)));
         }
         if (result.path("is_error").asBoolean(false) || result.path("subtype").asText("").startsWith("error")
                 || "api_error".equals(result.path("terminal_reason").asText(""))) {
@@ -406,6 +407,7 @@ public class ClaudeCodeRunner {
             throw new IllegalStateException("Claude Code: " + (why.isBlank()
                     ? result.path("terminal_reason").asText(result.path("subtype").asText("okänt fel")) : why));
         }
+        SubscriptionLimit.ok();
         List<ClaudeResponse.ContentBlock> content = new ArrayList<>();
         boolean tools = false;
         JsonNode structured = result.path("structured_output");
@@ -430,6 +432,20 @@ public class ClaudeCodeRunner {
         var usage = new ClaudeResponse.Usage(u.path("input_tokens").asLong(), u.path("output_tokens").asLong(),
                 u.path("cache_creation_input_tokens").asLong(), u.path("cache_read_input_tokens").asLong());
         return new ClaudeResponse(result.path("session_id").asText(null), content, tools ? "tool_use" : "end_turn", usage);
+    }
+
+    /** Claude Codes rader om abonnemangets gräns (status, hur mycket som gått åt, när den släpper). */
+    private void rateLimitEvents(String stdout) {
+        for (String l : stdout.split("\n")) {
+            if (!l.contains("rate_limit_event") && !l.contains("rate_limit_info")) {
+                continue;
+            }
+            try {
+                SubscriptionLimit.update(mapper.readTree(l.trim()));
+            } catch (IOException | RuntimeException e) {
+                log.debug("Kunde inte läsa gränsraden från Claude Code: {}", e.toString());
+            }
+        }
     }
 
     /** Resultatraden ({"type":"result",...}) i stream-json-utdata; annars sista JSON-raden. */

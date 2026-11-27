@@ -267,6 +267,14 @@ I18N.add({
   'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
   'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
   'Inställningar': 'Settings',
+  '5-timmarsgränsen': 'the 5-hour limit', 'veckogränsen': 'the weekly limit', 'veckogränsen (Opus)': 'the weekly limit (Opus)', 'gränsen': 'the limit',
+  '⛔ Abonnemangets {0} är nådd': "⛔ The subscription's {0} is reached", '– släpper {0}.': '– resets {0}.',
+  '– när den släpper vet vi inte än.': "– we don't know yet when it resets.", 'API-nyckeln tar jobben så länge.': 'The API key takes the jobs meanwhile.',
+  'Välj Hybrid nedan så tar API-nyckeln jobben så länge.': 'Choose Hybrid below and the API key takes the jobs meanwhile.',
+  'Eleven får veta det i appen och på Tab5.': 'The student is told in the app and on the Tab5.',
+  '⚠️ Nära {0}': '⚠️ Close to {0}', '✅ Abonnemanget går': '✅ The subscription works', '· {0} % använt': '· {0} % used', '· släpper/nollställs {0}': '· resets {0}',
+  'Valet sparas och gäller direkt, även efter omstart. Gränsen visas när Claude Code har berättat om den (efter ett anrop via abonnemanget). Hela bilden finns i Claude-appen under Inställningar → Användning.':
+    'The choice is saved and applies immediately, also after a restart. The limit is shown once Claude Code has reported it (after a call via the subscription). The full picture is in the Claude app under Settings → Usage.',
   'Säkerhetskopior': 'Backups', 'Pluggis kör med Postgres – ta kopior med pg_dump i stället.': 'Pluggis runs on Postgres – take backups with pg_dump instead.',
   '⬇ Ladda ner': '⬇ Download', 'Ta bort kopian från {0}?': 'Delete the backup from {0}?',
   'Hela databasen: läxor, planer, material, poäng, elever och inställningar. De {0} senaste sparas på servern ({1}, i Docker-volymen). Ladda ner en ibland och spara den någon annanstans.':

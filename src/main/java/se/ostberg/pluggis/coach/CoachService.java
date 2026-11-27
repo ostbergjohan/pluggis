@@ -139,12 +139,16 @@ public class CoachService {
         }
     }
 
+    /** Gränsen för abonnemanget är nådd: säg det (och när det går igen) i stället för "tappade tråden". */
     private static String fallback(Consumer<String> onSentence) {
+        String text = se.ostberg.pluggis.claude.SubscriptionLimit.reachedNow()
+                ? se.ostberg.pluggis.claude.SubscriptionLimit.message() : FALLBACK;
         if (onSentence != null) {
-            onSentence.accept(FALLBACK);
+            onSentence.accept(text);
         }
-        return FALLBACK;
+        return text;
     }
+
 
     public void forget(String deviceId) {
         conversations.remove(deviceId);

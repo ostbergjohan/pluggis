@@ -562,6 +562,12 @@ static int api(const char* method, const String& path, const String& body, JsonD
   return code;
 }
 
+/** Serverns förklaring ({"error": "..."}), t.ex. att Claudes gräns är nådd och när den släpper – annars fallback. */
+static String serverError(JsonDocument& doc, const String& fallback) {
+  const char* e = doc["error"] | (const char*)nullptr;
+  return e && *e ? clean(e) : fallback;
+}
+
 static void loadDecks() {
   decks.clear();   // kortlekar sparas inte längre – varje övning görs ny
   ovaMessage = "";
@@ -946,7 +952,7 @@ static void makeQuiz(long homeworkId, const char* mode) {
     return;
   }
   if (code != 200) {
-    ovaMessage = String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.";
+    ovaMessage = serverError(doc, String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.");
     dirtyOva = true;
     return;
   }
@@ -1039,12 +1045,12 @@ static void startGame(int which, long hw, const String& title) {
   if (game == Game::Explain) {
     gameBusy("Pluggis väljer ett begrepp ur materialet ...");
     int code = api("POST", "/api/explain/start", "{\"homeworkId\":" + String(hw) + focusJson + "}", &doc, 120000);
-    gameMsg = code == 200 ? "" : "Det gick inte att starta just nu (" + String(code) + ").";
+    gameMsg = code == 200 ? "" : serverError(doc, "Det gick inte att starta just nu (" + String(code) + ").");
     if (code == 200) explainApply(doc);
   } else if (game == Game::Exam) {
     gameBusy("Pluggis gör ett testprov av materialet ...\n\nDet kan ta en minut.");
     int code = api("POST", "/api/exam/start", "{\"homeworkId\":" + String(hw) + ",\"count\":10" + focusJson + "}", &doc, 180000);
-    gameMsg = code == 200 ? "" : "Det gick inte att göra ett testprov just nu (" + String(code) + ").";
+    gameMsg = code == 200 ? "" : serverError(doc, "Det gick inte att göra ett testprov just nu (" + String(code) + ").");
     examQs.clear();
     examAns.clear();
     examI = 0;
@@ -1117,7 +1123,7 @@ static void startGame(int which, long hw, const String& title) {
       for (JsonVariant st : q["steps"].as<JsonArray>()) sq.steps.push_back(clean(st.as<const char*>()));
       if (sq.steps.size() >= 2) seqs.push_back(sq);
     }
-    gameMsg = code != 200 ? "Det gick inte just nu (" + String(code) + ")." : seqs.empty() ? "Hittade inget att ordna i materialet." : "";
+    gameMsg = code != 200 ? serverError(doc, "Det gick inte just nu (" + String(code) + ").") : seqs.empty() ? "Hittade inget att ordna i materialet." : "";
     seqI = 0;
   }
   if (game == Game::Order && !seqs.empty()) {
@@ -1180,7 +1186,7 @@ static void examSubmit() {
   int code = api("POST", "/api/exam/" + examId + "/submit", json, &doc, 120000);
   gameMsg = "";
   gameDone = true;
-  if (code != 200) { gameMsg = "Det gick inte att rätta just nu (" + String(code) + ")."; return; }
+  if (code != 200) { gameMsg = serverError(doc, "Det gick inte att rätta just nu (" + String(code) + ")."); return; }
   SFX_DONE();
   examPoints = doc["points"] | 0;
   setLast(3, String((int)(doc["percent"] | 0)) + " %");

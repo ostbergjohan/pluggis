@@ -929,7 +929,19 @@ function claudeBackendPanel(st) {
         h('div', { class: 'item-meta' }, desc))));
   }
   const cc = st.claudeCode || {};
-  panel.append(list,
+  // Abonnemangets gräns, så långt Claude Code berättar det
+  const sub = st.subscription || {};
+  const typeName = { five_hour: '5-timmarsgränsen', seven_day: 'veckogränsen', seven_day_opus: 'veckogränsen (Opus)' }[sub.type] || 'gränsen';
+  const resets = sub.resetsAt ? new Date(sub.resetsAt).toLocaleString(I18N.locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  const subLine = sub.reached
+    ? h('div', { class: 'notice bad', style: 'margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--bad-bg, #fde8e7);color:#8a1f1a' },
+        h('strong', {}, `⛔ Abonnemangets ${typeName} är nådd`), resets ? ` – släpper ${resets}.` : ' – när den släpper vet vi inte än.',
+        st.apiKey && st.mode === 'hybrid' ? ' API-nyckeln tar jobben så länge.' : st.apiKey ? ' Välj Hybrid nedan så tar API-nyckeln jobben så länge.' : ' Eleven får veta det i appen och på Tab5.')
+    : sub.status && sub.status !== 'unknown'
+      ? h('p', { class: 'item-meta' }, sub.status === 'allowed_warning' ? `⚠️ Nära ${typeName}` : '✅ Abonnemanget går',
+          sub.utilization != null ? ` · ${Math.round(sub.utilization * 100)} % använt` : '', resets ? ` · släpper/nollställs ${resets}` : '')
+      : null;
+  panel.append(subLine, list,
     st.problems && st.problems.length ? h('p', { style: 'color:var(--red)' }, '⚠️ ', st.problems.join(' ')) : null,
     h('table', { style: 'margin-top:10px' }, h('tbody', {},
       h('tr', {}, h('td', {}, 'API-nyckel (ANTHROPIC_API_KEY)'), h('td', {}, ok(st.apiKey))),
@@ -939,7 +951,7 @@ function claudeBackendPanel(st) {
       h('tr', {}, h('td', {}, 'Senast lyckat via abonnemanget'), h('td', {}, when(cc.lastOk))),
       cc.lastError ? h('tr', {}, h('td', {}, 'Senaste fel'), h('td', {}, `${when(cc.lastFailure)}: ${cc.lastError}`)) : null,
       h('tr', {}, h('td', {}, 'Föll tillbaka till API-nyckeln'), h('td', {}, `${st.fallbacks || 0} gånger sedan start`)))),
-    h('p', { class: 'item-meta' }, 'Valet sparas och gäller direkt, även efter omstart. Hur mycket av Pro-abonnemangets gräns som gått åt syns inte här – det ser du i Claude-appen under Inställningar → Användning.'));
+    h('p', { class: 'item-meta' }, 'Valet sparas och gäller direkt, även efter omstart. Gränsen visas när Claude Code har berättat om den (efter ett anrop via abonnemanget). Hela bilden finns i Claude-appen under Inställningar → Användning.'));
   return panel;
 }
 

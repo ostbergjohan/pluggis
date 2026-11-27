@@ -36,6 +36,7 @@ public class ClaudeBackendController {
         m.put("claudeCode", runner.stats());
         m.put("fallbacks", claude.fallbacks());
         m.put("problems", problems(runner.mode()));
+        m.put("subscription", SubscriptionLimit.snapshot());
         return m;
     }
 

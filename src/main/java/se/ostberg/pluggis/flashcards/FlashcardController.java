@@ -112,7 +112,8 @@ public class FlashcardController {
             return ResponseEntity.unprocessableEntity().body(java.util.Map.of("error", e.getMessage()));
         } catch (RuntimeException e) {
             org.slf4j.LoggerFactory.getLogger(FlashcardController.class).warn("Quiz kunde inte skapas: {}", e.toString());
-            return ResponseEntity.status(503).body(java.util.Map.of("error", "Pluggis kunde inte göra frågor just nu – prova igen om en stund"));
+            String limit = se.ostberg.pluggis.claude.SubscriptionLimit.userMessage(e);
+            return ResponseEntity.status(503).body(java.util.Map.of("error", limit != null ? limit : "Pluggis kunde inte göra frågor just nu – prova igen om en stund"));
         }
     }
 
