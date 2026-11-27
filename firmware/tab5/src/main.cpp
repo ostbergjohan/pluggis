@@ -156,6 +156,7 @@ static const Note MEL_BAD[] = {{466, 150}, {440, 150}, {415, 150}, {392, 380}};
 static const Note MEL_DONE[] = {{392, 120}, {523, 120}, {659, 120}, {784, 200}, {659, 100}, {784, 380}};
 static const Note MEL_TICK[] = {{880, 40}};
 // Pluggis egen lugna starttrudelutt (spelas en gång när Tab5 är redo)
+static void quietRestart();
 static const Note MEL_HELLO[] = {{392, 220}, {494, 220}, {587, 260}, {0, 80}, {784, 520}};
 static const Note* mel = nullptr;
 static int melN = 0, melI = 0;
@@ -2886,7 +2887,7 @@ static void firmwareUpdate() {
   ui::buildMessage("Uppdaterad till " + std::string(fwNew.c_str()) + ". Startar om ...", true);
   lv_refr_now(lvDisp);
   delay(800);
-  ESP.restart();
+  quietRestart();
 }
 
 /**
@@ -2928,7 +2929,7 @@ static void firmwareConfirm() {
       ui::buildMessage("Uppdateringen fungerade inte. Startar om på förra versionen ...", true);
       lv_refr_now(lvDisp);
       delay(1500);
-      ESP.restart();
+      quietRestart();
     }
     checked = true;
   }
@@ -3013,7 +3014,7 @@ static void onAction(const ui::Action& a) {
       ui::buildMessage("Startar om ...", true);
       lv_refr_now(lvDisp);
       delay(300);
-      ESP.restart();
+      quietRestart();
       break;
     case ui::Act::WifiScan: wifiScan(); break;
     case ui::Act::WifiPick:
@@ -3314,6 +3315,15 @@ static void connectWifi() {
   WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());
 }
 
+// Stänger högtalare och mikrofon innan omstart, så att ljudchippet inte fastnar i ett halvt läge.
+static void quietRestart() {
+  M5.Speaker.stop();
+  M5.Speaker.end();
+  M5.Mic.end();
+  delay(100);
+  ESP.restart();
+}
+
 void setup() {
   auto m5cfg = M5.config();
   m5cfg.serial_baudrate = 115200;
@@ -3341,8 +3351,17 @@ void setup() {
   recBuf = (int16_t*)heap_caps_malloc(44 + REC_MAX_SAMPLES * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (!recBuf) Serial.println("[pluggis] kunde inte reservera minne för inspelning");
 
+  // Ljudchippet (ES8388) och förstärkaren ligger kvar i sitt gamla läge efter en mjuk omstart
+  // (OTA, "Starta om"). Stäng av allt, vänta in chippet och starta ljudet på nytt – två gånger
+  // om det behövs – så att ljudet fungerar utan att man måste bryta strömmen.
   M5.Mic.end();
-  M5.Speaker.begin();
+  for (int i = 0; i < 2; i++) {
+    M5.Speaker.end();
+    delay(120);
+    if (M5.Speaker.begin()) break;
+    Serial.println("[pluggis] högtalaren startade inte – försöker igen");
+    delay(250);
+  }
   M5.Speaker.setVolume(volume);
   M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
 
