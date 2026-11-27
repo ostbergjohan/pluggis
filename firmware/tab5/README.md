@@ -1,8 +1,72 @@
 # Pluggis on the M5Stack Tab5
 
-Copy `include/config.example.h` to `include/config.h` and fill it in before building. Images of the screens and the
-supported hardware are in the [main README](../../README.md#the-desk-screen-m5stack-tab5). The older firmware without
-LVGL has been removed (it's still in the git history).
+<p align="center"><img src="../../docs/brand/icon-512.png" width="120" alt="Pluggis logo"></p>
+
+Copy `include/config.example.h` to `include/config.h` and fill it in before building (see [Flashing](#flashing)).
+The older firmware without LVGL has been removed (it's still in the git history).
+
+## Screens
+
+Drawn with the simulator from the real interface code and test data (`./sim/run.sh`, see
+[the simulator](#see-the-screens-without-a-tab5-simulator)):
+
+<table>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/start.png" width="300" alt="Start screen"><br><sub>Start screen</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/ova.png" width="300" alt="Öva: homework and six exercises"><br><sub>Öva: homework and six exercises</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/snabbquiz-svar.png" width="300" alt="Quick quiz"><br><sub>Quick quiz</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/glosforhor.png" width="300" alt="Vocabulary quiz (answer by voice)"><br><sub>Vocabulary quiz (answer by voice)</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/forklara.png" width="300" alt="Explain to Pluggis"><br><sub>Explain to Pluggis</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/testprov.png" width="300" alt="Mock test"><br><sub>Mock test</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/matcha.png" width="300" alt="Match pairs"><br><sub>Match pairs</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/ordning.png" width="300" alt="Right order"><br><sub>Right order</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/lyssna.png" width="300" alt="Listen to the homework page by page"><br><sub>Listen to the homework page by page</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/plan.png" width="300" alt="Plan with Lyssna and Starta"><br><sub>Plan with Lyssna and Starta</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/chat.png" width="300" alt="Chat with the coach"><br><sub>Chat with the coach</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/fokustimer.png" width="300" alt="Focus timer"><br><sub>Focus timer</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/fokus-klar.png" width="300" alt="Focus session done"><br><sub>Focus session done</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/klocka.png" width="300" alt="The clock on the charger"><br><sub>The clock on the charger</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/wifi.png" width="300" alt="Choose WiFi on the screen"><br><sub>Choose WiFi on the screen</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="../../docs/screenshots/tab5/installningar.png" width="300" alt="Settings"><br><sub>Settings</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/en-ova.png" width="300" alt="The same in English"><br><sub>The same in English</sub></td>
+    <td align="center"><img src="../../docs/screenshots/tab5/en-plan.png" width="300" alt="Plan in English"><br><sub>Plan in English</sub></td>
+  </tr>
+</table>
+
+## Hardware
+
+Only the **M5Stack Tab5** (ESP32-P4), with or without a battery:
+
+| Model | What |
+|---|---|
+| Tab5 Kit (K145) | With a removable NP-F550 battery (7.4 V, 2000 mAh) – recommended, can sit on the desk without a cable |
+| Tab5 (C145) | Without a battery – powered via USB-C (or a battery bought separately) |
+
+| Part of the Tab5 | Used by Pluggis |
+|---|---|
+| ESP32-P4 (two RISC-V cores), 16 MB flash, 32 MB PSRAM | ✅ firmware (two app partitions for updates over WiFi) and screen buffers in PSRAM |
+| 5" IPS screen 1280×720 with touch (GT911, or ST7123/ST7121 on newer units) | ✅ via M5Unified/M5GFX and LVGL 9, landscape |
+| ESP32-C6 for WiFi (2.4 GHz) | ✅ 2.4 GHz networks only (an iPhone hotspot needs *Maximise Compatibility*) |
+| Two microphones (ES7210) | ✅ *Håll in och prata* (hold and talk) and spoken answers – recognised on the server (Whisper) |
+| 1 W speaker (ES8388 codec + NS4150B amplifier) | ✅ the coach's voice, read-aloud, sounds for right/wrong, the start sound |
+| Battery and charging (IP2326, INA226) | ✅ battery level, charging, shutdown time, the clock mode on the charger (USB power is detected) |
+| Power button | Hardware only: one press turns it on, a double press turns it off, a press while on resets |
+| 2 MP camera (SC2356), real-time clock (RX8130CE – the time is taken from the network), microSD, USB-A, RS485, Grove/M5-Bus, motion sensor (BMI270), headphone jack | – not used (homework is photographed with the phone) |
+
+Other ESP32 screens (Core2, CoreS3, Cardputer etc.) aren't supported: the interface is built for the Tab5's 1280×720.
+
+## How it's built
+
 
 Firmware for the desk screen (PlatformIO/Arduino). Talks to the server according to [docs/protocol.md](../../docs/protocol.md).
 

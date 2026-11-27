@@ -247,7 +247,7 @@ int main() {
   p.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, 1},
              {"NO", "Läs s. 40–45 (går att lyssna på)", 0x2f6f5e, 20, true, 1},
              {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
-             {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false, 2},
+             {"Spanska", "Övningspass: glosorna kap 3", 0xc8453b, 15, false, 2},
              {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false},
              {"Prov: Vikingatiden – handel, resor och vardagsliv", "Läs s. 112–118 om handelsresorna österut och gör tankekartan över de viktigaste orterna", 0xb7862a, 20, false},
              {"Engelska", "Repetera glosorna med boken framme, sedan utan, som på provet", 0x1f8a9e, 15, false}};
@@ -366,7 +366,7 @@ int main() {
     p2.totalMinutes = 60;
     p2.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, 1},
                 {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
-                {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false, 2},
+                {"Spanska", "Övningspass: glosorna kap 3", 0xc8453b, 15, false, 2},
                 {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false}};
     ui::buildPlan(p2);
     save("35-plan-med-timer");
@@ -380,7 +380,7 @@ int main() {
   ck.next = "NO: Fotosyntesen och cellandning";
   ck.nextWhen = "om 3 dagar";
   ck.today = "2 av 4 kvar · 35 min";
-  ck.items = {"Läs s. 46–52 om cellandning", "Öva glosorna kap 3 – Matcha par"};
+  ck.items = {"Läs s. 46–52 om cellandning", "Övningspass: glosorna kap 3"};
   ui::clockShow(&ck);
   save("36-klocka");
   ck.next = "Engelska: glosor kap 4";
@@ -405,20 +405,22 @@ int main() {
   save("24-elevkod");
   top.tab = 1;
   ui::setTop(top);
-  ui::toast("+5 poäng");
+  ui::toast("+5 p");
   run(500);
   save("17-notis");
   // ---- samma skärmar på engelska (elev med språket English)
   ui::setEnglish(true);
+  run(3000);   // notisen från förra bilden hinner försvinna
   top.tab = 0; top.focusLeft = -1; top.status = "";
   ui::setTop(top);
   {
     ui::Ova eo;
-    eo.rows = {{"Prov: Fotosyntesen", "Imorgon", ui::Tone::Warn, 0x2f6f5e, true},
-               {"Engelska: glosor kap 3", "Fredag 28/11", ui::Tone::Muted, 0x1f8a9e, true},
+    // det main.cpp räknar fram (datum) översätts där – här står det redan på engelska
+    eo.rows = {{"Prov: Fotosyntesen", "Tomorrow", ui::Tone::Warn, 0x2f6f5e, true},
+               {"Engelska: glosor kap 3", "Friday 28/11", ui::Tone::Muted, 0x1f8a9e, true},
                {"Prov: Vikingatiden", "börja nu", ui::Tone::Good, 0xb7862a, false}};
     eo.title = "Prov: Fotosyntesen";
-    eo.meta = "NO  ·  Imorgon";
+    eo.meta = "NO  ·  Tomorrow";
     eo.color = 0x2f6f5e;
     eo.topics = {"Klorofyll", "Ljus och energi"};
     eo.last = "Snabbquiz · Fotosyntesen · 8 av 10 rätt";
