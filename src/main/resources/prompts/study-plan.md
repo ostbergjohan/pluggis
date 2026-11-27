@@ -34,9 +34,12 @@ Regler:
   ett snabbquiz eller en tydligt avgränsad sida), så att eleven vet exakt vad som ska göras.
 - Variation: lägg aldrig två läsmoment direkt efter varandra – växla läsning med en övning i Pluggis
   (snabbquiz, lucktext, Förklara för Pluggis, matcha par) eller med att räkna/öva uppgifter.
-- Skriv övningar i Pluggis med sina namn, så att eleven kan starta dem direkt från planen:
-  "Gör ett snabbquiz", "Gör en lucktext", "Förklara för Pluggis", "Matcha par", "Rätt ordning", "Testprov i Pluggis",
-  och för glosor i ett språk: "Glosförhör" (eleven hör ordet och svarar högt på svenska).
+- Övningar i Pluggis är ett övningspass: eleven trycker Starta och en timer går momentets minuter medan övningarna
+  byts av (snabbquiz, matcha par, lucktext, rätt ordning, Förklara för Pluggis). Skriv dem som
+  "Öva i Pluggis: <vad>" – t.ex. "Öva i Pluggis: fotosyntesens begrepp" – eller börja med den övning som passar bäst:
+  "Gör ett snabbquiz …", "Matcha par …", "Rätt ordning …", "Förklara för Pluggis …". Ett övningspass är 10–20 minuter.
+  "Testprov i Pluggis" är ett eget pass (ca 20 minuter), och för glosor i ett språk finns "Glosförhör" (eleven hör
+  ordet och svarar högt).
 - Varje moment börjar med ett verb och är så konkret att det går att börja direkt.
   Det aktiva sker i egna moment med övningarna i Pluggis – inte som skrivuppgifter till läsningen.
 - PROV med minst 3 pluggdagar: lägg in ett moment "Testprov i Pluggis" (15–20 min, typ REVIEW) 1–2 dagar före

@@ -1237,6 +1237,7 @@ static String exerciseFor(const String& task) {
   String t = task;
   t.toLowerCase();
   if (t.indexOf("testprov") >= 0) return "exam";
+  if (t.indexOf("öva i pluggis") >= 0 || t.indexOf("blandade övningar") >= 0 || t.indexOf("övningspass") >= 0) return "mix";
   if (t.indexOf("glosförhör") >= 0 || t.indexOf("förhör glosorna") >= 0 || t.indexOf("muntligt förhör") >= 0) return "vocab";
   if (t.indexOf("snabbquiz") >= 0 || t.indexOf("quiz") >= 0) return "quiz";
   if (t.indexOf("lucktext") >= 0) return "cloze";
@@ -1766,6 +1767,7 @@ static String dateLabel(const String& iso) {
 }
 
 
+static void mixExerciseDone();
 static void setLast(int kind, const String& result) {
   // Övningen startades från planen: bocka av momentet (poäng som vanligt)
   if (practicePlanItem && api("POST", "/api/plan/items/" + String(practicePlanItem) + "/done", "", nullptr) == 200) {
@@ -1774,6 +1776,7 @@ static void setLast(int kind, const String& result) {
   }
   practicePlanItem = 0;
   lastKind = kind;
+  mixExerciseDone();
   String name;
   for (auto& m : makeList) if (m.id == lastHw) name = m.title;
   lastText = String(ui::tr(kind == 2 && oralDeck ? "Glosförhör" : MK_LABELS[kind]).c_str()) + (lastFocus.length() ? " · " + lastFocus : String()) +
@@ -1862,6 +1865,11 @@ struct FocusState {
   String title, subject, reward, practice;
   uint32_t color = ui::ACCENT;
   int minutes = 0;
+  // Övningspass från planen: timern går i toppraden medan övningarna byts av (ingen fokusskärm)
+  bool mix = false;
+  std::vector<String> kinds;     // quiz, match, cloze, order, explain/vocab – i den ordningen de görs
+  int next = 0;
+  uint32_t nextAt = 0;           // nästa övning startar (efter att resultatet visats en stund)
 };
 static FocusState fz;
 static Screen focusReturn = Screen::Plan;
@@ -1893,7 +1901,9 @@ static void focusBegin(int minutes, bool onBreak) {
   fz.total = minutes * 60;
   fz.startedAt = millis();
   fz.pausedMs = 0;
-  if (!onBreak) {
+  if (!onBreak && fz.mix) {
+    fz.minutes = minutes;
+  } else if (!onBreak) {
     fz.minutes = minutes;
     String what = "Fokus: " + (fz.title.length() ? fz.title : String("fritt pass"));
     what.replace("\"", "'");
@@ -1902,8 +1912,8 @@ static void focusBegin(int minutes, bool onBreak) {
     String body = "{\"what\":\"" + what + "\"" + (fz.hwId ? ",\"homeworkId\":" + String(fz.hwId) : "") + "}";
     fz.practice = api("POST", "/api/practice/start", body, &doc) == 200 ? String((const char*)(doc["id"] | "")) : "";
   }
-  Serial.printf("[pluggis] fokus: %s %d min\n", onBreak ? "paus" : "pass", minutes);
-  if (screen != Screen::Focus) showScreen(Screen::Focus);
+  Serial.printf("[pluggis] fokus: %s %d min\n", fz.mix ? "övningspass" : onBreak ? "paus" : "pass", minutes);
+  if (!fz.mix && screen != Screen::Focus) showScreen(Screen::Focus);
   dirtyAll = true;
 }
 
@@ -1927,6 +1937,7 @@ static void focusFinished() {
     dirtyAll = true;
     return;
   }
+  if (fz.mix && (screen == Screen::OvaCard || screen == Screen::Game)) practiceEnd();   // övningstiden räknas
   focusPracticeEnd();
   fz.done = true;
   String reward = String(fz.minutes) + " min plugg";
@@ -1940,6 +1951,49 @@ static void focusFinished() {
   focusDim = false;
   if (screen != Screen::Focus) showScreen(Screen::Focus);
   dirtyAll = true;
+}
+
+/** Startar en övning av ett slag ("quiz", "match" …) för läxan – samma som när coachen ber om en. */
+static void startKind(const String& kind, long hw) {
+  pendingKind = kind;
+  pendingHw = hw;
+  pendingPractice = true;
+}
+
+/**
+ * Ett övningsmoment i planen ("Gör ett snabbquiz", 15 min): timern startar med momentets minuter och övningarna
+ * byts av – den som står i planen först, sedan matcha par, lucktext, rätt ordning, Förklara (glosförhör för
+ * språk) – tills tiden är slut. Då bockas momentet av. Testprov görs som ett eget pass.
+ */
+static void mixStart(const PlanRow& r, const String& first) {
+  if (fz.on && !fz.done) focusPracticeEnd();
+  focusReturn = Screen::Plan;
+  fz = FocusState();
+  fz.mix = true;
+  fz.title = r.task;
+  fz.subject = r.subject;
+  fz.color = subjectColor(r.subject, r.task);
+  fz.planItem = r.id;
+  fz.hwId = r.hwId;
+  bool lang = isLanguageText(r.subject + " " + r.task);
+  for (const char* k : {"quiz", "match", "cloze", "order", lang ? "vocab" : "explain"})
+    if (first != k) fz.kinds.push_back(k);
+  fz.kinds.insert(fz.kinds.begin(), first == "mix" ? String("quiz") : first);
+  fz.next = 1;
+  practicePlanItem = 0;   // bockas av när tiden är slut, inte efter första övningen
+  focusBegin(std::max(5, std::min(60, r.minutes > 0 ? r.minutes : 15)), false);
+  startKind(fz.kinds[0], fz.hwId);
+}
+
+/** En övning i passet är klar: nästa startar om en stund om det finns tid kvar. */
+static void mixExerciseDone() {
+  if (!fz.on || !fz.mix || fz.done) return;
+  if (focusLeft() < 60) return;   // mindre än en minut kvar: passet tar slut av sig självt
+  fz.nextAt = millis() + 5000;
+  const String& k = fz.kinds[fz.next % fz.kinds.size()];
+  static const char* names[][2] = {{"quiz", "Snabbquiz"}, {"match", "Matcha par"}, {"cloze", "Lucktext"}, {"order", "Rätt ordning"},
+                                   {"explain", "Förklara"}, {"vocab", "Glosförhör"}};
+  for (auto& n : names) if (k == n[0]) ui::toast(ui::tr("Nästa: ") + ui::tr(n[1]));
 }
 
 static void focusStop() {
@@ -1956,6 +2010,10 @@ static void focusStop() {
 /** Varje varv i loop(): sekunder, 5 minuter kvar, slut och dämpning. */
 static void focusLoop() {
   if (!fz.on || fz.done) return;
+  if (fz.mix && fz.nextAt && millis() > fz.nextAt) {
+    fz.nextAt = 0;
+    startKind(fz.kinds[fz.next++ % fz.kinds.size()], fz.hwId);
+  }
   static int lastLeft = -1;
   int left = focusLeft();
   if (left != lastLeft) {
@@ -1969,7 +2027,7 @@ static void focusLoop() {
     ui::toast("5 minuter kvar");
   }
   if (left <= 0 && !fz.paused) { focusFinished(); return; }
-  bool running = !fz.paused;
+  bool running = !fz.paused && !fz.mix;
   if (running && !focusDim && millis() - lastTouchAt > 60000) {
     focusDim = true;
     M5.Display.setBrightness(std::max(20, cfg.bright / 4));
@@ -3168,10 +3226,15 @@ static void onAction(const ui::Action& a) {
       if (a.act == ui::Act::PlanRow && r.type == "READ" && r.hwId) { openReading(r); break; }
       // Tryck på en övning ("Gör ett snabbquiz"): starta den för läxan
       if (a.act == ui::Act::PlanRow && r.hwId && !r.done && exerciseFor(r.task).length()) {
-        pendingKind = exerciseFor(r.task);
-        pendingHw = r.hwId;
-        pendingPractice = true;
-        practicePlanItem = r.id;
+        String kind = exerciseFor(r.task);
+        if (kind == "exam") {   // testprovet är ett eget pass
+          pendingKind = kind;
+          pendingHw = r.hwId;
+          pendingPractice = true;
+          practicePlanItem = r.id;
+        } else {
+          mixStart(r, kind);
+        }
         break;
       }
       if (r.done) break;

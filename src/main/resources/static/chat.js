@@ -661,6 +661,7 @@ function pagesIn(task) {
 function exerciseFor(task) {
   const t = (task || '').toLowerCase();
   if (t.includes('testprov')) return 'exam';
+  if (t.includes('öva i pluggis') || t.includes('blandade övningar') || t.includes('övningspass')) return 'mix';
   if (t.includes('quiz')) return 'quiz';
   if (t.includes('lucktext')) return 'cloze';
   if (t.includes('förklara för pluggis') || t.includes('förklara i pluggis')) return 'explain';
@@ -684,7 +685,70 @@ function planAction(item) {
   }
   const kind = exerciseFor(item.task);
   if (!kind) return null;
-  return h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => { stop(e); openPractice(kind, item.homeworkId); } }, '▶ Starta');
+  // Testprovet är ett eget pass; övriga övningar blir ett övningspass med timer (se Run)
+  return h('button', { class: 'small-btn', style: 'margin-left:8px', onclick: (e) => {
+    stop(e);
+    if (kind === 'exam') openPractice(kind, item.homeworkId); else runStart(item, kind);
+  } }, '▶ Starta');
+}
+
+// ---- Övningspass från planen: "Gör ett snabbquiz, 15 min" → timern går i 15 min och övningarna byts av
+// (först den i planen, sedan matcha par, lucktext, rätt ordning, Förklara …). När tiden är slut bockas momentet av.
+const Run = { on: false };
+const RUN_NAMES = { quiz: 'Snabbquiz', match: 'Matcha par', cloze: 'Lucktext', order: 'Rätt ordning', explain: 'Förklara' };
+
+function runStart(item, first) {
+  if (Run.on) runStop(true);
+  const order = ['quiz', 'match', 'cloze', 'order', 'explain'];
+  const start = first === 'mix' || !order.includes(first) ? 'quiz' : first;
+  Object.assign(Run, { on: true, item, homeworkId: item.homeworkId, kinds: [start, ...order.filter(k => k !== start)], next: 1,
+    endsAt: Date.now() + Math.max(5, Math.min(60, item.minutes || 15)) * 60000 });
+  const bar = h('div', { id: 'runBar', style: 'display:flex;align-items:center;gap:10px;padding:8px 14px;background:#FEC434;color:#022153;font-weight:600;font-size:15px' },
+    h('span', { id: 'runTime' }, ''), h('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, item.task),
+    h('button', { class: 'small-btn', onclick: runNext }, 'Nästa övning ›'),
+    h('button', { class: 'small-btn', title: 'Avsluta passet', onclick: () => { if (confirm('Avsluta övningspasset?')) runStop(true); } }, '✕'));
+  document.getElementById('runBar')?.remove();
+  document.body.insertBefore(bar, document.getElementById('view'));
+  Run.timer = setInterval(runTick, 1000);
+  runTick();
+  openPractice(Run.kinds[0], Run.homeworkId);
+}
+
+function runNext() {
+  if (!Run.on) return;
+  Practice.end(false);
+  const k = Run.kinds[Run.next++ % Run.kinds.length];
+  toast(`Nästa: ${RUN_NAMES[k] || k}`);
+  openPractice(k, Run.homeworkId);
+}
+
+function runTick() {
+  if (!Run.on) return;
+  const left = Math.max(0, Run.endsAt - Date.now());
+  const el = document.getElementById('runTime');
+  if (el) el.textContent = `⏱ ${clock(left)}`;
+  if (left <= 0) runStop(false);
+}
+
+/** Passet är slut (eller avslutat): övningstiden skickas, och momentet bockas av när tiden gått ut. */
+async function runStop(early) {
+  if (!Run.on) return;
+  Run.on = false;
+  clearInterval(Run.timer);
+  document.getElementById('runBar')?.remove();
+  Practice.end(false);
+  if (early) return;
+  const item = Run.item;
+  let ticked = false;
+  try { await api(`/api/plan/items/${item.id}/done?deviceId=${enc(S.deviceId)}`, { method: 'POST' }); ticked = true; refreshPoints(); } catch { /* tyst */ }
+  const sheet = $('#sheet');
+  const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
+  sheet.replaceChildren(h('div', { class: 'panel' },
+    h('h2', {}, 'Bra jobbat! 🎉'),
+    h('p', {}, `${item.minutes || 15} minuter övning klart.` + (ticked ? pts(' Bockat i planen, +3 poäng.') : '')),
+    h('div', { class: 'box', style: 'padding:12px 14px;font-weight:600' }, item.task),
+    h('div', { class: 'actions' }, h('button', { class: 'go', onclick: () => { close(); show('plan'); } }, 'Till planen'))));
+  sheet.hidden = false;
 }
 
 function todayAside() {
@@ -1011,6 +1075,7 @@ document.addEventListener('visibilitychange', () => {
 
 /** "Bocka av 'Öva glosor 1–15'?" – ett tryck efter en övning. */
 function offerTick(item) {
+  if (Run.on && Run.item && Run.item.id === item.id) return;   // bockas av när passets tid är slut
   const sheet = $('#sheet');
   const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
   sheet.replaceChildren(h('div', { class: 'panel' },

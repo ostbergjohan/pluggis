@@ -247,7 +247,11 @@ I18N.add({
 
   // fler texter från appen
   'Läxa: {0}': 'Homework: {0}', 'Prov: {0}': 'Test: {0}',
-  'Senaste': 'Latest', 'Kvar:': 'Left:', 'dag i rad': 'day in a row', 'dagar i rad': 'days in a row',
+  'Senaste': 'Latest',
+  'Nästa övning ›': 'Next exercise ›', 'Avsluta passet': 'End the session', 'Avsluta övningspasset?': 'End the practice session?',
+  'Nästa: {0}': 'Next: {0}', 'Bra jobbat! 🎉': 'Well done! 🎉', '{0} minuter övning klart.{1}': '{0} minutes of practice done.{1}',
+  '{0} minuter övning klart.': '{0} minutes of practice done.', 'Bockat i planen, +3 poäng.': 'Ticked off in the plan, +3 points.',
+  'Till planen': 'To the plan', 'Snabbquiz': 'Quick quiz', 'Kvar:': 'Left:', 'dag i rad': 'day in a row', 'dagar i rad': 'days in a row',
   '{0} % · {1}': '{0} % · {1}',
 
   // poänghändelser från servern (skrivs på svenska där)

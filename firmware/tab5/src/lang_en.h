@@ -102,7 +102,7 @@ static const EnText EN_EXACT[] = {
   {"Kameran på skärmen kommer snart. Fota med telefonen i Pluggis-appen så länge.", "The camera on the screen is coming soon. Take photos with the phone in the Pluggis app for now."},
   {"Anslutning", "Connection"},
   // uppdatering över WiFi
-  {"Leta efter uppdatering", "Check for update"}, {"Uppdatera nu", "Update now"}, {"Letar efter uppdatering ...", "Checking for update ..."},
+  {"Leta efter uppdatering", "Check for update"}, {"Nästa:", "Next:"}, {"Uppdatera nu", "Update now"}, {"Letar efter uppdatering ...", "Checking for update ..."},
   {"Tryck Leta efter uppdatering för att se om det finns en ny version.", "Tap Check for update to see if there's a new version."},
   {"Du har den senaste versionen.", "You have the latest version."}, {"Ingen firmware på servern än.", "No firmware on the server yet."},
   {"Avsluta fokustimern först.", "Finish the focus timer first."}, {"För lite batteri – sätt Tab5 i laddaren först.", "Battery too low – put the Tab5 on the charger first."},
