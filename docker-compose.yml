@@ -1,10 +1,10 @@
 # Allt på en maskin:
-#   cp .env.example .env      # fyll i ANTHROPIC_API_KEY och PLUGGIS_DEVICE_TOKEN
+#   cp .env.example .env      # fyll i ANTHROPIC_API_KEY och PLUGGIS_ADMIN_PASSWORD
 #   docker compose up --build
 # Öppna sedan http://localhost:8080
 #
 # .env är valfri (kräver Docker Compose 2.24+). Utan den kan värdena sättas i skalet:
-#   ANTHROPIC_API_KEY=sk-ant-... PLUGGIS_DEVICE_TOKEN=hemligt docker compose up --build
+#   ANTHROPIC_API_KEY=sk-ant-... PLUGGIS_ADMIN_PASSWORD=hemligt docker compose up --build
 services:
   pluggis:
     build: .
@@ -24,7 +24,8 @@ services:
       # Valfritt: Azures svenska röster (gratisnivån F0). Tomt = bara Piper.
       AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
       AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-swedencentral}
-      PLUGGIS_DEVICE_TOKEN: ${PLUGGIS_DEVICE_TOKEN:-}
+      # Lösenord till föräldravyn (första gången, eller nytt om det glömts). Sparas krypterat; kan tas bort efteråt.
+      PLUGGIS_ADMIN_PASSWORD: ${PLUGGIS_ADMIN_PASSWORD:-}
       PLUGGIS_SPEECH_URL: http://speech:8090
     volumes:
       - pluggis-data:/app/data

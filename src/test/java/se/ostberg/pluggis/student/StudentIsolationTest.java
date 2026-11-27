@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @TestPropertySource(properties = {
-        "pluggis.device-token=test-token",
+        "pluggis.admin-password=test-password",
         "pluggis.anthropic.api-key=test",
         "pluggis.anthropic.base-url=http://127.0.0.1:9",
         "spring.datasource.url=jdbc:h2:mem:isolation;DB_CLOSE_DELAY=-1",
@@ -36,6 +36,19 @@ class StudentIsolationTest {
 
     @Autowired
     MockMvc mvc;
+
+    // Föräldern: inloggad i föräldravyn (lösenordet sätts från pluggis.admin-password vid start)
+    private static jakarta.servlet.http.Cookie parentCookie;
+
+    private jakarta.servlet.http.Cookie parent() throws Exception {
+        if (parentCookie == null) {
+            parentCookie = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/auth/login")
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"password\":\"test-password\"}"))
+                    .andReturn().getResponse().getCookie(se.ostberg.pluggis.config.AdminAuth.COOKIE);
+            org.assertj.core.api.Assertions.assertThat(parentCookie).as("inloggning i testet").isNotNull();
+        }
+        return parentCookie;
+    }
     @Autowired
     ObjectMapper mapper;
 
@@ -50,7 +63,7 @@ class StudentIsolationTest {
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder b, String studentId) {
-        b.header(TOKEN, "test-token");
+        b.cookie(parent());
         if (studentId != null) {
             b.header("X-Pluggis-Student", studentId);
         }

@@ -11,7 +11,7 @@ import java.util.Set;
 
 @ConfigurationProperties("pluggis")
 public record PluggisProperties(
-        String deviceToken,
+        String adminPassword,
         String timezone,
         int maxHistoryMessages,
         int conversationIdleMinutes,
@@ -88,11 +88,4 @@ public record PluggisProperties(
         return ZoneId.of(timezone == null || timezone.isBlank() ? "Europe/Stockholm" : timezone);
     }
 
-    public boolean tokenRequired() {
-        return deviceToken != null && !deviceToken.isBlank();
-    }
-
-    public boolean tokenMatches(String candidate) {
-        return !tokenRequired() || deviceToken.equals(candidate);
-    }
 }

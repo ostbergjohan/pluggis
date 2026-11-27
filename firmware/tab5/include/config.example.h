@@ -9,9 +9,9 @@
 #define PLUGGIS_HOST        "192.168.1.20"
 #define PLUGGIS_PORT        8080
 
-// Elevens enhets-id (admin → Inställningar → Elever) och PLUGGIS_DEVICE_TOKEN från .env
+// Elevens enhets-id och elevens kod (föräldravyn → Inställningar → Elever). Det finns ingen föräldertoken längre.
 #define PLUGGIS_DEVICE_ID   "fred"
-#define PLUGGIS_TOKEN       "byt-mig"
+#define PLUGGIS_TOKEN       "ABCDE"   // elevens kod
 
 // Stäng av efter så många minuter utan aktivitet (0 = aldrig)
 #define PLUGGIS_IDLE_MINUTES 5

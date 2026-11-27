@@ -17,9 +17,8 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Inloggning till föräldravyn (/auth, utanför /api så att den inte kräver token).
- * Första gången väljs ett lösenord – då behövs PLUGGIS_DEVICE_TOKEN en gång, så att inte vem som helst
- * på nätet hinner före.
+ * Inloggning till föräldravyn (/auth, utanför /api). Lösenordet sätts första gången med PLUGGIS_ADMIN_PASSWORD
+ * i .env (så att ingen annan på nätet hinner före) och kan sedan bytas när man är inloggad.
  */
 @RestController
 @RequestMapping("/auth")
@@ -28,15 +27,13 @@ public class AdminAuthController {
     private static final Logger log = LoggerFactory.getLogger(AdminAuthController.class);
 
     private final AdminAuth auth;
-    private final PluggisProperties props;
     private final LoginGuard guard = new LoginGuard(10, Duration.ofMinutes(10));
 
-    public AdminAuthController(AdminAuth auth, PluggisProperties props) {
+    public AdminAuthController(AdminAuth auth) {
         this.auth = auth;
-        this.props = props;
     }
 
-    public record SetupRequest(String password, String token) {
+    public record PasswordRequest(String password) {
     }
 
     public record LoginRequest(String password) {
@@ -45,19 +42,15 @@ public class AdminAuthController {
     /** Är lösenord valt, och är den här webbläsaren inloggad (cookie eller token)? */
     @GetMapping("/status")
     public Map<String, Object> status(HttpServletRequest req) {
-        return Map.of("passwordSet", auth.passwordSet(), "loggedIn", loggedIn(req), "tokenRequired", props.tokenRequired());
+        return Map.of("passwordSet", auth.passwordSet(), "loggedIn", loggedIn(req));
     }
 
-    /** Välj lösenord första gången (med token), eller byt lösenord när man är inloggad. */
+    /** Byt lösenord (inloggad). Det första lösenordet sätts med PLUGGIS_ADMIN_PASSWORD i .env. */
     @PostMapping("/password")
-    public ResponseEntity<?> setPassword(@RequestBody SetupRequest body, HttpServletRequest req, HttpServletResponse res) {
-        // Byta lösenord: inloggad. Välja första gången: token i rutan, eller redan inne med token (header).
-        boolean allowed = loggedIn(req) || (!auth.passwordSet() && props.tokenMatches(body.token()));
-        if (!allowed) {
-            log.warn("Lösenord för föräldravyn nekat från {}: {}", req.getRemoteAddr(),
-                    auth.passwordSet() ? "inte inloggad" : "fel token");
-            return ResponseEntity.status(401).body(Map.of("error",
-                    auth.passwordSet() ? "Logga in först" : "Fel token – samma som PLUGGIS_DEVICE_TOKEN i .env"));
+    public ResponseEntity<?> setPassword(@RequestBody PasswordRequest body, HttpServletRequest req, HttpServletResponse res) {
+        if (!loggedIn(req)) {
+            log.warn("Byte av lösenord för föräldravyn nekat från {}: inte inloggad", req.getRemoteAddr());
+            return ResponseEntity.status(401).body(Map.of("error", "Logga in först"));
         }
         boolean change = auth.passwordSet();
         try {
@@ -105,7 +98,7 @@ public class AdminAuthController {
     }
 
     private boolean loggedIn(HttpServletRequest req) {
-        return (props.tokenRequired() && props.tokenMatches(req.getHeader(ApiTokenFilter.HEADER))) || hasValidCookie(req, auth);
+        return hasValidCookie(req, auth);
     }
 
     static boolean hasValidCookie(HttpServletRequest req, AdminAuth auth) {

@@ -17,7 +17,7 @@ Allt hemligt ligger på två ställen, och inget av dem checkas in i git:
 
 | Vad | Måste? | Var | Kostnad |
 |---|---|---|---|
-| [Föräldertoken](#1-föräldertoken-pluggis_device_token) `PLUGGIS_DEVICE_TOKEN` | **Ja** | `.env` | – |
+| [Lösenord till föräldravyn](#1-lösenord-till-föräldravyn-pluggis_admin_password) `PLUGGIS_ADMIN_PASSWORD` | **Ja** (första gången) | `.env` | – |
 | [Claude](#2-claude--välj-ett-av-tre-sätt): API-nyckel `ANTHROPIC_API_KEY` och/eller abonnemangstoken `CLAUDE_CODE_OAUTH_TOKEN` | **Ja** (minst en) | `.env` | Per token, eller ingår i Pro/Max |
 | [Elevkoder](#3-elevkoder) | Skapas av Pluggis | Admin → Inställningar → Elever | – |
 | [Azure-röster](#4-azure-röster-valfritt) `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` | Nej | `.env` | Gratis (F0) |
@@ -27,23 +27,23 @@ Allt hemligt ligger på två ställen, och inget av dem checkas in i git:
 **Minsta möjliga `.env`:**
 
 ```bash
-PLUGGIS_DEVICE_TOKEN=<lång slumpad sträng>
+PLUGGIS_ADMIN_PASSWORD=<minst 8 tecken>
 ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
 ---
 
-## 1. Föräldertoken (`PLUGGIS_DEVICE_TOKEN`)
+## 1. Lösenord till föräldravyn (`PLUGGIS_ADMIN_PASSWORD`)
 
-Lösenordet till allt utom elevchatten: föräldravyn, iOS-genvägen och curl.
+Föräldravyn (`/admin`) loggar in med lösenord. Eleven, elevchatten och Tab5 loggar in med **elevens kod** (se 3).
 
-- **Skapa:** `openssl rand -hex 24` (eller valfri lång slumpad sträng).
-- **Lägg:** `PLUGGIS_DEVICE_TOKEN=...` i `.env`.
-- **Används i:**
-  - Föräldravyn (`/admin`): Inställningar → Token (sparas i webbläsaren, en gång per dator eller telefon).
-  - iOS-genvägen och curl: headern `X-Pluggis-Token`.
-- **Saknas den** är API:t öppet för alla på nätet. Loggen varnar då: *"pluggis.device-token är inte satt – API:t är öppet"*.
-- **Byta:** ändra i `.env`, kör `docker compose up -d` och uppdatera token i föräldravyn och i genvägen.
+- **Sätt:** `PLUGGIS_ADMIN_PASSWORD=...` i `.env` (minst 8 tecken) och kör `docker compose up -d`. Lösenordet
+  sparas krypterat (PBKDF2) när servern startar; loggen visar *"Lösenord för föräldravyn satt från PLUGGIS_ADMIN_PASSWORD"*.
+- **Sedan:** öppna `/admin` och logga in. Du är inloggad i 30 dagar per webbläsare. Raden i `.env` kan tas bort.
+- **Byta:** i föräldravyn under System → Anslutning, eller med ett nytt värde i `.env` och omstart.
+- **Glömt:** skriv ett nytt lösenord i `.env` och starta om.
+- **Saknas det** går föräldravyn inte att öppna (den visar hur lösenordet sätts), och loggen varnar:
+  *"Inget lösenord för föräldravyn – sätt PLUGGIS_ADMIN_PASSWORD i .env"*. Inget är öppet utan inloggning.
 
 ## 2. Claude – välj ett av tre sätt
 
@@ -161,7 +161,7 @@ Läxor och prov hämtas från skolans kalenderprenumeration.
 Efter `docker compose up -d --build`:
 
 ```bash
-docker compose logs pluggis | grep -E "Claude körs|Azure|Google Kalender|device-token"
+docker compose logs pluggis | grep -E "Claude körs|Azure|Google Kalender|föräldravyn"
 ```
 
 | Du vill se | Betyder |
@@ -169,7 +169,7 @@ docker compose logs pluggis | grep -E "Claude körs|Azure|Google Kalender|device
 | `Claude körs via API-nyckel` / `via Claude Code` / `hybrid` | Claude är inställt |
 | `Azure-röster påslagna` | Azure fungerar (annars Piper) |
 | `Google Kalender påslagen (tjänstekonto …)` | Google-nyckeln hittades |
-| **Ingen** rad med `device-token är inte satt` | Föräldertoken är satt |
+| `Lösenord för föräldravyn satt` (eller ingen varning om lösenord) | Lösenordet är satt |
 
 I föräldravyn visar **Kostnad** status för API-nyckel, Claude Code-token och `claude`-programmet. **Inställningar → Google Kalender** visar de närmaste passen med länkar.
 
@@ -177,7 +177,7 @@ I föräldravyn visar **Kostnad** status för API-nyckel, Claude Code-token och 
 
 | Vad | Gör så här |
 |---|---|
-| `PLUGGIS_DEVICE_TOKEN` | Ny sträng i `.env` → `docker compose up -d` → uppdatera föräldravyn och genvägen |
+| Lösenordet till föräldravyn | Nytt `PLUGGIS_ADMIN_PASSWORD` i `.env` → `docker compose up -d`, och *Logga ut överallt* under System → Anslutning |
 | `ANTHROPIC_API_KEY` | Ta bort nyckeln i console.anthropic.com → skapa ny → `.env` |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Kör `claude setup-token` för en ny token → `.env`. Byt även lösenord på ditt Claude-konto om du misstänker missbruk |
 | `AZURE_SPEECH_KEY` | *Regenerate key* i Azure-portalen → `.env` |

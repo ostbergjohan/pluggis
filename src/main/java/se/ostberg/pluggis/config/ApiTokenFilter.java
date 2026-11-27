@@ -12,14 +12,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /**
- * Enkel delad-hemlighet-kontroll för /api/**. Räcker på hemnätet/VPN.
- * Ska tjänsten exponeras publikt (t.ex. som MCP-connector) behövs riktig auth (OAuth).
+ * Vem som får använda /api/**: föräldern när den är inloggad i föräldravyn (cookie från /auth/login), eller eleven
+ * med sin kod (header X-Pluggis-Token) – bara det eleven behöver, och bara sin egen data. Inget annat släpps in.
  */
 @Component
 public class ApiTokenFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Pluggis-Token";
-    private static final Logger log = LoggerFactory.getLogger(ApiTokenFilter.class);
 
     private final PluggisProperties props;
     private final se.ostberg.pluggis.chat.ChatAccess chat;
@@ -38,9 +37,6 @@ public class ApiTokenFilter extends OncePerRequestFilter {
         this.props = props;
         this.chat = chat;
         this.students = students;
-        if (!props.tokenRequired()) {
-            log.warn("pluggis.device-token är inte satt – API:t är öppet. Sätt PLUGGIS_DEVICE_TOKEN utanför lokal utveckling.");
-        }
     }
 
     @Override
@@ -53,8 +49,7 @@ public class ApiTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String token = request.getHeader(HEADER);
         Long student;
-        if ((props.tokenRequired() && props.tokenMatches(token))
-                || (adminAuth != null && AdminAuthController.hasValidCookie(request, adminAuth))) {
+        if (adminAuth != null && AdminAuthController.hasValidCookie(request, adminAuth)) {
             student = parentStudent(request);                       // föräldern: vald elev
         } else {
             var kid = chat.studentFor(token);
@@ -76,8 +71,6 @@ public class ApiTokenFilter extends OncePerRequestFilter {
                 if (own != null) {
                     request = ownDevice(request, own);
                 }
-            } else if (!props.tokenRequired()) {
-                student = parentStudent(request);                   // öppet läge (lokal utveckling)
             } else {
                 if (!guard.allow(request.getRemoteAddr())) {
                     response.sendError(429, "För många felaktiga försök – vänta en stund");

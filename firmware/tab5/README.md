@@ -18,7 +18,7 @@ Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hell
 
 1. Installera [PlatformIO](https://platformio.org/install/cli) (eller VS Code + PlatformIO).
 2. `cp include/config.example.h include/config.h` och fyll i WiFi, serverns adress, elevens enhets-id
-   (admin → Inställningar → Elever) och `PLUGGIS_DEVICE_TOKEN` från `.env`. `config.h` checkas aldrig in.
+   (admin → Inställningar → Elever) och elevens kod i `PLUGGIS_TOKEN` (föräldertoken finns inte längre). `config.h` checkas aldrig in.
 3. Koppla Tab5 med USB-C. Gå till nedladdningsläge: håll reset-knappen ~2 s tills den gröna lampan blinkar snabbt.
 4. `pio run -t upload`, och `pio device monitor` för loggen.
 5. I admin: Inställningar → Tab5 (hårdvara) för att visa enhetens status.

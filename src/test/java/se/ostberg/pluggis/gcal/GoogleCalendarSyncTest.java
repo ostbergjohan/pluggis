@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** Google Kalender mot en låtsas-Google: inloggning med signerad JWT, och skapa/ändra/ta bort pass. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:gcaltest;DB_CLOSE_DELAY=-1",
-        "pluggis.device-token=test-token",
+        "pluggis.admin-password=test-password",
         "pluggis.anthropic.api-key=test",
         "pluggis.anthropic.base-url=http://127.0.0.1:9",
         "pluggis.speech.base-url=",
@@ -165,6 +165,19 @@ class GoogleCalendarSyncTest {
     @Autowired
     MockMvc mvc;
 
+    // Föräldern: inloggad i föräldravyn (lösenordet sätts från pluggis.admin-password vid start)
+    private static jakarta.servlet.http.Cookie parentCookie;
+
+    private jakarta.servlet.http.Cookie parent() throws Exception {
+        if (parentCookie == null) {
+            parentCookie = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/auth/login")
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"password\":\"test-password\"}"))
+                    .andReturn().getResponse().getCookie(se.ostberg.pluggis.config.AdminAuth.COOKIE);
+            org.assertj.core.api.Assertions.assertThat(parentCookie).as("inloggning i testet").isNotNull();
+        }
+        return parentCookie;
+    }
+
     @Autowired
     PlanItemRepository items;
 
@@ -174,15 +187,15 @@ class GoogleCalendarSyncTest {
 
     @Test
     void planBecomesOneSessionPerDayInGoogleCalendar() throws Exception {
-        JsonNode status0 = call(get("/api/google-calendar").header("X-Pluggis-Token", "test-token"));
+        JsonNode status0 = call(get("/api/google-calendar").cookie(parent()));
         assertThat(status0.path("enabled").asBoolean()).isTrue();
         assertThat(status0.path("serviceAccountEmail").asText()).isEqualTo("pluggis@test.iam.gserviceaccount.com");
 
         // Pluggtid och en läxa med plan över två dagar
-        mvc.perform(put("/api/student").header("X-Pluggis-Token", "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/student").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"studyTime\":\"16:15\",\"studyCue\":\"efter mellanmålet\",\"studyDays\":[\"MONDAY\",\"TUESDAY\",\"WEDNESDAY\",\"THURSDAY\",\"FRIDAY\",\"SATURDAY\",\"SUNDAY\"]}"))
                 .andExpect(status().isOk());
-        JsonNode hw = M.readTree(mvc.perform(post("/api/homework").header("X-Pluggis-Token", "test-token")
+        JsonNode hw = M.readTree(mvc.perform(post("/api/homework").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"NO\",\"title\":\"NO-prov fotosyntes\",\"dueDate\":\"" + LocalDate.now().plusDays(5) + "\"}"))
                 .andReturn().getResponse().getContentAsString());
@@ -193,7 +206,7 @@ class GoogleCalendarSyncTest {
         items.save(new PlanItem(hid, d1, "Skriv 3 nyckelord", 15, PlanItem.Type.WRITE));
         PlanItem c = items.save(new PlanItem(hid, d2, "Förhör dig på begreppen", 15, PlanItem.Type.REVIEW));
 
-        JsonNode linked = call(put("/api/google-calendar").header("X-Pluggis-Token", "test-token")
+        JsonNode linked = call(put("/api/google-calendar").cookie(parent())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"calendarId\":\"fred@group.calendar.google.com\"}"));
         assertThat(jwtVerified).isTrue();
         assertThat(linked.path("result").path("created").asInt()).isEqualTo(2);
@@ -207,26 +220,26 @@ class GoogleCalendarSyncTest {
         assertThat(day1.path("end").path("dateTime").asText()).contains("T16:35");
         assertThat(day1.path("reminders").path("overrides").get(0).path("minutes").asInt()).isZero();
 
-        JsonNode st = call(get("/api/google-calendar").header("X-Pluggis-Token", "test-token"));
+        JsonNode st = call(get("/api/google-calendar").cookie(parent()));
         assertThat(st.path("upcoming")).hasSize(2);
         assertThat(st.path("upcoming").get(0).path("link").asText()).startsWith("https://calendar.google.com/event");
         assertThat(PlanCalendarSync.withAuthUser("https://www.google.com/calendar/event?eid=x", "fred@gmail.com"))
                 .isEqualTo("https://www.google.com/calendar/event?eid=x&authuser=fred%40gmail.com");
 
         // Inget ändrat → inget att göra
-        JsonNode again = call(post("/api/google-calendar/sync").header("X-Pluggis-Token", "test-token"));
+        JsonNode again = call(post("/api/google-calendar/sync").cookie(parent()));
         assertThat(again.path("result").path("updated").asInt()).isZero();
         assertThat(again.path("result").path("created").asInt()).isZero();
 
         // Bocka av ett moment → passet uppdateras
-        mvc.perform(post("/api/plan/items/" + a.getId() + "/done").param("deviceId", "tab5-1").header("X-Pluggis-Token", "test-token"))
+        mvc.perform(post("/api/plan/items/" + a.getId() + "/done").param("deviceId", "tab5-1").cookie(parent()))
                 .andExpect(status().isOk());
-        JsonNode afterDone = call(post("/api/google-calendar/sync").header("X-Pluggis-Token", "test-token"));
+        JsonNode afterDone = call(post("/api/google-calendar/sync").cookie(parent()));
         assertThat(afterDone.path("result").path("updated").asInt()).isEqualTo(1);
         assertThat(EVENTS.values().stream().anyMatch(e -> e.path("description").asText().contains("✅ Läs rubrikerna"))).isTrue();
 
         // Framsteg: 5 av 35 minuter klart
-        JsonNode prog = call(get("/api/plan/progress").header("X-Pluggis-Token", "test-token"));
+        JsonNode prog = call(get("/api/plan/progress").cookie(parent()));
         JsonNode p = null;
         for (JsonNode x : prog) {
             if (x.path("homeworkId").asLong() == hid) {
@@ -239,13 +252,13 @@ class GoogleCalendarSyncTest {
 
         // Dag 2 försvinner ur planen → passet tas bort
         items.deleteById(c.getId());
-        JsonNode afterDelete = call(post("/api/google-calendar/sync").header("X-Pluggis-Token", "test-token"));
+        JsonNode afterDelete = call(post("/api/google-calendar/sync").cookie(parent()));
         assertThat(afterDelete.path("result").path("deleted").asInt()).isEqualTo(1);
         assertThat(EVENTS).hasSize(1);
 
         // Koppla bort → kommande pass bort
         call(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/google-calendar")
-                .header("X-Pluggis-Token", "test-token"));
+                .cookie(parent()));
         assertThat(EVENTS).isEmpty();
     }
 }

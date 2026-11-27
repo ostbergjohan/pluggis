@@ -14,7 +14,6 @@ const store = {
 };
 
 const state = {
-  token: store.get('lc.token', ''),
   deviceId: store.get('lc.device', 'tab5-1'),
   // Tab5-hårdvaran är dold tills den används på riktigt (Inställningar → Tab5)
   showTab5: store.get('lc.showTab5', '') === '1',
@@ -61,7 +60,6 @@ function toast(message, isError = false) {
 
 async function api(path, { method = 'GET', body, form, raw } = {}) {
   const headers = {};
-  if (state.token) headers['X-Pluggis-Token'] = state.token;
   if (state.studentId) headers['X-Pluggis-Student'] = state.studentId;
   let payload;
   if (form) payload = form;
@@ -174,7 +172,7 @@ async function filesForm(files) {
   return fd;
 }
 
-/** Bild som kräver token (img src kan inte skicka headers): hämta som blob. */
+/** Bild bakom inloggningen: hämta som blob. */
 async function authImage(path) {
   const res = await api(path, { raw: true });
   if (!res.ok) throw new Error(String(res.status));
@@ -1299,7 +1297,7 @@ views.simulator = async (main) => {
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws/device?deviceId=${enc(state.deviceId)}&token=${enc(state.token)}`;
+    const url = `${proto}://${location.host}/ws/device?deviceId=${enc(state.deviceId)}`;   // inloggad: cookien följer med
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
     state.ws = ws;
@@ -1615,7 +1613,7 @@ function connectionPanel() {
   const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nytt lösenord (minst 8 tecken)' });
   const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma igen' });
   const post = async (path, body) => {
-    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.token ? { 'X-Pluggis-Token': state.token } : {}) },
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || r.statusText);
@@ -1632,19 +1630,13 @@ function connectionPanel() {
         await run(() => post('/auth/password', { password: pw.value }), e.target, 'Lösenordet är bytt');
         pw.value = pw2.value = '';
       } }, 'Spara lösenord'),
-      h('button', { onclick: async () => { await post('/auth/logout'); state.token = ''; store.set('lc.token', ''); location.reload(); } }, 'Logga ut'),
+      h('button', { onclick: async () => { await post('/auth/logout'); location.reload(); } }, 'Logga ut'),
       h('button', { class: 'danger', onclick: async (e) => {
         if (!confirm('Logga ut i alla webbläsare och telefoner?')) return;
         await run(() => post('/auth/logout-all'), e.target);
-        state.token = ''; store.set('lc.token', ''); location.reload();
+        location.reload();
       } }, 'Logga ut överallt')));
-  return h('div', {}, login, h('section', { class: 'panel' },
-    h('h2', {}, 'iOS-genvägen och curl'),
-    h('p', { class: 'item-meta' }, 'De loggar in med PLUGGIS_DEVICE_TOKEN från .env (headern X-Pluggis-Token), inte med lösenordet. '
-      + 'Token används också om du glömt lösenordet: "Använd token i stället" på inloggningssidan.'),
-    state.token ? h('div', { class: 'toolbar', style: 'margin-top:8px' },
-      h('button', { class: 'small', onclick: () => { state.token = ''; store.set('lc.token', ''); toast('Token borttagen från den här webbläsaren'); route(); } },
-        'Ta bort sparad token från webbläsaren')) : null));
+  return login;
 }
 
 function tab5Panel() {
@@ -1928,7 +1920,7 @@ async function pollDevice() {
   const el = $('#deviceStatus');
   if (!state.showTab5) return;
   try {
-    const r = await fetch('/api/devices', { headers: state.token ? { 'X-Pluggis-Token': state.token } : {} });
+    const r = await fetch('/api/devices');
     if (!r.ok) throw new Error();
     const data = await r.json();
     const on = data.connected.includes(state.deviceId);
@@ -1981,10 +1973,10 @@ $('#studentSel').addEventListener('change', (e) => {
 
 window.addEventListener('hashchange', route);
 
-// ---- Inloggning: lösenord (cookie i 30 dagar) eller token som förut ----
+// ---- Inloggning: lösenord (cookie i 30 dagar) ----
 async function authStatus() {
   try {
-    const r = await fetch('/auth/status', { headers: state.token ? { 'X-Pluggis-Token': state.token } : {} });
+    const r = await fetch('/auth/status');
     return await r.json();
   } catch { return { loggedIn: true, passwordSet: true }; }   // servern svarar inte: visa sidan, felen syns där
 }
@@ -2000,57 +1992,36 @@ function showLogin(st) {
   if (loginShown) return;
   loginShown = true;
   const msg = h('div', { class: 'login-msg', role: 'alert' });
-  const pw = h('input', { type: 'password', autocomplete: st.passwordSet ? 'current-password' : 'new-password', placeholder: 'Lösenord' });
-  const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma lösenord igen' });
-  const tok = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN', autocomplete: 'off' });
-  const done = () => { overlay.remove(); loginShown = false; startAdmin(); };
-  const later = st.loggedIn ? h('button', { type: 'button', class: 'ghost small', onclick: () => {
-    sessionStorage.setItem('pluggis.later', '1');
-    overlay.remove(); loginShown = false;
-  } }, 'Inte nu') : null;
-  const post = async (path, body) => {
-    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || r.statusText);
-    return d;
-  };
+  const pw = h('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Lösenord' });
   const submit = async (e) => {
     e.preventDefault();
     msg.textContent = '';
     try {
-      if (st.passwordSet) {
-        await post('/auth/login', { password: pw.value });
-      } else {
-        if (pw.value.length < 8) throw new Error('Minst 8 tecken');
-        if (pw.value !== pw2.value) throw new Error('Lösenorden är inte lika');
-        await post('/auth/password', { password: pw.value, token: tok.value.trim() });
-        toast('Lösenordet är valt – du är inloggad i 30 dagar');
-      }
-      done();
+      const r = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw.value }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || r.statusText);
+      overlay.remove(); loginShown = false; startAdmin();
     } catch (err) { msg.textContent = err.message; pw.select(); }
   };
-  const useToken = h('button', { type: 'button', class: 'ghost small', onclick: async () => {
-    const t = prompt('Token (samma som PLUGGIS_DEVICE_TOKEN i .env)', state.token || '');
-    if (t == null) return;
-    state.token = t.trim(); store.set('lc.token', state.token);
-    const s2 = await authStatus();
-    if (s2.loggedIn) done(); else msg.textContent = 'Fel token';
-  } }, 'Använd token i stället');
-  const form = h('form', { class: 'login-box', onsubmit: submit },
-    h('img', { src: '/logo-220.png', alt: '', class: 'login-logo' }),
-    h('h1', {}, st.passwordSet ? 'Logga in' : 'Välj lösenord'),
-    h('p', { class: 'item-meta' }, st.passwordSet ? 'Föräldravyn i Pluggis.'
-      : 'Första gången: välj ett lösenord för föräldravyn (minst 8 tecken). Token från .env behövs bara nu, så att ingen annan på nätet hinner före.'),
-    !st.passwordSet && st.tokenRequired && !st.loggedIn ? h('label', {}, 'Token (PLUGGIS_DEVICE_TOKEN i .env)') : null,
-    !st.passwordSet && st.tokenRequired && !st.loggedIn ? tok : null,
-    h('label', {}, st.passwordSet ? 'Lösenord' : 'Nytt lösenord'), pw,
-    st.passwordSet ? null : pw2,
-    msg,
-    h('button', { class: 'primary', type: 'submit' }, st.passwordSet ? 'Logga in' : 'Spara och logga in'),
-    st.passwordSet ? useToken : later);
-  const overlay = h('div', { class: 'login' }, form);
+  const box = st.passwordSet
+    ? h('form', { class: 'login-box', onsubmit: submit },
+        h('img', { src: '/logo-220.png', alt: '', class: 'login-logo' }),
+        h('h1', {}, 'Logga in'),
+        h('p', { class: 'item-meta' }, 'Föräldravyn i Pluggis.'),
+        h('label', {}, 'Lösenord'), pw, msg,
+        h('button', { class: 'primary', type: 'submit' }, 'Logga in'),
+        h('p', { class: 'item-meta' }, 'Glömt lösenordet? Sätt ett nytt med PLUGGIS_ADMIN_PASSWORD i .env och starta om servern.'))
+    : h('div', { class: 'login-box' },
+        h('img', { src: '/logo-220.png', alt: '', class: 'login-logo' }),
+        h('h1', {}, 'Välj lösenord'),
+        h('p', {}, 'Föräldravyn har inget lösenord än. Lägg till en rad i .env bredvid docker-compose.yml:'),
+        h('pre', { class: 'login-pre' }, 'PLUGGIS_ADMIN_PASSWORD=ditt-lösenord'),
+        h('p', {}, 'Kör sedan ', h('code', {}, 'docker compose up -d'), ' och ladda om sidan. Minst 8 tecken. Raden kan tas bort efteråt – lösenordet sparas krypterat i Pluggis.'),
+        h('button', { class: 'primary', onclick: () => location.reload() }, 'Ladda om'));
+  const overlay = h('div', { class: 'login' }, box);
   document.body.append(overlay);
-  setTimeout(() => (st.passwordSet || !st.tokenRequired || st.loggedIn ? pw : tok).focus(), 50);
+  if (st.passwordSet) setTimeout(() => pw.focus(), 50);
 }
 
 let started = false;
@@ -2062,12 +2033,8 @@ function startAdmin() {
   setInterval(pollDevice, 30000);
 }
 
-authStatus().then(st => {
-  if (!st.loggedIn) return showLogin(st);
-  startAdmin();
-  // Inne med token men inget lösenord valt än: föreslå att välja ett (kan skjutas upp)
-  if (!st.passwordSet && !sessionStorage.getItem('pluggis.later')) showLogin(st);
-});
+try { localStorage.removeItem('lc.token'); } catch { /* gammal token behövs inte längre */ }
+authStatus().then(st => (st.loggedIn ? startAdmin() : showLogin(st)));
 
 // ---- Ljust/mörkt: ◐ följer telefonen/datorn, ☀ ljust, ☾ mörkt. Sparas i webbläsaren (samma för appen och admin). ----
 (function themeToggle() {

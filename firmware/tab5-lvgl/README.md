@@ -56,7 +56,7 @@ kalender, glödlampa, frågetecken, länk, ordning, pokal, klocka). Kommandot st
 2. `cp include/config.example.h include/config.h` och fyll i WiFi, serverns IP-adress och **elevens kod**
    (`PLUGGIS_CODE`, samma 5 tecken som i elevchatten – admin → Inställningar → Elever). Koden räcker: servern vet
    vilken elev den hör till, och skärmen når bara den elevens läxor, plan och poäng. Byts koden i admin (*Ny kod*)
-   måste den bytas här också. En äldre `config.h` med `PLUGGIS_DEVICE_ID` + `PLUGGIS_TOKEN` fungerar fortfarande.
+   måste den bytas här också.
    `config.h` checkas aldrig in.
 3. Koppla Tab5 med USB-C. Gå till nedladdningsläge: håll reset-knappen ~2 s tills den gröna lampan blinkar snabbt.
 4. `pio run -t upload`, och `pio device monitor` för loggen.

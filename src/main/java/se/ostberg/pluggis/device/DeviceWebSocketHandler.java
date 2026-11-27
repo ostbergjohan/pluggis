@@ -72,7 +72,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         Long studentId = null;
         boolean parentCookie = adminAuth != null
                 && adminAuth.validCookieHeader(session.getHandshakeHeaders().getFirst("Cookie"));   // inloggad i föräldravyn
-        if ((props.tokenRequired() && props.tokenMatches(token)) || parentCookie) {
+        if (parentCookie) {
             studentId = findDevice(session, deviceId, from).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
         } else {
             var kid = chat.studentFor(token);
@@ -81,15 +81,13 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
                 studentId = kid.get();
                 deviceId = students.byId(studentId).map(se.ostberg.pluggis.student.Student::getDeviceId).orElse(deviceId);
                 log.debug("Enhet från {} loggar in med elevkod som {}", from, deviceId);
-            } else if (!props.tokenRequired()) {
-                studentId = students.byDeviceId(deviceId).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
             } else {
                 deviceId = null;
             }
         }
         if (deviceId == null || deviceId.isBlank()) {
             log.warn("Enhet nekad från {}: {} (deviceId {})", from,
-                    token == null || token.isBlank() ? "token saknas" : "fel token", query.getFirst(DEVICE_ID));
+                    token == null || token.isBlank() ? "elevkod saknas" : "fel elevkod", query.getFirst(DEVICE_ID));
             tell(session, "Servern nekade skärmen: fel kod. PLUGGIS_CODE i config.h ska vara elevens kod "
                     + "(admin -> Inställningar -> Elever).");
             session.close(CloseStatus.POLICY_VIOLATION.withReason("deviceId eller token saknas/fel"));

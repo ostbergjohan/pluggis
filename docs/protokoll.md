@@ -1,6 +1,6 @@
 # Protokoll: Tab5 ⇄ backend
 
-Anslutning: `ws://<host>:8080/ws/device?deviceId=tab5-1&token=<PLUGGIS_DEVICE_TOKEN>`
+Anslutning: `ws://<host>:8080/ws/device?deviceId=tab5-1&token=<elevens kod>` (servern byter till elevens eget enhets-id; föräldravyn ansluter med sin inloggning)
 
 Alla meddelanden är JSON-text med fältet `type`.
 
@@ -41,7 +41,7 @@ Exempel:
 
 ```
 POST /api/homework/photo?deviceId=tab5-1[&hint=...]
-Header: X-Pluggis-Token: <token>
+Header: X-Pluggis-Token: <elevens kod>
 Content-Type: multipart/form-data, fält "image" (image/jpeg, max 5 MB)
 ```
 
@@ -54,7 +54,7 @@ Samma endpoint används av iOS-genvägen: *Ta bild → Hämta innehåll från UR
 
 ```
 POST /api/flashcards/photo?deviceId=tab5-1[&hint=...][&count=20]
-Header: X-Pluggis-Token: <token>
+Header: X-Pluggis-Token: <elevens kod>
 Content-Type: multipart/form-data, fält "image"
 ```
 

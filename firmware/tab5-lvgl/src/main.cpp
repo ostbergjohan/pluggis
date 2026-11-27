@@ -28,8 +28,7 @@
 #include "config.example.h"
 #endif
 
-// Inloggning: elevens kod (PLUGGIS_CODE) räcker – servern vet vilken elev den hör till. En äldre config.h med
-// enhets-id och föräldertoken (PLUGGIS_DEVICE_ID + PLUGGIS_TOKEN) fungerar fortfarande.
+// Inloggning: elevens kod (PLUGGIS_CODE) – servern vet vilken elev den hör till. Det finns ingen föräldertoken.
 // Allt går också att ändra på skärmen (Inställningar) och sparas då i Tab5 – det går före config.h.
 
 #ifndef PLUGGIS_IDLE_MINUTES
@@ -2224,11 +2223,11 @@ static void loadCfg() {
     cfg.device = "elevkod";   // servern byter till elevens eget enhets-id
     cfg.code = true;
   } else {
-#if defined(PLUGGIS_TOKEN) && defined(PLUGGIS_DEVICE_ID)
-    cfg.auth = PLUGGIS_TOKEN;   // äldre config.h: förälderns token + enhets-id
-    cfg.device = PLUGGIS_DEVICE_ID;
+#if defined(PLUGGIS_TOKEN)
+    cfg.auth = PLUGGIS_TOKEN;   // äldre config.h: fungerar om PLUGGIS_TOKEN är elevens kod
+    cfg.device = "elevkod";
+    cfg.code = true;
 #endif
-    cfg.code = false;
   }
   cfg.idleMin = prefs.getInt("idleMin", PLUGGIS_IDLE_MINUTES);
   cfg.bright = prefs.getInt("bright", 200);

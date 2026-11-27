@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:pluggis;DB_CLOSE_DELAY=-1",
-        "pluggis.device-token=test-token",
+        "pluggis.admin-password=test-password",
         "pluggis.anthropic.api-key=test",
         "pluggis.anthropic.base-url=http://127.0.0.1:9",
         "pluggis.speech.base-url=",
@@ -50,6 +50,26 @@ class ApplicationSmokeTest {
 
     @Autowired
     MockMvc mvc;
+
+    // Föräldern: inloggad i föräldravyn (lösenordet sätts från pluggis.admin-password vid start)
+    private static jakarta.servlet.http.Cookie parentCookie;
+
+    private jakarta.servlet.http.Cookie parent() throws Exception {
+        if (parentCookie == null) {
+            parentCookie = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/auth/login")
+                            .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"password\":\"test-password\"}"))
+                    .andReturn().getResponse().getCookie(se.ostberg.pluggis.config.AdminAuth.COOKIE);
+            org.assertj.core.api.Assertions.assertThat(parentCookie).as("inloggning i testet").isNotNull();
+        }
+        return parentCookie;
+    }
+
+    /** WebSocket som inloggad förälder (cookien skickas med i handskakningen, som från föräldravyn). */
+    private WebSocketSession wsAsParent(org.springframework.web.socket.WebSocketHandler h, String url) throws Exception {
+        var headers = new org.springframework.web.socket.WebSocketHttpHeaders();
+        headers.add("Cookie", se.ostberg.pluggis.config.AdminAuth.COOKIE + "=" + parent().getValue());
+        return new StandardWebSocketClient().execute(h, headers, java.net.URI.create(url)).get(5, TimeUnit.SECONDS);
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     se.ostberg.pluggis.homework.HomeworkService homeworkService;
@@ -84,7 +104,7 @@ class ApplicationSmokeTest {
         usageService.recordClaude("coach", "claude-haiku-5-5", false, 2_000_000, 1_000_000, 0, 0);
         usageService.recordClaude("planning", "claude-sonnet-5-5", true, 100_000, 10_000, 0, 0);
         usageService.recordTts("azure", 1234);
-        JsonNode c = json(mvc.perform(get("/api/costs").header(TOKEN, "test-token"))
+        JsonNode c = json(mvc.perform(get("/api/costs").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         // Haiku: 2 M in × 0,10 + 1 M ut × 0,50 = 0,70 USD = 7 kr
         assertThat(c.path("today").path("sek").asDouble()).isGreaterThanOrEqualTo(7.0);
@@ -94,49 +114,49 @@ class ApplicationSmokeTest {
         assertThat(c.path("days")).hasSizeGreaterThanOrEqualTo(30);
         assertThat(c.path("purposes").toString()).contains("Coachen").contains("Planering");
 
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         mvc.perform(get("/api/costs").header(TOKEN, code)).andExpect(status().isForbidden());
     }
 
     @Test
     void claudeModeCanBeCheckedAndRefusesModesThatCannotWork() throws Exception {
-        JsonNode st = json(mvc.perform(get("/api/claude").header(TOKEN, "test-token"))
+        JsonNode st = json(mvc.perform(get("/api/claude").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(st.path("mode").asText()).isEqualTo("api");
         assertThat(st.has("apiKey")).isTrue();
         // Ingen Claude Code-token i testmiljön → abonnemangsläget nekas med förklaring
-        String err = mvc.perform(put("/api/claude").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        String err = mvc.perform(put("/api/claude").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mode\":\"claude-code\"}"))
                 .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
         assertThat(err).contains("CLAUDE_CODE_OAUTH_TOKEN");
-        mvc.perform(put("/api/claude").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/claude").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"mode\":\"nonsens\"}")).andExpect(status().isBadRequest());
     }
 
     @Test
     void homeworkWeightIsSavedRoundedAndClamped() throws Exception {
-        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long id = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Nationellt prov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
-        String r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        String r = mvc.perform(put("/api/homework/" + id).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"weight\":87,\"replan\":false}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(r).path("weight").asInt()).isEqualTo(90);
-        r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        r = mvc.perform(put("/api/homework/" + id).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"weight\":500,\"replan\":false}")).andReturn().getResponse().getContentAsString();
         assertThat(json(r).path("weight").asInt()).isEqualTo(100);
         // Utan vikt i anropet ändras den inte
-        r = mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        r = mvc.perform(put("/api/homework/" + id).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Nationellt prov i matte\",\"replan\":false}")).andReturn().getResponse().getContentAsString();
         assertThat(json(r).path("weight").asInt()).isEqualTo(100);
     }
 
     @Test
     void studentCanPracticeFlashcardsInChatButOnlyAsThemselves() throws Exception {
-        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        JsonNode first = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0);
         String code = first.path("code").asText();
         String own = first.path("deviceId").asText();
-        long deck = json(mvc.perform(post("/api/flashcards/decks").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long deck = json(mvc.perform(post("/api/flashcards/decks").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Glosor mobil\",\"cards\":[{\"front\":\"dog\",\"back\":\"hund\"}]}"))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
 
@@ -155,7 +175,7 @@ class ApplicationSmokeTest {
     }
 
     private boolean manualPlan(long homeworkId) throws Exception {
-        for (JsonNode x : json(mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+        for (JsonNode x : json(mvc.perform(get("/api/homework?openOnly=false").cookie(parent()))
                 .andReturn().getResponse().getContentAsString())) {
             if (x.path("id").asLong() == homeworkId) {
                 return x.path("manualPlan").asBoolean();
@@ -167,10 +187,10 @@ class ApplicationSmokeTest {
     @Test
     void parentCanRearrangePlanByHandAndItSticks() throws Exception {
         String due = LocalDate.now().plusDays(6).toString();
-        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long id = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Dra-prov\",\"dueDate\":\"" + due + "\",\"steps\":[\"Del 1\",\"Del 2\",\"Del 3\"]}"))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
-        JsonNode plan = json(mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token"))
+        JsonNode plan = json(mvc.perform(post("/api/plan/homework/" + id).cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("items");
         assertThat(plan.size()).isGreaterThanOrEqualTo(2);
         long a = plan.get(0).path("id").asLong();
@@ -178,35 +198,35 @@ class ApplicationSmokeTest {
         String day = LocalDate.now().plusDays(2).toString();
 
         // Lägg b före a på samma dag
-        JsonNode arranged = json(mvc.perform(put("/api/plan/days/" + day).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        JsonNode arranged = json(mvc.perform(put("/api/plan/days/" + day).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[" + b + "," + a + "]}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         java.util.List<Long> order = new java.util.ArrayList<>();
         arranged.forEach(n -> { if (n.path("homeworkId").asLong() == id) order.add(n.path("id").asLong()); });
         assertThat(order).containsSubsequence(b, a);
         assertThat(manualPlan(id)).isTrue();
-        String upcoming = mvc.perform(get("/api/plan/upcoming?days=10").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString();
+        String upcoming = mvc.perform(get("/api/plan/upcoming?days=10").cookie(parent())).andReturn().getResponse().getContentAsString();
         assertThat(upcoming.indexOf("\"id\":" + b + ",")).isLessThan(upcoming.indexOf("\"id\":" + a + ","));
 
         // Inte på provdagen, inte bakåt i tiden, inte med elevkoden
-        mvc.perform(put("/api/plan/days/" + due).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/plan/days/" + due).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[" + a + "]}")).andExpect(status().isBadRequest());
-        mvc.perform(put("/api/plan/days/" + LocalDate.now().minusDays(1)).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/plan/days/" + LocalDate.now().minusDays(1)).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[" + a + "]}")).andExpect(status().isBadRequest());
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         mvc.perform(put("/api/plan/days/" + day).header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":[" + a + "]}")).andExpect(status().isForbidden());
 
         // Ny plan för hand → Pluggis tar över igen
-        mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(post("/api/plan/homework/" + id).cookie(parent())).andExpect(status().isOk());
         assertThat(manualPlan(id)).isFalse();
     }
 
     @Test
     void pointsCanBeTurnedOffPerStudent() throws Exception {
-        long lisa = json(mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long lisa = json(mvc.perform(post("/api/students").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Utan poäng\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
-        JsonNode created = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString());
+        JsonNode created = json(mvc.perform(get("/api/students").cookie(parent())).andReturn().getResponse().getContentAsString());
         String code = null;
         for (JsonNode x : created) {
             if (x.path("id").asLong() == lisa) {
@@ -215,7 +235,7 @@ class ApplicationSmokeTest {
         }
         assertThat(json(mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
                 .path("pointsEnabled").asBoolean()).isTrue();
-        JsonNode st = json(mvc.perform(put("/api/student").header(TOKEN, "test-token").header("X-Pluggis-Student", String.valueOf(lisa))
+        JsonNode st = json(mvc.perform(put("/api/student").cookie(parent()).header("X-Pluggis-Student", String.valueOf(lisa))
                 .contentType(MediaType.APPLICATION_JSON).content("{\"pointsEnabled\":false}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(st.path("pointsEnabled").asBoolean()).isFalse();
@@ -227,7 +247,7 @@ class ApplicationSmokeTest {
     void chatFilesAreRevalidatedAndChatKnowsItsVersion() throws Exception {
         String cc = mvc.perform(get("/chat.js")).andExpect(status().isOk()).andReturn().getResponse().getHeader("Cache-Control");
         assertThat(cc).contains("no-cache");
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         assertThat(json(mvc.perform(get("/api/chat/me").header(TOKEN, code)).andReturn().getResponse().getContentAsString())
                 .path("version").asText()).hasSize(12);
@@ -237,15 +257,15 @@ class ApplicationSmokeTest {
     void eachDayIsGroupedPerSubjectWithNearestDeadlineFirst() throws Exception {
         String later = LocalDate.now().plusDays(5).toString();
         String sooner = LocalDate.now().plusDays(4).toString();
-        long a = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long a = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Gruppa A\",\"subject\":\"Engelska\",\"dueDate\":\"" + later + "\",\"steps\":[\"A1\",\"A2\",\"A3\",\"A4\"]}"))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
-        long b = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long b = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Gruppa B\",\"subject\":\"NO\",\"dueDate\":\"" + sooner + "\",\"steps\":[\"B1\",\"B2\",\"B3\",\"B4\"]}"))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
-        mvc.perform(post("/api/plan/homework/" + a).header(TOKEN, "test-token")).andExpect(status().isOk());
-        mvc.perform(post("/api/plan/homework/" + b).header(TOKEN, "test-token")).andExpect(status().isOk());
-        JsonNode up = json(mvc.perform(get("/api/plan/upcoming?days=6").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString());
+        mvc.perform(post("/api/plan/homework/" + a).cookie(parent())).andExpect(status().isOk());
+        mvc.perform(post("/api/plan/homework/" + b).cookie(parent())).andExpect(status().isOk());
+        JsonNode up = json(mvc.perform(get("/api/plan/upcoming?days=6").cookie(parent())).andReturn().getResponse().getContentAsString());
         java.util.Map<String, java.util.List<Long>> perDay = new java.util.LinkedHashMap<>();
         up.forEach(i -> {
             long hw = i.path("homeworkId").asLong();
@@ -282,10 +302,10 @@ class ApplicationSmokeTest {
         if (aIds.size() == 1) {
             mixed.add(0, bIds.get(0));
         }
-        mvc.perform(put("/api/plan/days/" + day).header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/plan/days/" + day).cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"ids\":" + mixed + "}")).andExpect(status().isOk());
         java.util.List<Long> after = new java.util.ArrayList<>();
-        json(mvc.perform(get("/api/plan/upcoming?days=6").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString())
+        json(mvc.perform(get("/api/plan/upcoming?days=6").cookie(parent())).andReturn().getResponse().getContentAsString())
                 .forEach(i -> {
                     long hw = i.path("homeworkId").asLong();
                     if (i.path("planDate").asText().equals(day) && (hw == a || hw == b)) {
@@ -304,12 +324,12 @@ class ApplicationSmokeTest {
         var deck = flashcardService.createDeck("⚡ Snabbquiz: test", "NO", null, se.ostberg.pluggis.flashcards.Deck.Source.GENERATED,
                 java.util.List.of(new se.ostberg.pluggis.flashcards.FlashcardService.NewCard(
                         "Det gröna färgämnet ___ fångar ljus.", "klorofyll", null, "CLOZE", java.util.List.of("glukos", "stärkelse", "cellulosa"))));
-        JsonNode card = json(mvc.perform(get("/api/flashcards/decks/" + deck.getId() + "/next?practiceAnyway=true").header(TOKEN, "test-token"))
+        JsonNode card = json(mvc.perform(get("/api/flashcards/decks/" + deck.getId() + "/next?practiceAnyway=true").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
         assertThat(card.path("kind").asText()).isEqualTo("CLOZE");
         assertThat(card.path("wrongOptions")).hasSize(3);
 
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         // Claude nås inte i testet – men eleven ska inte stoppas av behörigheten
         int st = mvc.perform(post("/api/flashcards/quiz").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
@@ -319,7 +339,7 @@ class ApplicationSmokeTest {
 
     @Test
     void studentCanStartExplainingAndUnknownRoundsAreGone() throws Exception {
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         // Claude nås inte i testet: vänligt 503, inte stoppad av behörigheten
         mvc.perform(post("/api/explain/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
@@ -330,7 +350,7 @@ class ApplicationSmokeTest {
 
     @Test
     void studentCanStartAMockExam() throws Exception {
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         mvc.perform(post("/api/exam/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isServiceUnavailable()); // Claude nås inte i testet – men behörigheten släppte igenom
@@ -340,12 +360,12 @@ class ApplicationSmokeTest {
 
     @Test
     void studentCanPlayGamesAndGetsPointsOncePerDay() throws Exception {
-        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString()).get(0);
+        JsonNode first = json(mvc.perform(get("/api/students").cookie(parent())).andReturn().getResponse().getContentAsString()).get(0);
         String code = first.path("code").asText();
         String dev = first.path("deviceId").asText();
         mvc.perform(post("/api/games/order").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isServiceUnavailable()); // Claude nås inte i testet
-        long deck = json(mvc.perform(post("/api/flashcards/decks").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long deck = json(mvc.perform(post("/api/flashcards/decks").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Matchlek\",\"cards\":[{\"front\":\"perro\",\"back\":\"hund\"}]}"))
                 .andReturn().getResponse().getContentAsString()).path("id").asLong();
         assertThat(mvc.perform(get("/api/flashcards/decks/" + deck + "/cards").header(TOKEN, code)).andExpect(status().isOk())
@@ -365,7 +385,7 @@ class ApplicationSmokeTest {
 
     @Test
     void practiceTimeIsCappedToRealElapsedTime() throws Exception {
-        JsonNode first = json(mvc.perform(get("/api/students").header(TOKEN, "test-token")).andReturn().getResponse().getContentAsString()).get(0);
+        JsonNode first = json(mvc.perform(get("/api/students").cookie(parent())).andReturn().getResponse().getContentAsString()).get(0);
         String code = first.path("code").asText();
         String id = json(mvc.perform(post("/api/practice/start").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"what\":\"Glosor\"}")).andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("id").asText();
@@ -382,9 +402,9 @@ class ApplicationSmokeTest {
 
     @Test
     void listeningPositionIsSavedOnTheHomeworkAndStudentsMaySaveIt() throws Exception {
-        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long id = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Lyssnaprov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         mvc.perform(put("/api/homework/" + id + "/listen").header(TOKEN, code).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"materialId\":55,\"sentence\":7,\"listened\":[53,54,54]}")).andExpect(status().isOk());
@@ -404,9 +424,9 @@ class ApplicationSmokeTest {
 
     @Test
     void topicsAreEmptyWithoutContentAndStudentsMayAskForThem() throws Exception {
-        long id = json(mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        long id = json(mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Tomt prov\"}")).andReturn().getResponse().getContentAsString()).path("id").asLong();
-        String code = json(mvc.perform(get("/api/students").header(TOKEN, "test-token"))
+        String code = json(mvc.perform(get("/api/students").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).get(0).path("code").asText();
         JsonNode t = json(mvc.perform(get("/api/homework/" + id + "/topics").header(TOKEN, code))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
@@ -434,7 +454,7 @@ class ApplicationSmokeTest {
         String due = LocalDate.now().plusDays(6).toString();
 
         // Ny läxa
-        String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+        String created = mvc.perform(post("/api/homework").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"NO\",\"title\":\"Prov fotosyntes\",\"dueDate\":\"" + due + "\","
                                 + "\"steps\":[\"Läs s. 40–48\",\"Läs s. 49–56\",\"Gör begreppslistan\"]}"))
@@ -443,10 +463,10 @@ class ApplicationSmokeTest {
         long id = json(created).path("id").asLong();
 
         // Gör det till ett prov och planera – Claude svarar inte, så reservplanen ska användas
-        mvc.perform(put("/api/homework/" + id).header(TOKEN, "test-token")
+        mvc.perform(put("/api/homework/" + id).cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"TEST\",\"replan\":false}"))
                 .andExpect(status().isOk());
-        String plan = mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token"))
+        String plan = mvc.perform(post("/api/plan/homework/" + id).cookie(parent()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode items = json(plan).path("items");
@@ -454,55 +474,55 @@ class ApplicationSmokeTest {
         long firstItem = items.get(0).path("id").asLong();
 
         // Lista, plan för idag/kommande, bocka av ett moment (ger poäng)
-        mvc.perform(get("/api/homework").header(TOKEN, "test-token")).andExpect(status().isOk());
-        mvc.perform(get("/api/plan/today").header(TOKEN, "test-token")).andExpect(status().isOk());
-        mvc.perform(get("/api/plan/upcoming?days=14").header(TOKEN, "test-token")).andExpect(status().isOk());
-        mvc.perform(post("/api/plan/items/" + firstItem + "/done?deviceId=tab5-1").header(TOKEN, "test-token"))
+        mvc.perform(get("/api/homework").cookie(parent())).andExpect(status().isOk());
+        mvc.perform(get("/api/plan/today").cookie(parent())).andExpect(status().isOk());
+        mvc.perform(get("/api/plan/upcoming?days=14").cookie(parent())).andExpect(status().isOk());
+        mvc.perform(post("/api/plan/items/" + firstItem + "/done?deviceId=tab5-1").cookie(parent()))
                 .andExpect(status().isOk());
 
         // Egen kortlek, öva ett kort
-        String deck = mvc.perform(post("/api/flashcards/decks").header(TOKEN, "test-token")
+        String deck = mvc.perform(post("/api/flashcards/decks").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Glosor\",\"subject\":\"Engelska\",\"cards\":[{\"front\":\"hund\",\"back\":\"dog\"},{\"front\":\"katt\",\"back\":\"cat\"}]}"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         long deckId = json(deck).path("id").asLong();
-        String card = mvc.perform(get("/api/flashcards/decks/" + deckId + "/next?deviceId=tab5-1").header(TOKEN, "test-token"))
+        String card = mvc.perform(get("/api/flashcards/decks/" + deckId + "/next?deviceId=tab5-1").cookie(parent()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         long cardId = json(card).path("id").asLong();
-        mvc.perform(post("/api/flashcards/cards/" + cardId + "/grade?deviceId=tab5-1").header(TOKEN, "test-token")
+        mvc.perform(post("/api/flashcards/cards/" + cardId + "/grade?deviceId=tab5-1").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"correct\":true}"))
                 .andExpect(status().isOk());
-        mvc.perform(get("/api/flashcards/decks/" + deckId + "/export.tsv").header(TOKEN, "test-token"))
+        mvc.perform(get("/api/flashcards/decks/" + deckId + "/export.tsv").cookie(parent()))
                 .andExpect(status().isOk());
 
         // Pass
-        mvc.perform(post("/api/devices/tab5-1/sessions").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/tab5-1/sessions").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"task\":\"Matte\",\"minutes\":15}"))
                 .andExpect(status().isOk());
         sessions.tick();
-        mvc.perform(post("/api/devices/tab5-1/sessions/active/finish").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/tab5-1/sessions/active/finish").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"summary\":\"klar\"}"))
                 .andExpect(status().isOk());
 
         // Poäng, bonus, utbetalning, statistik
-        mvc.perform(post("/api/devices/tab5-1/rewards/bonus").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/tab5-1/rewards/bonus").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"points\":20,\"reason\":\"Bra jobbat\"}"))
                 .andExpect(status().isOk());
-        String week = mvc.perform(get("/api/devices/tab5-1/rewards").header(TOKEN, "test-token"))
+        String week = mvc.perform(get("/api/devices/tab5-1/rewards").cookie(parent()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(json(week).path("weekPoints").asLong()).isGreaterThanOrEqualTo(26); // 20 bonus + 3 moment + 3 kort
-        mvc.perform(post("/api/devices/tab5-1/rewards/payouts").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/tab5-1/rewards/payouts").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isOk());
-        mvc.perform(get("/api/devices/tab5-1/rewards/events").header(TOKEN, "test-token")).andExpect(status().isOk());
-        String stats = mvc.perform(get("/api/devices/tab5-1/stats?days=14").header(TOKEN, "test-token"))
+        mvc.perform(get("/api/devices/tab5-1/rewards/events").cookie(parent())).andExpect(status().isOk());
+        String stats = mvc.perform(get("/api/devices/tab5-1/stats?days=14").cookie(parent()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(json(stats).path("totalCardsReviewed").asInt()).isGreaterThanOrEqualTo(1); // andra tester kan också ha rättat kort
-        mvc.perform(get("/api/devices").header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(get("/api/devices").cookie(parent())).andExpect(status().isOk());
 
         // iCal: förhandsgranska, importera valda, prenumeration med trasig länk
         String d3 = LocalDate.now().plusDays(3).toString().replace("-", "");
@@ -510,16 +530,16 @@ class ApplicationSmokeTest {
                 + "BEGIN:VEVENT\r\nUID:x1\r\nDTSTART;VALUE=DATE:" + d3 + "\r\nSUMMARY:Engelska: Glosförhör\r\nEND:VEVENT\r\n"
                 + "BEGIN:VEVENT\r\nUID:x2\r\nDTSTART;VALUE=DATE:" + d3 + "\r\nSUMMARY:Studiedag\r\nEND:VEVENT\r\n"
                 + "END:VCALENDAR\r\n";
-        String preview = mvc.perform(post("/api/calendar/preview").header(TOKEN, "test-token")
+        String preview = mvc.perform(post("/api/calendar/preview").cookie(parent())
                         .contentType("text/plain").content(ics))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         assertThat(json(preview).size()).isEqualTo(2);
-        mvc.perform(put("/api/calendar").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/calendar").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"url\":\"webcals://127.0.0.1:9/kalender\",\"onlySchoolwork\":true}"))
                 .andExpect(status().isBadRequest());
-        mvc.perform(get("/api/calendar").header(TOKEN, "test-token")).andExpect(status().isOk());
-        String imported = mvc.perform(post("/api/calendar/import?uids=x1").header(TOKEN, "test-token")
+        mvc.perform(get("/api/calendar").cookie(parent())).andExpect(status().isOk());
+        String imported = mvc.perform(post("/api/calendar/import?uids=x1").cookie(parent())
                         .contentType("text/calendar").content(ics))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -527,7 +547,7 @@ class ApplicationSmokeTest {
 
         // Ta bort läxan
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .delete("/api/homework/" + id).header(TOKEN, "test-token"))
+                        .delete("/api/homework/" + id).cookie(parent()))
                 .andExpect(status().isNoContent());
     }
 
@@ -544,21 +564,21 @@ class ApplicationSmokeTest {
                 + "END:VCALENDAR\r\n";
 
         // Som innan åäö-rättningen: titeln sparad med trasig kodning
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                         .content(feed.apply("1").replace("Läxa", "LÃ¤xa")))
                 .andExpect(status().isOk());
         // Ny hämtning: nya UID:n och rätt kodning
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                         .content(feed.apply("2")))
                 .andExpect(status().isOk());
-        String third = mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        String third = mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                         .content(feed.apply("3")))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         // Samma innehåll med nya UID:n: inget nytt, inget ändrat
         assertThat(json(third).path("created").asInt()).isZero();
         assertThat(json(third).path("updated").asInt()).isZero();
 
-        String list = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+        String list = mvc.perform(get("/api/homework?openOnly=false").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String due = LocalDate.now().plusDays(10).toString();
         long count = 0;
@@ -571,7 +591,7 @@ class ApplicationSmokeTest {
         }
         assertThat(count).isEqualTo(2);
         assertThat(glosorOk).isTrue();
-        mvc.perform(post("/api/calendar/dedupe").header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(post("/api/calendar/dedupe").cookie(parent())).andExpect(status().isOk());
     }
 
     @Test
@@ -579,7 +599,7 @@ class ApplicationSmokeTest {
         String dueIso = LocalDate.now().plusDays(11).toString();
         String date = dueIso.replace("-", "");
         // Läxan fanns redan, inlagd för hand med lite annan stavning
-        mvc.perform(post("/api/homework").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(post("/api/homework").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"Matte\",\"title\":\"Matteprov - kapitel 3\",\"description\":\"s. 40-60\",\"dueDate\":\"" + dueIso + "\"}"))
                 .andExpect(status().isCreated());
         java.util.function.BiFunction<String, String, String> feed = (uid, glosor) -> "BEGIN:VCALENDAR\r\n"
@@ -588,21 +608,21 @@ class ApplicationSmokeTest {
                 + "BEGIN:VEVENT\r\nUID:g-" + uid + "\r\nDTSTART;VALUE=DATE:" + date
                 + "\r\nSUMMARY:" + glosor + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                 .content(feed.apply("1", "Glosförhör v.48"))).andExpect(status().isOk());
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                 .content(feed.apply("2", "Glosf?rh?r v.48"))).andExpect(status().isOk());
         // Två synkar samtidigt (t.ex. timsynk + knapptryck), båda med nya UID:n
         var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
-        var a = pool.submit(() -> mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token")
+        var a = pool.submit(() -> mvc.perform(post("/api/calendar/import").cookie(parent())
                 .contentType("text/plain").content(feed.apply("3", "GlosfÃ¶rhÃ¶r v.48"))).andReturn());
-        var b = pool.submit(() -> mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token")
+        var b = pool.submit(() -> mvc.perform(post("/api/calendar/import").cookie(parent())
                 .contentType("text/plain").content(feed.apply("4", "Glosförhör v.48"))).andReturn());
         a.get();
         b.get();
         pool.shutdown();
 
-        String list = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+        String list = mvc.perform(get("/api/homework?openOnly=false").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         java.util.List<String> titles = new java.util.ArrayList<>();
         for (JsonNode h : json(list)) {
@@ -620,10 +640,10 @@ class ApplicationSmokeTest {
         String date = LocalDate.now().plusDays(12).toString().replace("-", "");
         java.util.function.Function<String, String> feed = uid -> "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:akt-" + uid
                 + "\r\nDTSTART;VALUE=DATE:" + date + "\r\nSUMMARY:Läxa: Aktivitetsdag i Västertorshallen\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                 .content(feed.apply("1"))).andExpect(status().isOk());
         long id = -1;
-        for (JsonNode h : json(mvc.perform(get("/api/homework").header(TOKEN, "test-token"))
+        for (JsonNode h : json(mvc.perform(get("/api/homework").cookie(parent()))
                 .andReturn().getResponse().getContentAsString())) {
             if (h.path("title").asText().contains("Aktivitetsdag")) {
                 id = h.path("id").asLong();
@@ -632,15 +652,15 @@ class ApplicationSmokeTest {
         assertThat(id).isPositive();
 
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/homework/" + id)
-                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"kind\":\"OTHER\",\"clearDueDate\":true}"))
                 .andExpect(status().isOk());
         // Ny synk med nytt UID (som InfoMentor gör) – ska inte ge ny läxa eller återställa typ/datum
-        mvc.perform(post("/api/calendar/import").header(TOKEN, "test-token").contentType("text/plain")
+        mvc.perform(post("/api/calendar/import").cookie(parent()).contentType("text/plain")
                 .content(feed.apply("2"))).andExpect(status().isOk());
 
         int found = 0;
-        for (JsonNode h : json(mvc.perform(get("/api/homework").header(TOKEN, "test-token"))
+        for (JsonNode h : json(mvc.perform(get("/api/homework").cookie(parent()))
                 .andReturn().getResponse().getContentAsString())) {
             if (h.path("title").asText().contains("Aktivitetsdag")) {
                 found++;
@@ -649,7 +669,7 @@ class ApplicationSmokeTest {
             }
         }
         assertThat(found).isEqualTo(1);
-        mvc.perform(post("/api/plan/homework/" + id).header(TOKEN, "test-token")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/plan/homework/" + id).cookie(parent())).andExpect(status().isBadRequest());
         assertThat(homeworkService.summaryForPrompt()).doesNotContain("Aktivitetsdag");
     }
 
@@ -659,12 +679,12 @@ class ApplicationSmokeTest {
         for (String body : new String[]{
                 "{\"title\":\"Gammalt prov i SO\",\"dueDate\":\"" + past + "\"}",
                 "{\"title\":\"Sen engelskaläxa\",\"dueDate\":\"" + past + "\"}"}) {
-            String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+            String created = mvc.perform(post("/api/homework").cookie(parent())
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
             if (body.contains("prov")) {
                 mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .put("/api/homework/" + json(created).path("id").asLong()).header(TOKEN, "test-token")
+                        .put("/api/homework/" + json(created).path("id").asLong()).cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"kind\":\"TEST\"}"));
             }
         }
@@ -672,7 +692,7 @@ class ApplicationSmokeTest {
         assertThat(summary).doesNotContain("Gammalt prov i SO");
         assertThat(summary).contains("Sen engelskaläxa").contains("har passerat");
 
-        String r = mvc.perform(post("/api/homework/archive-past").header(TOKEN, "test-token"))
+        String r = mvc.perform(post("/api/homework/archive-past").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(r).path("archived").asInt()).isGreaterThanOrEqualTo(2);
         assertThat(homeworkService.summaryForPrompt()).doesNotContain("Sen engelskaläxa");
@@ -681,24 +701,24 @@ class ApplicationSmokeTest {
     @Test
     void studentLinkOnlyReachesWhatTheStudentNeeds() throws Exception {
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
-                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Fred\",\"tone\":\"lekfull\",\"extra\":\"Gillar fotboll\"}"))
                 .andExpect(status().isOk());
         assertThat(studentProfile.promptSection()).contains("Fred", "humor", "fotboll", "inga färdiga svar");
 
         // Planering per elev: max minuter och pluggdagar
         String plan = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
-                        .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                        .cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"maxMinutesPerDay\":25,\"studyDays\":[\"monday\",\"WEDNESDAY\",\"SUNDAY\"]}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(plan).path("maxMinutesPerDay").asInt()).isEqualTo(25);
         assertThat(json(plan).path("studyDays").toString()).isEqualTo("[\"MONDAY\",\"WEDNESDAY\",\"SUNDAY\"]");
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/student")
-                .header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+                .cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"studyDays\":[]}")).andExpect(status().isBadRequest());
-        mvc.perform(post("/api/plan/replan-all").header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(post("/api/plan/replan-all").cookie(parent())).andExpect(status().isOk());
 
-        String link = mvc.perform(post("/api/chat/link").header(TOKEN, "test-token"))
+        String link = mvc.perform(post("/api/chat/link").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String path = json(link).path("path").asText();
         assertThat(path).startsWith("/#t=");
@@ -729,8 +749,7 @@ class ApplicationSmokeTest {
         BlockingQueue<String> phone = new LinkedBlockingQueue<>();
         StandardWebSocketClient client = new StandardWebSocketClient();
         String kidDevice = json(me).path("deviceId").asText();
-        WebSocketSession a = client.execute(collect(tab5),
-                "ws://localhost:" + port + "/ws/device?deviceId=" + kidDevice + "&token=test-token").get(5, TimeUnit.SECONDS);
+        WebSocketSession a = wsAsParent(collect(tab5), "ws://localhost:" + port + "/ws/device?deviceId=" + kidDevice);
         // Eleven ber om ett annat enhets-id – får ändå sin egen
         WebSocketSession b = client.execute(collect(phone),
                 "ws://localhost:" + port + "/ws/device?deviceId=nagon-annans&token=" + kid).get(5, TimeUnit.SECONDS);
@@ -742,13 +761,13 @@ class ApplicationSmokeTest {
         b.close();
 
         // Ny länk → den gamla slutar fungera
-        mvc.perform(post("/api/chat/link").header(TOKEN, "test-token")).andExpect(status().isOk());
+        mvc.perform(post("/api/chat/link").cookie(parent())).andExpect(status().isOk());
         mvc.perform(get("/api/chat/me").header(TOKEN, kid)).andExpect(status().isUnauthorized());
     }
 
     @Test
     void eachStudentOnlySeesTheirOwnHomeworkAndLogsInWithCode() throws Exception {
-        String lisa = mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        String lisa = mvc.perform(post("/api/students").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Lisa\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         long lisaId = json(lisa).path("id").asLong();
@@ -758,22 +777,22 @@ class ApplicationSmokeTest {
         assertThat(lisaDevice).isEqualTo("lisa");
 
         // Föräldern lägger in en läxa åt Lisa
-        mvc.perform(post("/api/homework").header(TOKEN, "test-token").header("X-Pluggis-Student", String.valueOf(lisaId))
+        mvc.perform(post("/api/homework").cookie(parent()).header("X-Pluggis-Student", String.valueOf(lisaId))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Lisas glosor\"}"))
                 .andExpect(status().isCreated());
         // och en åt första eleven
-        mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+        mvc.perform(post("/api/homework").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Första elevens matte\"}"))
                 .andExpect(status().isCreated());
 
         String asLisa = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, code.toLowerCase()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(asLisa).contains("Lisas glosor").doesNotContain("Första elevens matte");
-        String asParentLisa = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token")
+        String asParentLisa = mvc.perform(get("/api/homework?openOnly=false").cookie(parent())
                         .header("X-Pluggis-Student", String.valueOf(lisaId)))
                 .andReturn().getResponse().getContentAsString();
         assertThat(asParentLisa).contains("Lisas glosor").doesNotContain("Första elevens matte");
-        String asParentFirst = mvc.perform(get("/api/homework?openOnly=false").header(TOKEN, "test-token"))
+        String asParentFirst = mvc.perform(get("/api/homework?openOnly=false").cookie(parent()))
                 .andReturn().getResponse().getContentAsString();
         assertThat(asParentFirst).contains("Första elevens matte").doesNotContain("Lisas glosor");
 
@@ -797,12 +816,12 @@ class ApplicationSmokeTest {
                 .andExpect(status().is(429));
 
         // Ny kod → den gamla slutar fungera; ta bort eleven → hennes läxor försvinner
-        String renewed = mvc.perform(post("/api/students/" + lisaId + "/code").header(TOKEN, "test-token"))
+        String renewed = mvc.perform(post("/api/students/" + lisaId + "/code").cookie(parent()))
                 .andReturn().getResponse().getContentAsString();
         assertThat(json(renewed).path("code").asText()).isNotEqualTo(code);
         mvc.perform(get("/api/chat/me").header(TOKEN, code)).andExpect(status().isUnauthorized());
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/students/" + lisaId)
-                .header(TOKEN, "test-token")).andExpect(status().isNoContent());
+                .cookie(parent())).andExpect(status().isNoContent());
         Integer left = jdbc.queryForObject("select count(*) from homework where student_key = ?", Integer.class, String.valueOf(lisaId));
         assertThat(left).isZero();
     }
@@ -812,37 +831,37 @@ class ApplicationSmokeTest {
         String dev = "reset-tab";
         var item = planItems.save(new se.ostberg.pluggis.planning.PlanItem(999L, LocalDate.now(), "Läs s. 10", 10,
                 se.ostberg.pluggis.planning.PlanItem.Type.READ));
-        mvc.perform(post("/api/plan/items/" + item.getId() + "/done").param("deviceId", dev).header(TOKEN, "test-token"))
+        mvc.perform(post("/api/plan/items/" + item.getId() + "/done").param("deviceId", dev).cookie(parent()))
                 .andExpect(status().isOk());
-        long afterDone = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, "test-token"))
+        long afterDone = json(mvc.perform(get("/api/devices/" + dev + "/rewards").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).path("weekPoints").asLong();
         assertThat(afterDone).isGreaterThanOrEqualTo(3);
 
-        String undone = mvc.perform(post("/api/plan/items/" + item.getId() + "/undo").param("deviceId", dev).header(TOKEN, "test-token"))
+        String undone = mvc.perform(post("/api/plan/items/" + item.getId() + "/undo").param("deviceId", dev).cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(undone).path("done").asBoolean()).isFalse();
-        long afterUndo = json(mvc.perform(get("/api/devices/" + dev + "/rewards").header(TOKEN, "test-token"))
+        long afterUndo = json(mvc.perform(get("/api/devices/" + dev + "/rewards").cookie(parent()))
                 .andReturn().getResponse().getContentAsString()).path("weekPoints").asLong();
         // Momentets 3 poäng bort – och dagen-klar-bonusen (5) om den delades ut
         assertThat(afterUndo).isIn(afterDone - 3, afterDone - 3 - 5);
 
         // Bonus, ta bort en händelse, nollställ veckan
-        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").cookie(parent())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"points\":20,\"reason\":\"Test\"}")).andExpect(status().isOk());
-        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").header(TOKEN, "test-token")
+        mvc.perform(post("/api/devices/" + dev + "/rewards/bonus").cookie(parent())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"points\":5,\"reason\":\"Test 2\"}")).andExpect(status().isOk());
-        JsonNode events = json(mvc.perform(get("/api/devices/" + dev + "/rewards/events").header(TOKEN, "test-token"))
+        JsonNode events = json(mvc.perform(get("/api/devices/" + dev + "/rewards/events").cookie(parent()))
                 .andReturn().getResponse().getContentAsString());
         long bonusId = events.get(0).path("id").asLong();
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/devices/" + dev + "/rewards/events/" + bonusId)
-                .header(TOKEN, "test-token")).andExpect(status().isNoContent());
-        String reset = mvc.perform(post("/api/devices/" + dev + "/rewards/reset").header(TOKEN, "test-token")
+                .cookie(parent())).andExpect(status().isNoContent());
+        String reset = mvc.perform(post("/api/devices/" + dev + "/rewards/reset").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"scope\":\"week\"}"))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(reset).path("week").path("weekPoints").asLong()).isZero();
 
         // Elevkoden når inte ångra/nollställ
-        String kid = json(mvc.perform(post("/api/students").header(TOKEN, "test-token").contentType(MediaType.APPLICATION_JSON)
+        String kid = json(mvc.perform(post("/api/students").cookie(parent()).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Testis\"}")).andReturn().getResponse().getContentAsString()).path("code").asText();
         mvc.perform(post("/api/plan/items/" + item.getId() + "/undo").header(TOKEN, kid)).andExpect(status().isForbidden());
         mvc.perform(post("/api/devices/" + dev + "/rewards/reset").header(TOKEN, kid)).andExpect(status().isForbidden());
@@ -859,7 +878,7 @@ class ApplicationSmokeTest {
 
     @Test
     void wordAndTextMaterialIsSavedOnHomeworkEvenWhenClaudeIsDown() throws Exception {
-        String created = mvc.perform(post("/api/homework").header(TOKEN, "test-token")
+        String created = mvc.perform(post("/api/homework").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"SO\",\"title\":\"Prov vikingatiden\",\"dueDate\":\""
                                 + LocalDate.now().plusDays(8) + "\"}"))
@@ -872,11 +891,11 @@ class ApplicationSmokeTest {
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document", word);
         String res = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .multipart("/api/homework/upload").file(file).param("homeworkId", String.valueOf(id))
-                        .header(TOKEN, "test-token"))
+                        .cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(res).path("note").asText()).contains("sparades");
 
-        String list = mvc.perform(get("/api/homework/" + id + "/material").header(TOKEN, "test-token"))
+        String list = mvc.perform(get("/api/homework/" + id + "/material").cookie(parent()))
                 .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         assertThat(json(list).get(0).path("text").asText()).contains("Vikingatiden");
         assertThat(json(list).get(0).path("kind").asText()).isEqualTo("WORD");
@@ -888,9 +907,9 @@ class ApplicationSmokeTest {
         var f2 = new org.springframework.mock.web.MockMultipartFile("file", "s2.docx", "application/octet-stream", word2);
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .multipart("/api/homework/upload").file(f1).file(f2).param("homeworkId", String.valueOf(id))
-                        .header(TOKEN, "test-token"))
+                        .cookie(parent()))
                 .andExpect(status().isOk());
-        JsonNode all = json(mvc.perform(get("/api/homework/" + id + "/material").header(TOKEN, "test-token"))
+        JsonNode all = json(mvc.perform(get("/api/homework/" + id + "/material").cookie(parent()))
                 .andReturn().getResponse().getContentAsString());
         assertThat(all).hasSize(3);
         assertThat(all.get(1).path("page").asInt()).isEqualTo(1);
@@ -898,23 +917,23 @@ class ApplicationSmokeTest {
         assertThat(all.get(2).path("text").asText()).contains("Asatron");
         assertThat(all.get(2).path("hasImage").asBoolean()).isFalse();
         assertThat(all.get(2).has("image")).isFalse();
-        mvc.perform(get("/api/homework/material/" + all.get(2).path("id").asLong() + "/image").header(TOKEN, "test-token"))
+        mvc.perform(get("/api/homework/material/" + all.get(2).path("id").asLong() + "/image").cookie(parent()))
                 .andExpect(status().isNotFound());
 
         // Ny läxa från fil kräver Claude – ska ge ett begripligt fel, inte 500
         var png = new org.springframework.mock.web.MockMultipartFile("file", "skarm.png", "image/png", new byte[]{1, 2, 3});
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .multipart("/api/homework/upload").file(png).header(TOKEN, "test-token"))
+                        .multipart("/api/homework/upload").file(png).cookie(parent()))
                 .andExpect(status().is(502));
         var mp3 = new org.springframework.mock.web.MockMultipartFile("file", "x.mp3", "audio/mpeg", new byte[]{1});
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .multipart("/api/homework/upload").file(mp3).header(TOKEN, "test-token"))
+                        .multipart("/api/homework/upload").file(mp3).cookie(parent()))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void voiceSettingsAreStoredEvenWithoutSpeechService() throws Exception {
-        String saved = mvc.perform(put("/api/speech").header(TOKEN, "test-token")
+        String saved = mvc.perform(put("/api/speech").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"voice\":\"sv_SE-lisa-medium\",\"speed\":1.15}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -922,7 +941,7 @@ class ApplicationSmokeTest {
         assertThat(s.path("enabled").asBoolean()).isFalse();
         assertThat(s.path("voice").asText()).isEqualTo("sv_SE-lisa-medium");
         assertThat(s.path("speed").asDouble()).isEqualTo(1.15);
-        mvc.perform(post("/api/speech/preview").header(TOKEN, "test-token")
+        mvc.perform(post("/api/speech/preview").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isServiceUnavailable());
     }
@@ -930,7 +949,7 @@ class ApplicationSmokeTest {
     @Test
     void backendLogIsAvailableToTheWebUi() throws Exception {
         org.slf4j.LoggerFactory.getLogger("se.ostberg.pluggis.test").warn("Loggtest från smoke-testet");
-        String body = mvc.perform(get("/api/logs?level=WARN&q=loggtest").header(TOKEN, "test-token"))
+        String body = mvc.perform(get("/api/logs?level=WARN&q=loggtest").cookie(parent()))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode logs = json(body);
@@ -941,7 +960,7 @@ class ApplicationSmokeTest {
 
     @Test
     void coachAnswersWithFallbackWhenClaudeIsUnreachable() throws Exception {
-        String reply = mvc.perform(post("/api/devices/tab5-2/coach").header(TOKEN, "test-token")
+        String reply = mvc.perform(post("/api/devices/tab5-2/coach").cookie(parent())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"hej\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -958,8 +977,7 @@ class ApplicationSmokeTest {
             }
         };
         StandardWebSocketClient client = new StandardWebSocketClient();
-        WebSocketSession ws = client.execute(handler,
-                "ws://localhost:" + port + "/ws/device?deviceId=tab5-ws&token=test-token").get(5, TimeUnit.SECONDS);
+        WebSocketSession ws = wsAsParent(handler, "ws://localhost:" + port + "/ws/device?deviceId=tab5-ws");
 
         ws.sendMessage(new TextMessage("{\"type\":\"hello\",\"audio\":false}"));
         assertThat(json(received.poll(5, TimeUnit.SECONDS)).path("type").asText()).isEqualTo("hello_ack");

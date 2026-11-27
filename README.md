@@ -22,7 +22,7 @@ påminnelser, poäng och svensk uppläsning.
 | Material på en läxa/prov (skärmdump, Word, PDF, text) → innehåll, ny plan, valfria flashkort | ✅ |
 | Elevchatt i mobilen: chatt, plan, läxor, material, flashkort och poäng | ✅ |
 | Föräldravy: läxor, plan (dra och släpp), flashkort, poäng, kostnad, statistik, flera elever | ✅ |
-| REST för test med curl / iOS-genväg | ✅ |
+| Inloggning: föräldravyn med lösenord, elevchatten och Tab5 med elevens kod | ✅ |
 | Prometheus-metrik för Claude-latens och tokens | ✅ |
 | Ljud: KB-Whisper (tal till text) + Piper (text till tal), uppläsning mening för mening | ✅ |
 | Modell per jobb (Haiku 5.5 för röst, Sonnet 5.5 för planer/kort/foto), prompt caching | ✅ |
@@ -76,7 +76,7 @@ Byt `<server>` mot datorns adress – på Linux syns den med `hostname -I` (t.ex
 
 | Vad | Adress | För |
 |---|---|---|
-| **Föräldravyn (admin)** | `http://<server>:8080/admin` | Dig: läxor, plan, elever, inställningar, kostnad. Logga in med lösenord (första gången väljer du det med token från `.env`). |
+| **Föräldravyn (admin)** | `http://<server>:8080/admin` | Dig: läxor, plan, elever, inställningar, kostnad. Logga in med lösenordet (`PLUGGIS_ADMIN_PASSWORD` i `.env`). |
 | **Elevchatten** | `http://<server>:8080/` | Eleven. Logga in med elevens kod på 5 tecken. (`/chat.html` fungerar också.) |
 | **Elevens personliga länk** | `http://<server>:8080/#k=KOD` | Loggar in direkt. Kopiera/dela den under admin → Inställningar → Elever. |
 
@@ -117,46 +117,14 @@ Har du redan lagt till appen på hemskärmen: ta bort den och lägg till igen f�
 Kräver Java 21 och Maven.
 
 ```bash
-cp .env.example .env        # fyll i ANTHROPIC_API_KEY och PLUGGIS_DEVICE_TOKEN
+cp .env.example .env        # fyll i ANTHROPIC_API_KEY och PLUGGIS_ADMIN_PASSWORD
 set -a; . ./.env; set +a
 mvn spring-boot:run
 ```
 
-Öppna sedan föräldravyn på **http://localhost:8080/admin** och ange token under *Inställningar*. Elevchatten ligger på **http://localhost:8080/**.
+Öppna sedan föräldravyn på **http://localhost:8080/admin** och logga in med lösenordet från `PLUGGIS_ADMIN_PASSWORD`. Elevchatten ligger på **http://localhost:8080/**.
 
 Data hamnar i en H2-fil under `./data`. Kör med Postgres via `SPRING_PROFILES_ACTIVE=postgres`.
-
-### Testa coachen utan hårdvara
-
-```bash
-T=$PLUGGIS_DEVICE_TOKEN
-D=fred   # elevens enhets-id (syns i admin under Elever)
-curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"text":"jag vill börja plugga nu"}' \
-  localhost:8080/api/devices/$D/coach
-
-curl -s -H "X-Pluggis-Token: $T" -F image=@stencil.jpg \
-  "localhost:8080/api/homework/photo?deviceId=$D"
-
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/homework
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/$D/sessions/active
-```
-
-Flashkort och poäng:
-
-```bash
-curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"topic":"Engelska glosor: djur","subject":"Engelska","count":10}' \
-  localhost:8080/api/flashcards/generate
-curl -s -H "X-Pluggis-Token: $T" -F image=@glosor.jpg "localhost:8080/api/flashcards/photo?deviceId=$D"
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/flashcards/decks
-curl -s -H "X-Pluggis-Token: $T" -o kort.tsv localhost:8080/api/flashcards/decks/1/export.tsv   # till Anki
-
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/devices/$D/rewards            # veckans poäng och kronor
-curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"points":50,"reason":"Bra jobbat på provet!"}' localhost:8080/api/devices/$D/rewards/bonus
-curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/$D/rewards/payouts  # markera veckan utbetald
-```
 
 ## Arkitektur
 
@@ -164,7 +132,7 @@ curl -s -H "X-Pluggis-Token: $T" -X POST localhost:8080/api/devices/$D/rewards/p
 Elevchatten (mobil) ── WebSocket + REST ──▶ Spring Boot "pluggis"
 Tab5 (skrivbordet)  ── WebSocket + REST ──▶  │
 Föräldravyn (webb)  ── REST ─────────────▶  ├─ coach/     Claude-loop med verktyg + historik
-iOS-genväg ── POST /api/homework/photo ──▶  ├─ homework/  läxor, material, fotoavläsning
+                                            ├─ homework/  läxor, material, fotoavläsning
                                             ├─ planning/  pluggplan, omplanering, block per ämne
                                             ├─ flashcards/ kortlekar och repetition
                                             ├─ calendar/  InfoMentor-import · gcal/ Google Kalender
@@ -252,7 +220,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), fyll i vad som ingår, planera, markera klar, ta bort |
 | Plan | Tre veckor framåt; dagar utan moment slås ihop. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas |
 | *Elevens namn* | Coachen (namn, ton, önskemål, poäng av/på) · Planering (max per dag, pluggdagar, pluggtid) · Röst · Kalender (skolans InfoMentor-kalender in, och planen ut till Google) · Poäng (om påslaget) |
-| System | Elever och koder · Claude och kostnad · Logg · Anslutning (token) · Tab5 (och simulatorn) |
+| System | Elever och koder · Claude och kostnad · Logg · Anslutning (lösenord, logga ut) · Tab5 (och simulatorn) |
 
 ### Flera elever
 
@@ -310,9 +278,7 @@ behandla den som ett lösenord (den sparas bara i Pluggis databas).
 Andra vägar in:
 
 1. **.ics-fil:** samma flik → *Välj .ics-fil*, förhandsgranska och välj vilka händelser som ska med.
-2. **Skärmdump av veckoplanen** → iOS-genväg "Pluggis: läxor"
-   (*Dela-menyn → Hämta innehåll från URL*, POST `/api/homework/photo?deviceId=$D`,
-   formulär med fältet `image`, header `X-Pluggis-Token`).
+2. **Skärmdump av veckoplanen:** *📷 Fota eller ladda upp en läxa* i elevchatten.
 3. **Klistra in text** från veckoplanen/veckobrevet: `POST /api/homework/text` med `{"text":"..."}`.
 4. **Ladda upp fil** (bild, Word .docx, PDF, .txt): *📎 Ladda upp fil* och välj **Ny läxa eller prov**
    eller en befintlig läxa. Kopplat till en läxa blir filen *material*: Claude läser vad som ingår
@@ -360,17 +326,6 @@ använder vanliga, korta ord utan förkortningar.
 
 **Påminnelser:** vid elevens pluggtid (standard 16:30) säger chatten vad som står först på dagens plan
 och vad som ska in imorgon, och två timmar senare kommer en mjuk knuff om inget pass startats. Bara på pluggdagarna.
-
-```bash
-curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"text":"v.48: Engelska glosförhör fredag, kap 3 s. 42. NO-prov 4/12 fotosyntesen, Utkik s. 40–72"}' \
-  "localhost:8080/api/homework/text?deviceId=$D"
-curl -s -H "X-Pluggis-Token: $T" -H 'Content-Type: application/json' \
-  -d '{"content":"Utkik kap 4 s. 40–72 + begreppslistan","kind":"TEST"}' \
-  localhost:8080/api/plan/homework/2/content
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/today
-curl -s -H "X-Pluggis-Token: $T" localhost:8080/api/plan/upcoming?days=14
-```
 
 ## Google Kalender
 
@@ -478,7 +433,7 @@ Två versioner finns: [firmware/tab5-lvgl](firmware/tab5-lvgl) med gränssnitt i
   söker, man trycker på ett nät och skriver lösenordet på skärmens tangentbord. Det sparas i Tab5 först när det
   fungerar och går sedan före `config.h`. Bara 2,4 GHz.
 - **Felsökning:** tryck på WiFi-ikonen eller *Ansluter* för WiFi, IP, server, om chatten är uppe, senaste fel och
-  ledigt minne. Startskärmen visar själv varför den fastnar. Servern loggar nekade skärmar (fel token) och okända
+  ledigt minne. Startskärmen visar själv varför den fastnar. Servern loggar nekade skärmar (fel elevkod) och okända
   enhets-id (`docker compose logs pluggis | grep -i enhet`).
 - Skärmarna går att se utan Tab5: `firmware/tab5-lvgl/sim/run.sh` ritar dem till PNG.
 
@@ -488,14 +443,14 @@ Mer i [firmware/tab5-lvgl/README.md](firmware/tab5-lvgl/README.md).
 
 Det här hanterar en minderårigs röst, bilder och skolarbete.
 
-- **Föräldravyn loggar in med lösenord.** Första gången du öppnar `/admin` väljer du ett lösenord (minst 8 tecken);
-  då behövs `PLUGGIS_DEVICE_TOKEN` en gång, så att ingen annan på nätet hinner före. Lösenordet sparas som en
-  PBKDF2-hash, och inloggningen är en signerad cookie (HttpOnly, SameSite=Strict) som gäller i 30 dagar.
-  Under **System → Anslutning** kan du byta lösenord, logga ut eller *Logga ut överallt*. Högst 10 fel
-  försök per 10 minuter och adress. Token fungerar som förut för iOS-genvägen och curl.
-  Glömt lösenordet: *Använd token i stället* på inloggningssidan, och byt sedan lösenord.
-- **Tab5 och elevchatten använder elevens kod** och når bara den elevens data.
-- Sätt alltid `PLUGGIS_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
+- **Föräldravyn loggar in med lösenord.** Det sätts med `PLUGGIS_ADMIN_PASSWORD` i `.env` när servern startar
+  (minst 8 tecken) och sparas som en PBKDF2-hash; raden kan sedan tas bort. Inloggningen är en signerad cookie
+  (HttpOnly, SameSite=Strict) som gäller i 30 dagar. Under **System → Anslutning** kan du byta lösenord, logga ut
+  eller *Logga ut överallt*. Högst 10 fel försök per 10 minuter och adress. Glömt lösenordet: skriv ett nytt i
+  `.env` och starta om.
+- **Elevchatten och Tab5 använder elevens kod** och når bara den elevens data. Det finns ingen delad token:
+  utan inloggning eller elevkod är allt stängt.
+- Kör på hemnätet eller bakom VPN.
   Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.
 - Material på en läxa sparas: texten (från Word/text, eller som Claude läst av bilden/PDF:en) och en förminskad

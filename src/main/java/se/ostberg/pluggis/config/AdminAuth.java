@@ -22,7 +22,7 @@ import java.util.Base64;
  *   <li>Lösenordet sparas som PBKDF2-hash (salt, 210 000 varv) – aldrig i klartext.</li>
  *   <li>Inloggad = en signerad cookie (giltig till och med, HMAC med en hemlighet som bara servern har) i 30 dagar.
  *       "Logga ut på alla enheter" byter hemligheten, så att alla cookies slutar gälla.</li>
- *   <li>PLUGGIS_DEVICE_TOKEN fungerar som förut (iOS-genvägen, curl) och behövs första gången lösenordet väljs.</li>
+ *   <li>Första lösenordet (eller ett nytt om det glömts) sätts med PLUGGIS_ADMIN_PASSWORD i .env vid start.</li>
  * </ul>
  */
 @Component
@@ -36,11 +36,25 @@ public class AdminAuth {
     static final String SECRET_KEY = "admin.secret";
     private static final int ITERATIONS = 210_000;
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AdminAuth.class);
+
     private final SettingsService settings;
     private final SecureRandom random = new SecureRandom();
 
     public AdminAuth(SettingsService settings) {
         this.settings = settings;
+    }
+
+    /** Vid start: PLUGGIS_ADMIN_PASSWORD i .env blir lösenordet (om det skiljer sig från det sparade). */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void fromEnvironment(org.springframework.boot.context.event.ApplicationReadyEvent event) {
+        String pw = event.getApplicationContext().getEnvironment().getProperty("pluggis.admin-password", "");
+        if (!pw.isBlank() && !check(pw)) {
+            setPassword(pw);
+            log.info("Lösenord för föräldravyn satt från PLUGGIS_ADMIN_PASSWORD (raden i .env kan tas bort nu)");
+        } else if (!passwordSet()) {
+            log.warn("Inget lösenord för föräldravyn – sätt PLUGGIS_ADMIN_PASSWORD i .env och starta om");
+        }
     }
 
     public boolean passwordSet() {
