@@ -5,16 +5,18 @@
 //  - knappar på pekskärmen: Börja/Hjälp, Avsluta, och håll in "Prata" för att prata
 //  - rösten spelas in (16 kHz mono) och skickas som wav; svaret spelas upp mening för mening
 //
-// Version 1: ingen kamera ännu (fota med telefonen), ingen Dual Button.
+// Gränssnittet ritas med LVGL 9 i ui.cpp (simulator i sim/). Ingen kamera ännu, ingen Dual Button.
 
 #include <M5Unified.h>
+#include <lvgl.h>
+#include "ui.h"
+#include "brand.h"   // loggan och figuren (PNG)
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <deque>
-#include "brand.h"   // loggan och figuren (PNG)
 #include <vector>
 #include <algorithm>
 #include <time.h>
@@ -26,58 +28,61 @@
 #include "config.example.h"
 #endif
 
+// Inloggning: elevens kod (PLUGGIS_CODE) – servern vet vilken elev den hör till. Det finns ingen föräldertoken.
+// Allt går också att ändra på skärmen (Inställningar) och sparas då i Tab5 – det går före config.h.
+
 #ifndef PLUGGIS_IDLE_MINUTES
 #define PLUGGIS_IDLE_MINUTES 5   // stäng av efter så många minuter utan aktivitet (0 = aldrig)
 #endif
 
+/** Inställningarna som gäller: sparade i Tab5 (Preferences) eller standard från config.h. */
+struct Cfg {
+  String host;
+  int port = 8080;
+  String auth;        // elevkoden (eller förälderns token i en äldre config.h)
+  String device;      // enhets-id i anropen; med elevkod byter servern till elevens eget
+  bool code = false;  // auth är en elevkod
+  int idleMin = 5;    // stäng av efter (0 = aldrig)
+  int bright = 200;   // ljusstyrka 30–255
+  int clockMode = 1;  // klocka på laddaren när ingen rör den: 0 av, 1 kl 15–21, 2 kl 7–22
+};
+static Cfg cfg;
+
 static uint32_t lastActivity = 0;
-static uint32_t activeSec = 0, activeTickAt = 0;   // aktiv tid sedan Tab5 startade/vaknade
 static bool pendingPractice = false;   // coachen bad om en övning (startas från loop())
 static String pendingKind;
 static long pendingHw = 0;
 static bool asleep = false, idleWarned = false;
+static bool booting = true;   // startskärmen visas tills WiFi och läxorna är på plats
+static String wsLast = "inte startad";   // senaste som hänt med WebSocket (visas när man trycker på "Ansluter")
+static uint32_t wsLastAt = 0, wsTries = 0;
+static long practicePlanItem = 0;      // planens moment vars övning pågår (bockas av när övningen är klar)
+// ---- WiFi: nätverket som valts på skärmen sparas i Preferences och går före config.h
+static String wifiSsidSaved();
+static String wifiPassSaved();
+static std::vector<ui::WifiNet> wifiNets;
+static bool wifiScanning = false, wifiManual = false;
+static String wifiPick;                 // nätverket vars lösenord skrivs nu
+static String wifiTrySsid, wifiTryPass; // försöket som pågår (sparas först när det lyckats)
+static uint32_t wifiTryAt = 0;
+static String wifiMsg = "";
+static ui::Tone wifiMsgTone = ui::Tone::Muted;
+static String lastError;   // senaste felet från servern eller ett anrop – visas på startskärmen och i loggen
 
-// ---------------------------------------------------------------- utseende
-static constexpr uint32_t BG = 0x021A44;      // mörkblått som loggan
-static constexpr uint32_t PANEL = 0x0D2C63;
-static constexpr uint32_t INK = 0xF2F5F8;
-static constexpr uint32_t MUTED = 0x8FA1B3;
-static constexpr uint32_t ACCENT = 0x2F62C8;   // knappar och vald flik
-static constexpr uint32_t PL_YELLOW = 0xFEC434;   // loggans gula: framsteg, markeringar
-static constexpr uint32_t GOOD = 0x34C77B;
-static constexpr uint32_t BAD = 0xF0605D;
-static constexpr uint32_t WARN = 0xF5B544;
-
-static const lgfx::IFont* F_BIG = &fonts::lgfxJapanGothicP_40;
-static const lgfx::IFont* F_MID = &fonts::lgfxJapanGothicP_32;
-static const lgfx::IFont* F_SMALL = &fonts::lgfxJapanGothicP_24;
-
+// ---------------------------------------------------------------- skärmen (LVGL)
+// Allt som syns byggs i ui.cpp. Här finns bara tillståndet; redraw() bygger om den skärm som ändrats.
 static int W = 1280, H = 720;
-
-// Allt ritas först i en bild i minnet (frame) och läggs sedan på skärmen i ett svep – inget blinkande.
-static M5Canvas frame(&M5.Display);
-static LovyanGFX* G = &M5.Display;
-static void present() {
-  if (G == &frame) frame.pushSprite(0, 0);
-}
-static constexpr int TOP_H = 96;
-static constexpr int BTN_H = 130;
-static constexpr int TIMER_H = 64;
-
-struct Button {
-  int x, y, w, h;
-  const char* label;
-  uint32_t color;
-};
-static Button btnStart, btnEnd, btnTalk;
-static Button tabCoach, tabOva, tabHw, tabPlan, btnVolDown, btnVolUp;
+static lv_display_t* lvDisp = nullptr;
+static bool touchDown = false, swallowTouch = false;
+static int touchX = 0, touchY = 0;
+static void redraw();
+static void goToSleep();
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
-enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game };
+enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi, Settings, Entry, Focus };
 static Screen screen = Screen::OvaList;   // Tab5 startar på Öva
 enum class Game { None, Explain, Exam, Match, Order };
 static Game game = Game::None;
-static bool dirtyOva = false;
 
 // Ljudvolym (sparas i enheten) och batteri
 static Preferences prefs;
@@ -107,10 +112,9 @@ static bool cardAnswered = false, cardCorrect = false;
 static int cardBox = 0;
 
 static int weekPoints = -1;
+static String studentName;      // elevens namn från /api/chat/me (visas i statusrutan)
 static bool pointsOn = false;    // poäng av/på för eleven (admin) – hämtas från /api/chat/me
 static bool meLoaded = false;
-static String pointsBanner;
-static uint32_t pointsBannerUntil = 0;
 
 // Inspelning (tryck-och-prata)
 static constexpr uint32_t REC_RATE = 16000;
@@ -166,7 +170,8 @@ static void sayStop();
 static int examSpoken = -1;
 static void examSpeak();
 
-static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true;
+
+static bool dirtyAll = true, dirtyMain = true, dirtyTimer = true, dirtyTop = true, dirtyOva = false;
 
 // ---------------------------------------------------------------- text
 /** Ersätter tecken som typsnittet inte har (emojis, långa streck …) med enkla motsvarigheter. */
@@ -200,350 +205,6 @@ static String clean(const char* s) {
   }
   out.trim();
   return out;
-}
-
-/** Ritar text med radbrytning på ord inom rutan. Krymper typsnittet om texten inte får plats. */
-static void drawWrapped(const String& text, int x, int y, int w, int h, uint32_t color,
-                        const lgfx::IFont* first = F_BIG, bool center = false) {
-  const lgfx::IFont* fonts[] = {F_BIG, F_MID, F_SMALL};
-  int start = first == F_MID ? 1 : first == F_SMALL ? 2 : 0;
-  auto& d = *G;
-  for (int fi = start; fi < 3; fi++) {
-    d.setFont(fonts[fi]);
-    int lineH = d.fontHeight() + 8;
-    // dela upp i rader
-    std::vector<String> lines;
-    String line;
-    int i = 0, len = text.length();
-    while (i <= len) {
-      int sp = text.indexOf(' ', i);
-      int nl = text.indexOf('\n', i);
-      int end = sp < 0 ? len : sp;
-      bool hardBreak = false;
-      if (nl >= 0 && nl < end) { end = nl; hardBreak = true; }
-      String word = text.substring(i, end);
-      String test = line.length() ? line + " " + word : word;
-      if (d.textWidth(test) > w && line.length()) {
-        lines.push_back(line);
-        line = word;
-      } else {
-        line = test;
-      }
-      if (hardBreak) { lines.push_back(line); line = ""; }
-      i = end + 1;
-    }
-    if (line.length()) lines.push_back(line);
-    if ((int)lines.size() * lineH <= h || fi == 2) {
-      d.setTextColor(color);
-      int total = lines.size() * lineH;
-      int yy = center ? y + (h - total) / 2 : y;
-      for (auto& l : lines) {
-        if (yy + lineH > y + h + 4) break;
-        if (center) { d.setTextDatum(top_center); d.drawString(l, x + w / 2, yy); }
-        else { d.setTextDatum(top_left); d.drawString(l, x, yy); }
-        yy += lineH;
-      }
-      d.setTextDatum(top_left);
-      return;
-    }
-  }
-}
-
-// ---------------------------------------------------------------- ritning
-static void layout() {
-  W = M5.Display.width();
-  H = M5.Display.height();
-  int gap = 20, by = H - BTN_H - 16;
-  int talkW = W / 2 - gap;
-  int sideW = (W - talkW - 4 * gap) / 2;
-  btnStart = {gap, by, sideW, BTN_H, "Börja", PANEL};
-  btnTalk = {gap * 2 + sideW, by, talkW, BTN_H, "Håll in och prata", ACCENT};
-  btnEnd = {gap * 3 + sideW + talkW, by, sideW, BTN_H, "Avsluta", PANEL};
-  tabOva = {12, 10, 142, 76, "Öva", PANEL};
-  tabCoach = {164, 10, 150, 76, "Chat", PANEL};
-  tabHw = {324, 10, 166, 76, "Läxor", PANEL};
-  tabPlan = {500, 10, 142, 76, "Plan", PANEL};
-  btnVolDown = {W - 520, 14, 68, 68, "-", PANEL};
-  btnVolUp = {W - 520 + 68 + 12 + 90 + 12, 14, 68, 68, "+", PANEL};
-}
-
-static bool inside(const Button& b, int x, int y) {
-  return x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
-}
-
-static void drawButton(const Button& b, bool pressed = false, const char* label = nullptr) {
-  auto& d = *G;
-  d.fillRoundRect(b.x, b.y, b.w, b.h, 28, pressed ? WARN : b.color);
-  d.setFont(F_BIG);
-  d.setTextColor(INK);
-  d.setTextDatum(middle_center);
-  d.drawString(label ? label : b.label, b.x + b.w / 2, b.y + b.h / 2);
-  d.setTextDatum(top_left);
-}
-
-static void drawTab(const Button& b, bool active) {
-  auto& d = *G;
-  d.fillRoundRect(b.x, b.y, b.w, b.h, 22, active ? ACCENT : PANEL);
-  d.setFont(F_BIG);
-  d.setTextColor(INK);
-  d.setTextDatum(middle_center);
-  d.drawString(b.label, b.x + b.w / 2, b.y + b.h / 2);
-  d.setTextDatum(top_left);
-}
-
-static void drawSpeaker(int x, int y, uint32_t c) {
-  auto& d = *G;
-  d.fillRect(x, y + 12, 10, 16, c);
-  d.fillTriangle(x + 10, y + 12, x + 24, y, x + 24, y + 40, c);
-  d.fillTriangle(x + 10, y + 28, x + 24, y + 40, x + 10, y + 12, c);
-}
-
-static void drawBattery(int x, int y) {
-  auto& d = *G;
-  if (batteryLevel < 0) return;
-  uint32_t c = batteryLevel <= 15 ? BAD : batteryLevel <= 30 ? WARN : GOOD;
-  d.drawRoundRect(x, y, 52, 28, 5, INK);
-  d.fillRect(x + 52, y + 9, 5, 10, INK);
-  int fw = 46 * batteryLevel / 100;
-  if (fw > 0) d.fillRoundRect(x + 3, y + 3, fw, 22, 3, c);
-  if (batteryCharging) {   // blixt
-    d.fillTriangle(x + 28, y + 2, x + 18, y + 16, x + 27, y + 16, INK);
-    d.fillTriangle(x + 25, y + 12, x + 34, y + 12, x + 24, y + 26, INK);
-  }
-  d.setFont(F_SMALL);
-  d.setTextColor(MUTED);
-  d.drawString(String(batteryLevel) + "%", x + 64, y + 1);
-}
-
-static void drawTop() {
-  auto& d = *G;
-  d.fillRect(0, 0, W, TOP_H, BG);
-  drawTab(tabCoach, screen == Screen::Coach);
-  drawTab(tabOva, screen == Screen::OvaList || screen == Screen::OvaCard);
-  drawTab(tabHw, screen == Screen::HwList || screen == Screen::HwDetail);
-  drawTab(tabPlan, screen == Screen::Plan);
-  d.setFont(F_SMALL);
-  const char* status = WiFi.status() != WL_CONNECTED ? "Inget WiFi" : !wsUp ? "Ansluter" : "";
-  d.setTextColor(WARN);
-  if (*status) d.drawString(status, tabPlan.x + tabPlan.w + 14, 26);
-  // volym: [-] högtalare nivå [+]
-  int vx = btnVolDown.x;
-  d.fillRoundRect(btnVolDown.x, btnVolDown.y, btnVolDown.w, btnVolDown.h, 18, PANEL);
-  d.fillRoundRect(btnVolUp.x, btnVolUp.y, btnVolUp.w, btnVolUp.h, 18, PANEL);
-  d.setFont(F_BIG);
-  d.setTextColor(INK);
-  d.setTextDatum(middle_center);
-  d.drawString("-", btnVolDown.x + btnVolDown.w / 2, btnVolDown.y + btnVolDown.h / 2);
-  d.drawString("+", btnVolUp.x + btnVolUp.w / 2, btnVolUp.y + btnVolUp.h / 2);
-  d.setTextDatum(top_left);
-  int sx = vx + btnVolDown.w + 12;
-  drawSpeaker(sx, 28, volume ? INK : MUTED);
-  int bars = (volume + 50) / 51;   // 0–5
-  for (int i = 0; i < 5; i++) {
-    int bh = 8 + i * 6;
-    d.fillRect(sx + 34 + i * 10, 28 + 40 - bh, 7, bh, i < bars ? ACCENT : PANEL);
-  }
-  drawBattery(btnVolUp.x + btnVolUp.w + 28, 34);
-  if (weekPoints >= 0 && pointsOn) {
-    d.setFont(F_MID);
-    d.setTextColor(WARN);
-    d.setTextDatum(top_right);
-    d.drawString(String(weekPoints) + " p", W - 28, 30);
-    d.setTextDatum(top_left);
-  }
-  d.drawFastHLine(0, TOP_H - 1, W, PANEL);
-}
-
-static void setVolume(int v) {
-  volume = v < 0 ? 0 : v > 255 ? 255 : v;
-  M5.Speaker.setVolume(volume);
-  prefs.putInt("volume", volume);
-  if (!M5.Speaker.isPlaying()) playMelody(MEL_TICK, 1);
-  dirtyTop = true;
-}
-
-static int mainTop() { return TOP_H + 12; }
-static int mainBottom() { return H - BTN_H - 16 - (sessionActive ? TIMER_H + 12 : 12); }
-
-static bool dirtyDots = false;
-static void drawDots() {
-  auto& d = *G;
-  int y = mainTop() + 8 + (heardText.length() ? 64 : 0) + 20;
-  int dx = 48 + AVATAR_PNG_W + 24;
-  d.fillRect(dx, y, 700, 56, BG);
-  d.setFont(F_BIG);
-  d.setTextColor(ACCENT);
-  int dots = ((millis() - thinkingSince) / 400) % 4;
-  String t = "Pluggis tänker";
-  for (int i = 0; i < dots; i++) t += " .";
-  d.drawString(t, dx, y);
-}
-
-static void drawMain() {
-  auto& d = *G;
-  int top = mainTop(), bottom = mainBottom();
-  d.fillRect(0, top, W, bottom - top + 2, BG);
-  int x = 48, w = W - 96;
-  if (mode == Mode::Card) {
-    int cardH = bottom - top - 10;
-    uint32_t edge = !cardAnswered ? ACCENT : cardCorrect ? GOOD : BAD;
-    d.fillRoundRect(x, top, w, cardH, 24, PANEL);
-    d.drawRoundRect(x, top, w, cardH, 24, edge);
-    d.drawRoundRect(x + 1, top + 1, w - 2, cardH - 2, 23, edge);
-    d.setFont(F_SMALL);
-    d.setTextColor(MUTED);
-    d.drawString(cardAnswered ? (cardCorrect ? "Rätt!" : "Inte riktigt") : "Flashkort", x + 28, top + 18);
-    if (cardAnswered && cardBox > 0) {
-      d.setTextDatum(top_right);
-      d.drawString("Fack " + String(cardBox) + " av 5", x + w - 28, top + 18);
-      d.setTextDatum(top_left);
-    }
-    String body = cardAnswered ? cardFront + "\n\n" + cardBack : cardFront;
-    drawWrapped(body, x + 28, top + 64, w - 56, cardH - (cardHint.length() && !cardAnswered ? 130 : 90),
-                cardAnswered ? (cardCorrect ? GOOD : INK) : INK, F_BIG, true);
-    if (cardHint.length() && !cardAnswered) {
-      drawWrapped("Ledtråd: " + cardHint, x + 28, top + cardH - 60, w - 56, 50, MUTED, F_SMALL, true);
-    }
-  } else {
-    int y = top + 8;
-    if (heardText.length()) {
-      drawWrapped("Du: " + heardText, x, y, w, 70, MUTED, F_SMALL);
-      y += 64;
-    }
-    // Pluggis figur till vänster om svaret
-    d.drawPng(AVATAR_PNG, AVATAR_PNG_LEN, x, y + 4);
-    int tx = x + AVATAR_PNG_W + 24;
-    if (thinking) {
-      drawDots();
-    } else {
-      drawWrapped(sayText, tx, y, x + w - tx, bottom - y, INK, F_BIG);
-    }
-  }
-  if (pointsBanner.length() && millis() < pointsBannerUntil) {
-    d.setFont(F_BIG);
-    int bw = d.textWidth(pointsBanner) + 60;
-    d.fillRoundRect(W - bw - 28, top + 6, bw, 64, 32, WARN);
-    d.setTextColor(BG);
-    d.setTextDatum(middle_center);
-    d.drawString(pointsBanner, W - 28 - bw / 2, top + 38);
-    d.setTextDatum(top_left);
-  }
-}
-
-static int timerLeftNow() {
-  if (!sessionActive || !timerAt) return timerRemaining;
-  int left = timerRemaining - (int)((millis() - timerAt) / 1000);
-  return left < 0 ? 0 : left;
-}
-
-static int timerDrawn = -2;
-
-static void drawTimer() {
-  auto& d = *G;
-  int y = H - BTN_H - 16 - TIMER_H - 6;
-  int x = 48, w = W - 96;
-  if (!sessionActive) {
-    // Inget pass igång: visa hur länge Tab5 använts nu (räknas när någon tryckt de senaste 2 min)
-    int mins = activeSec / 60;
-    if (timerDrawn == -100 - mins) return;
-    timerDrawn = -100 - mins;
-    d.fillRect(0, y - 4, W, TIMER_H + 8, BG);
-    d.drawRoundRect(x, y, w, TIMER_H, 18, PANEL);
-    d.setFont(F_MID);
-    d.setTextColor(MUTED);
-    d.setTextDatum(middle_left);
-    d.drawString(mins < 1 ? "Aktiv tid nu: under 1 min" : "Aktiv tid nu: " + String(mins) + " min", x + 22, y + TIMER_H / 2);
-    d.setTextDatum(top_left);
-    return;
-  }
-  int left = timerLeftNow();
-  if (left == timerDrawn) return;
-  timerDrawn = left;
-  auto& c = *G;
-  float frac = timerTotal > 0 ? (float)left / timerTotal : 0;
-  c.fillRect(0, y - 4, W, TIMER_H + 8, BG);
-  c.fillRoundRect(x, y, w, TIMER_H, 18, PANEL);
-  int fw = (int)(w * frac);
-  if (fw > 36) c.fillRoundRect(x, y, fw, TIMER_H, 18, left < 120 ? WARN : GOOD);
-  c.setFont(F_MID);
-  c.setTextColor(INK);
-  c.setTextDatum(middle_left);
-  char mm[16];
-  snprintf(mm, sizeof(mm), "%d:%02d", left / 60, left % 60);
-  String label = String(mm);
-  if (sessionTask.length()) label += "   " + sessionTask;
-  if (c.textWidth(label) > w - 40) label = String(mm);
-  c.drawString(label, x + 22, y + TIMER_H / 2);
-  c.setTextDatum(top_left);
-}
-
-static void drawButtons() {
-  btnStart.label = sessionActive ? "Hjälp" : "Börja";
-  drawButton(btnStart);
-  drawButton(btnTalk, recording, recording ? "Släpp när du är klar" : nullptr);
-  drawButton(btnEnd);
-}
-
-static void drawOva();
-
-// ---------------------------------------------------------------- startskärm (tills WiFi och läxorna är på plats)
-static bool booting = true;
-static uint32_t bootStart = 0;
-
-static void drawBoot() {
-  auto& d = *G;
-  d.fillScreen(BG);
-  int cx = W / 2, cy = H / 2 + 120;
-  d.drawPng(LOGO_PNG, LOGO_PNG_LEN, cx - LOGO_PNG_W / 2, 36);
-  // snurrande ring av punkter
-  int n = 12, r = 34, step = (millis() / 90) % n;
-  for (int i = 0; i < n; i++) {
-    float a = (float)i / n * 2 * PI - PI / 2;
-    int x = cx + (int)(cosf(a) * r), y = cy + (int)(sinf(a) * r);
-    int k = (i - step + n) % n;   // 0 = ledande punkt
-    uint32_t c = k == 0 ? PL_YELLOW : k < 4 ? 0xB8962E : PANEL;
-    d.fillCircle(x, y, k == 0 ? 8 : 6, c);
-  }
-  d.setTextDatum(middle_center);
-  d.setFont(F_MID);
-  bool wifi = WiFi.status() == WL_CONNECTED;
-  String line = !wifi ? String("Ansluter till WiFi \"") + PLUGGIS_WIFI_SSID + "\" ..." : String("Hämtar läxor ...");
-  d.setTextColor(MUTED);
-  d.drawString(line, cx, cy + 70);
-  if (!wifi && millis() - bootStart > 30000) {
-    d.setFont(F_SMALL);
-    d.setTextColor(WARN);
-    d.drawString("Hittar inget WiFi. Kolla namn och lösenord i include/config.h och att nätet når hit.", cx, cy + 115);
-  } else if (wifi && millis() - bootStart > 30000) {
-    d.setFont(F_SMALL);
-    d.setTextColor(WARN);
-    d.drawString(String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?", cx, cy + 115);
-  }
-  d.setTextDatum(top_left);
-  present();
-}
-
-static void redraw() {
-  if (booting) { drawBoot(); return; }
-  if (dirtyAll) {
-    G->fillScreen(BG);
-    dirtyTop = true;
-    timerDrawn = -2;
-    if (screen == Screen::Coach) { dirtyMain = dirtyTimer = true; drawButtons(); }
-    else dirtyOva = true;
-    dirtyAll = false;
-  }
-  bool any = dirtyTop || dirtyMain || dirtyTimer || dirtyDots || dirtyOva;
-  if (dirtyTop) { drawTop(); dirtyTop = false; }
-  if (screen == Screen::Coach) {
-    if (dirtyMain) { drawMain(); dirtyMain = false; }
-    if (dirtyTimer) { drawTimer(); dirtyTimer = false; }
-    if (dirtyDots) { if (thinking) drawDots(); dirtyDots = false; }
-  } else {
-    dirtyMain = dirtyTimer = dirtyDots = false;
-    if (dirtyOva) { drawOva(); dirtyOva = false; }
-  }
-  if (any) present();
 }
 
 // ---------------------------------------------------------------- ljud
@@ -594,8 +255,7 @@ static void startRecording() {
   recSamples = 0;
   recording = true;
   recStarted = millis();
-  if (screen == Screen::Coach) { drawButton(btnTalk, true, "Släpp när du är klar"); present(); }
-  else dirtyOva = true;
+  ui::setTalking(true);   // knappen byggs inte om medan den hålls in
 }
 
 static void pumpRecording() {
@@ -622,9 +282,8 @@ static void stopRecording(bool send) {
   M5.Speaker.begin();
   M5.Speaker.setVolume(volume);
   M5.Speaker.setChannelVolume(7, 110);   // effektljuden (pling) lägre än talet
+  ui::setTalking(false);
   if (screen != Screen::Coach) { answerByVoice(send); return; }
-  drawButton(btnTalk);
-  present();
   uint32_t ms = millis() - recStarted;
   if (!send || ms < 400 || recSamples < REC_RATE / 4) {
     if (send) { sayText = "Håll in knappen medan du pratar."; dirtyMain = true; }
@@ -669,7 +328,7 @@ static void onText(const char* json, size_t len) {
     heardText = clean(doc["text"] | "");
     dirtyMain = true;
   } else if (type == "say" || type == "reminder") {
-    if (asleep) { asleep = false; M5.Display.setBrightness(200); dirtyAll = true; }
+    if (asleep) { asleep = false; M5.Display.setBrightness(cfg.bright); dirtyAll = true; }
     lastActivity = millis();
     thinking = false;
     sayText = clean(doc["text"] | "");
@@ -726,14 +385,12 @@ static void onText(const char* json, size_t len) {
   } else if (type == "points") {
     int delta = doc["delta"] | 0;
     if (doc["weekTotal"].is<int>()) weekPoints = doc["weekTotal"].as<int>();
-    if (delta > 0 && pointsOn) {
-      pointsBanner = "+" + String(delta);
-      pointsBannerUntil = millis() + 3500;
-    }
-    dirtyTop = dirtyMain = true;
+    if (delta > 0 && pointsOn) ui::toast("+" + std::to_string(delta) + " p");
+    dirtyTop = true;
     if (screen != Screen::Coach) dirtyOva = true;
   } else if (type == "open_practice") {
     // Coachen öppnar en övning: gå till Öva och starta den där
+    practicePlanItem = 0;   // coachen startade övningen, inte planen
     pendingKind = doc["kind"] | "quiz";
     pendingHw = doc["homeworkId"] | 0L;
     pendingPractice = true;
@@ -742,7 +399,10 @@ static void onText(const char* json, size_t len) {
     sayText = "Kameran på skärmen kommer snart. Fota med telefonen i Pluggis-appen så länge.";
     dirtyMain = true;
   } else if (type == "error") {
-    Serial.printf("[pluggis] fel från servern: %s\n", (const char*)(doc["message"] | ""));
+    String msg = doc["message"] | "";
+    Serial.printf("[pluggis] fel från servern: %s\n", msg.c_str());
+    lastError = msg;
+    if (!booting && msg.length()) ui::toast(std::string("Servern: ") + msg.c_str());
     thinking = false;
     dirtyMain = true;
   }
@@ -764,6 +424,9 @@ static void onBinary(uint8_t* data, size_t len) {
 static void onWs(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED: {
+      wsLast = "ansluten";
+      wsLastAt = millis();
+      Serial.printf("[pluggis] ansluten till %s:%d som %s\n", cfg.host.c_str(), cfg.port, cfg.device.c_str());
       wsUp = true;
       dirtyTop = true;
       JsonDocument doc;
@@ -775,7 +438,12 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       break;
     }
     case WStype_DISCONNECTED:
+      wsTries++;
+      wsLast = wsUp ? String("tappade kopplingen") : String("kom inte fram") + (length ? String(": ") + String((const char*)payload).substring(0, length) : String());
+      wsLastAt = millis();
       if (wsUp) Serial.println("[pluggis] frånkopplad, försöker igen");
+      else Serial.printf("[pluggis] får ingen WebSocket mot %s:%d%s\n", cfg.host.c_str(), cfg.port,
+                         WiFi.status() == WL_CONNECTED ? "" : " (inget WiFi)");
       wsUp = false;
       thinking = false;
       dirtyTop = dirtyMain = true;
@@ -785,6 +453,11 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_BIN:
       onBinary(payload, length);
+      break;
+    case WStype_ERROR:
+      wsLast = String("fel") + (length ? String(": ") + String((const char*)payload).substring(0, length) : String());
+      wsLastAt = millis();
+      Serial.printf("[pluggis] WebSocket-fel: %s\n", wsLast.c_str());
       break;
     default:
       break;
@@ -810,10 +483,8 @@ struct MakeHw {
   String label;      // "Prov: Glosförhör kap 3" (för titlar i övningarna)
   String title, subject, due;
   bool test = false, startNow = false;
+  bool language = false;   // språk/glosor: Glosförhör i Öva
 };
-static int listTop = 0;            // första synliga raden i läxlistan
-static constexpr int LIST_ROWS = 6;
-static Button listRow[LIST_ROWS], btnListUp, btnListDown, btnAgain;
 // Senast: det som gjordes sist, för "Kör igen"
 static String lastText, lastFocus;
 static int lastKind = -1;
@@ -824,17 +495,14 @@ static String dateLabel(const String& iso);
 static uint32_t subjectColor(const String& subject, const String& title);
 static std::vector<MakeHw> makeList;
 static int makeIdx = 0;
-static Button btnMkPrev, btnMkNext, btnMk[6];
 static const char* MK_LABELS[6] = {"Snabbquiz", "Lucktext", "Förklara", "Testprov", "Matcha par", "Rätt ordning"};
 static std::vector<long> allDeckIds, allDeckHw;
 // Fokus: delområden i vald läxa ("Siffror 1–100", "Veckodagar" …) – välj ett eller Allt
 static std::vector<String> mkTopics;
 static long mkTopicsFor = -1;
 static int mkFocus = 0;   // 0 = Allt
-static Button btnChip[7];
 static String currentFocus() { return mkFocus > 0 && mkFocus <= (int)mkTopics.size() ? mkTopics[mkFocus - 1] : String(); }   // alla kortlekar och deras läxa – för Matcha par
 static String makeBusy;
-static Button deckTiles[6];
 static bool decksLoaded = false;
 static String ovaMessage;
 
@@ -848,17 +516,11 @@ static int answered = 0, rightCount = 0;
 static std::vector<String> deckBacks;   // svaren på lekens kort – blir felaktiga alternativ
 static String spokenAnswer;
 static bool isLanguageDeck();
+static bool isLanguageText(String t);
+static bool oralDeck = false, oralNext = false;   // muntligt glosförhör: ordet sägs, eleven svarar på svenska
 static String jsonEscape(const String& t);
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
-static Button btnSay;
-// Glosor besvaras med rösten, slumpvis åt båda hållen: svenska -> målspråket (svara på t.ex. spanska,
-// flerspråkig Whisper på servern) eller målspråket -> svenska (KB-Whisper)
-static bool langVoiceCard = false;
-static const char* answerLang = "";   // "" = svara på svenska, annars "es", "de", "fr", "en"
-static const char* langName(const char* l);
-static const char* deckLang();
 static constexpr int ROUND = 10;
-static Button optBtn[4], btnReveal, btnKnew, btnDidnt;
 
 static String practiceId;
 static uint32_t practiceActive = 0, lastTouchAt = 0, lastActiveTick = 0;
@@ -867,13 +529,20 @@ static int api(const char* method, const String& path, const String& body, JsonD
   if (WiFi.status() != WL_CONNECTED) return -1;
   WiFiClient client;
   HTTPClient http;
-  String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + path +
-               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
+  String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + path +
+               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + cfg.device.c_str();
   if (!http.begin(client, url)) return -1;
   http.setTimeout(timeoutMs);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+  http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
   http.addHeader("Content-Type", "application/json");
   int code = strcmp(method, "GET") == 0 ? http.GET() : http.sendRequest(method, body);
+  if (code <= 0 || code >= 400) {
+    String what = code <= 0 ? String("ingen kontakt med ") + cfg.host.c_str() + ":" + String(cfg.port) + " (" + http.errorToString(code) + ")"
+                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla elevkoden under Inställningar"
+                : String("svarade ") + String(code);
+    Serial.printf("[pluggis] %s %s: %s\n", method, path.c_str(), what.c_str());
+    lastError = String(method) + " " + path + ": " + what;
+  }
   if (code > 0 && out) {
     String resp = http.getString();
     if (resp.length()) deserializeJson(*out, resp);
@@ -899,6 +568,7 @@ static void loadDecks() {
       m.due = x["dueDate"] | "";
       m.test = kind == "TEST";
       m.label = String(m.test ? "Prov: " : "Läxa: ") + m.title;
+      m.language = isLanguageText(m.subject + " " + m.title);
       makeList.push_back(m);
     }
   }
@@ -917,7 +587,6 @@ static void loadDecks() {
   }
   makeIdx = 0;
   for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == selected) makeIdx = i;
-  if (listTop > makeIdx || makeIdx >= listTop + LIST_ROWS) listTop = std::max(0, makeIdx - LIST_ROWS + 1);
   allDeckIds.clear();
   allDeckHw.clear();
   for (auto& d : decks) { allDeckIds.push_back(d.id); allDeckHw.push_back(d.homeworkId); }
@@ -964,7 +633,7 @@ static void nextCard() {
   if (answered >= ROUND) {
     noMoreCards = true;
     SFX_DONE();
-    setLast(cur.name.startsWith("Lucktext") || cur.name.indexOf("Lucktext") >= 0 ? 1 : 0, String(rightCount) + " av " + String(answered) + " rätt");
+    setLast(oralDeck ? 2 : cur.name.startsWith("Lucktext") || cur.name.indexOf("Lucktext") >= 0 ? 1 : 0, String(rightCount) + " av " + String(answered) + " rätt");
     return;
   }
   for (int attempt = 0; attempt < 2; attempt++) {
@@ -977,15 +646,6 @@ static void nextCard() {
       qBack = clean(doc["back"] | "");
       qHint = clean(doc["hint"] | "");
       JsonArray wrong = doc["wrongOptions"].as<JsonArray>();
-      // Glosor utan svarsalternativ: svara med rösten, slumpvis på svenska eller på målspråket
-      langVoiceCard = isLanguageDeck() && (wrong.isNull() || wrong.size() == 0) && qBack.length() > 0;
-      answerLang = "";
-      if (langVoiceCard) {
-        if (looksSwedish(qBack) && !looksSwedish(qFront)) std::swap(qFront, qBack);   // nu: framsida svenska
-        const char* lang = deckLang();
-        if (*lang && (esp_random() & 1)) answerLang = lang;   // visa svenska, svara på målspråket
-        else std::swap(qFront, qBack);                         // visa målspråket, svara på svenska
-      }
       if (!wrong.isNull() && wrong.size() > 0) {
         options.push_back(qBack);
         for (JsonVariant w : wrong) {
@@ -996,7 +656,7 @@ static void nextCard() {
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
       // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
-      if (!langVoiceCard && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
+      if (!oralDeck && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
         std::vector<String> pool;
         for (auto& b : deckBacks)
           if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
@@ -1027,6 +687,8 @@ static void grade(bool correct) {
 
 static void openDeck(const DeckInfo& d) {
   cur = d;
+  oralDeck = oralNext;
+  oralNext = false;
   answered = rightCount = 0;
   practiceAnyway = d.due == 0;
   screen = Screen::OvaCard;
@@ -1078,200 +740,15 @@ static void showScreen(Screen s, bool force) {
   dirtyAll = true;
 }
 
-static constexpr int LIST_W = 470;   // läxlistan till vänster
-static void layoutOva() {
-  int top = TOP_H + 368, gap = 20;
-  int ry = TOP_H + 70, rh = 80;
-  btnMkPrev = {0, 0, 0, 0, "<", PANEL};   // ersatta av listan
-  btnMkNext = {0, 0, 0, 0, ">", PANEL};
-  btnListUp = {gap, H - 58 - 64, 110, 56, "", PANEL};
-  btnListDown = {LIST_W + gap - 110, H - 58 - 64, 110, 56, "", PANEL};
-  btnAgain = {W - gap - 200, H - 52, 200, 46, "", PANEL};
-  int rx = LIST_W + 2 * gap, rw = W - rx - gap;
-  int tw = (rw - 2 * 14) / 3, th = 118, ty = H - 58 - 2 * th - 14;
-  for (int i = 0; i < 6; i++) btnMk[i] = {rx + (i % 3) * (tw + 14), ty + (i / 3) * (th + 14), tw, th, MK_LABELS[i], ACCENT};
-  (void)ry; (void)rh;
-  for (int i = 0; i < 6; i++) deckTiles[i] = {0, top, 0, 0, "", PANEL};   // kortlekar sparas inte längre
-  int oh = 112, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
-  for (int i = 0; i < 4; i++) optBtn[i] = {gap + (i % 2) * (ow + gap), oy + (i / 2) * (oh + gap), ow, oh, "", PANEL};
-  btnReveal = {gap, H - oh - gap, ow, oh, "Visa svar", PANEL};
-  btnSay = {2 * gap + ow, H - oh - gap, ow, oh, "Håll in och svara", ACCENT};
-  btnDidnt = {gap, H - oh - gap, ow, oh, "Kunde inte", BAD};
-  btnKnew = {2 * gap + ow, H - oh - gap, ow, oh, "Kunde", GOOD};
-}
-
-static void drawTextButton(const Button& b, uint32_t color, const String& text) {
-  auto& d = *G;
-  d.fillRoundRect(b.x, b.y, b.w, b.h, 24, color);
-  drawWrapped(text, b.x + 16, b.y + 10, b.w - 32, b.h - 20, INK, F_MID, true);
-}
-
-static void drawHwPlan();
-static void drawGame();
-
-static void drawOva() {
-  auto& d = *G;
-  d.fillRect(0, TOP_H, W, H - TOP_H, BG);
-  if (screen == Screen::Game) { drawGame(); return; }
-  if (screen != Screen::OvaList && screen != Screen::OvaCard) { drawHwPlan(); return; }
-  if (screen == Screen::OvaList) {
-    if (!decksLoaded) { drawWrapped("Hämtar läxor ...", 28, TOP_H + 60, W - 56, 80, MUTED, F_MID); return; }
-    if (makeBusy.length()) { drawWrapped(makeBusy, 28, TOP_H + 120, W - 56, 300, ACCENT, F_BIG, true); return; }
-    if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 60, W - 56, 200, MUTED, F_MID); return; }
-    // --- vänster: läxor och prov (Snart / Längre fram)
-    int y = TOP_H + 14;
-    bool soonHeader = false, laterHeader = false;
-    for (int k = 0; k < LIST_ROWS; k++) listRow[k] = {0, 0, 0, 0, "", PANEL};
-    for (int k = 0; k < LIST_ROWS && listTop + k < (int)makeList.size(); k++) {
-      auto& m = makeList[listTop + k];
-      int days = m.due.length() ? daysUntil(m.due) : 999;
-      bool soon = days <= 7;
-      if ((soon && !soonHeader) || (!soon && !laterHeader)) {
-        d.setFont(F_SMALL);
-        d.setTextColor(MUTED);
-        d.drawString(soon ? "Snart" : "Längre fram", 28, y + 2);
-        y += 34;
-        if (soon) soonHeader = true; else { laterHeader = true; soonHeader = true; }
-      }
-      Button r = {20, y, LIST_W, 64, "", PANEL};
-      listRow[k] = r;
-      bool sel = listTop + k == makeIdx;
-      d.fillRoundRect(r.x, r.y, r.w, r.h, 14, sel ? 0x1A4390 : PANEL);
-      if (sel) { d.drawRoundRect(r.x, r.y, r.w, r.h, 14, PL_YELLOW); d.drawRoundRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2, 13, PL_YELLOW); }
-      d.fillRoundRect(r.x, r.y, 10, r.h, 5, subjectColor(m.subject, m.title));
-      String when = !m.due.length() ? String() : m.startNow ? "börja nu" : days < 0 ? "försenad" : dateLabel(m.due);
-      d.setFont(F_SMALL);
-      int ww = when.length() ? d.textWidth(when) : 0;
-      d.setTextColor(m.startNow ? GOOD : days <= 2 ? WARN : MUTED);
-      d.setTextDatum(middle_right);
-      if (ww) d.drawString(when, r.x + r.w - 16, r.y + r.h / 2);
-      d.setTextDatum(middle_left);
-      d.setFont(F_MID);
-      String t = (m.test ? "Prov: " : "") + m.title;
-      int maxW = r.w - 40 - ww - 16;
-      while (t.length() > 4 && d.textWidth(t) > maxW) t = t.substring(0, t.length() - 4) + "...";
-      d.setTextColor(INK);
-      d.drawString(t, r.x + 26, r.y + r.h / 2);
-      d.setTextDatum(top_left);
-      y += 64 + 8;
-    }
-    if ((int)makeList.size() > LIST_ROWS) {
-      bool up = listTop > 0, down = listTop + LIST_ROWS < (int)makeList.size();
-      drawTextButton(btnListUp, up ? PANEL : BG, up ? "Upp" : "");
-      drawTextButton(btnListDown, down ? PANEL : BG, down ? "Ner" : "");
-      d.setFont(F_SMALL);
-      d.setTextColor(MUTED);
-      d.setTextDatum(middle_center);
-      d.drawString(String(listTop + 1) + "-" + String(std::min((int)makeList.size(), listTop + LIST_ROWS)) + " av " + String(makeList.size()),
-                   20 + LIST_W / 2, btnListUp.y + btnListUp.h / 2);
-      d.setTextDatum(top_left);
-    }
-    // --- höger: vald läxa, delområden, övningarna
-    auto& m = makeList[makeIdx];
-    int rx = LIST_W + 40, rw = W - rx - 20;
-    drawWrapped((m.test ? "Prov: " : "Läxa: ") + m.title, rx, TOP_H + 14, rw, 48, INK, F_MID);
-    d.setFont(F_SMALL);
-    d.setTextColor(MUTED);
-    d.drawString((m.subject.length() ? m.subject : String("Ämne saknas")) + (m.due.length() ? " · " + dateLabel(m.due) : String()), rx, TOP_H + 60);
-    int cy = TOP_H + 100, cx = rx;
-    for (int i = 0; i < 7; i++) btnChip[i] = {0, 0, 0, 0, "", PANEL};
-    if (mkTopicsFor != m.id) {
-      d.setTextColor(MUTED);
-      d.drawString("Letar delområden ...", cx, cy + 14);
-    } else if (!mkTopics.empty()) {
-      d.setTextColor(MUTED);
-      d.drawString("Öva på:", cx, cy + 14);
-      cx += d.textWidth("Öva på:") + 12;
-      int rowStart = cx;
-      for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
-        String t = i == 0 ? String("Allt") : mkTopics[i - 1];
-        d.setFont(F_SMALL);
-        int w = d.textWidth(t) + 34;
-        if (cx + w > rx + rw) { cx = rowStart; cy += 62; }   // ny rad
-        if (cy > TOP_H + 100 + 62) break;                    // högst två rader
-        btnChip[i] = {cx, cy, w, 54, "", PANEL};
-        d.fillRoundRect(cx, cy, w, 54, 27, i == mkFocus ? ACCENT : PANEL);
-        d.setTextColor(INK);
-        d.setTextDatum(middle_center);
-        d.drawString(t, cx + w / 2, cy + 27);
-        d.setTextDatum(top_left);
-        cx += w + 10;
-      }
-    }
-    static const char* SUBS[6] = {"fyra alternativ", "fyll i ordet", "lär ut till Pluggis", "som på riktigt", "slå rekordet", "steg i rad"};
-    for (int i = 0; i < 6; i++) {
-      auto& b = btnMk[i];
-      d.fillRoundRect(b.x, b.y, b.w, b.h, 22, i < 2 ? ACCENT : 0x2D5BA8);
-      d.setFont(F_MID);
-      d.setTextColor(INK);
-      d.drawString(MK_LABELS[i], b.x + 20, b.y + 26);
-      d.setFont(F_SMALL);
-      d.setTextColor(0xC9D6E8);
-      d.drawString(SUBS[i], b.x + 20, b.y + 72);
-    }
-    // --- längst ner: Senast
-    d.drawFastHLine(20, H - 58, W - 40, PANEL);
-    d.setFont(F_SMALL);
-    d.setTextColor(MUTED);
-    d.drawString(lastText.length() ? "Senast: " + lastText : String("Välj läxa till vänster och en övning."), 28, H - 44);
-    if (lastKind >= 0) drawTextButton(btnAgain, PANEL, "Kör igen");
-    return;
-  }
-  // Ett kort
-  d.setFont(F_SMALL);
-  d.setTextColor(MUTED);
-  d.drawString(cur.name, 28, TOP_H + 16);
-  d.setTextDatum(top_right);
-  d.drawString(String(answered) + " av " + String(ROUND) + "  ·  " + String(rightCount) + " rätt", W - 28, TOP_H + 16);
-  d.setTextDatum(top_left);
-  if (noMoreCards) {
-    String msg = answered ? "Bra jobbat! " + String(rightCount) + " av " + String(answered) + " rätt." : "Inga kort att öva just nu.";
-    drawWrapped(msg + "\n\nTryck för att välja en annan kortlek.", 48, TOP_H + 120, W - 96, 300, answered ? GOOD : INK, F_BIG, true);
-    return;
-  }
-  bool hasOptions = options.size() >= 2;
-  int qBottom = hasOptions ? optBtn[0].y - 20 : btnReveal.y - (spokenAnswer.length() ? 90 : 20);
-  String q = qFront;
-  if (revealed && !hasOptions) q += "\n\n" + qBack;
-  drawWrapped(q, 48, TOP_H + 60, W - 96, qBottom - TOP_H - 60 - (qHint.length() ? 40 : 0),
-              revealed && !hasOptions ? GOOD : INK, F_BIG, true);
-  if (qHint.length() && !revealed && chosen < 0) drawWrapped("Ledtråd: " + qHint, 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
-  if (hasOptions) {
-    for (size_t i = 0; i < options.size() && i < 4; i++) {
-      uint32_t c = PANEL;
-      if (chosen >= 0) c = (int)i == correctIdx ? GOOD : (int)i == chosen ? BAD : PANEL;
-      drawTextButton(optBtn[i], c, options[i]);
-    }
-    if (chosen >= 0) drawWrapped("Tryck för nästa", 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
-  } else if (!revealed) {
-    if (isLanguageDeck() && !langVoiceCard) {
-      Button full = {btnReveal.x, btnReveal.y, btnSay.x + btnSay.w - btnReveal.x, btnReveal.h, "Visa svar", ACCENT};
-      drawTextButton(full, ACCENT, "Visa svar");
-    } else {
-      drawTextButton(btnReveal, PANEL, "Visa svar");
-      drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar"
-                                                       : langVoiceCard ? "Håll in, svara på " + String(langName(answerLang))
-                                                                       : "Håll in och svara");
-    }
-  } else {
-    if (spokenAnswer.length()) {
-      String v = voiceVerdict == 1 ? "Låter rätt!  " : voiceVerdict == 0 ? "Jämför med svaret.  " : "";
-      drawWrapped(v + "Du sa: " + spokenAnswer, 48, btnDidnt.y - 70, W - 96, 60, voiceVerdict == 1 ? GOOD : WARN, F_SMALL, true);
-    }
-    drawTextButton(btnDidnt, BAD, "Kunde inte");
-    drawTextButton(btnKnew, GOOD, "Kunde");
-  }
-}
-
 
 /** Språk (glosor): rösten (svensk KB-Whisper) hör inte spanska ord bra – där trycker man i stället. */
-static bool isLanguageDeck() {
-  String t = cur.subject + " " + cur.name;
+static bool isLanguageText(String t) {
   t.toLowerCase();
   const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol"};
   for (auto w : words) if (t.indexOf(w) >= 0) return true;
   return false;
 }
+static bool isLanguageDeck() { return isLanguageText(cur.subject + " " + cur.name); }
 
 /** Språket i en språk-kortlek: "es", "de", "fr", "en" – annars "". */
 static const char* langFrom(String t) {
@@ -1326,34 +803,11 @@ static void sayCardSide(const String& text) {
   sayAloud(text, looksSwedish(text) ? "" : guessLang(text));
 }
 
-static const char* langName(const char* l) {
-  if (!strcmp(l, "es")) return "spanska";
-  if (!strcmp(l, "de")) return "tyska";
-  if (!strcmp(l, "fr")) return "franska";
-  if (!strcmp(l, "en")) return "engelska";
-  return "svenska";
-}
-
-static String urlEncode(const String& in) {
-  String out;
-  const char* hex = "0123456789ABCDEF";
-  for (size_t i = 0; i < in.length(); i++) {
-    uint8_t c = in[i];
-    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') out += (char)c;
-    else { out += '%'; out += hex[c >> 4]; out += hex[c & 15]; }
-  }
-  return out;
-}
-
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
 static String normalize(const String& in) {
   String s = in;
   s.toLowerCase();
   s.replace("Å", "å"); s.replace("Ä", "ä"); s.replace("Ö", "ö");
-  // Accenter i spanska/franska/tyska spelar ingen roll när vi jämför (Whisper skriver dem inte alltid)
-  const char* from[] = {"á", "à", "â", "é", "è", "ê", "ë", "í", "î", "ï", "ó", "ô", "ú", "ù", "û", "ü", "ñ", "ç", "ß", "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü", "¿", "¡"};
-  const char* to[] = {"a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "o", "o", "u", "u", "u", "u", "n", "c", "ss", "a", "e", "i", "o", "u", "n", "u", " ", " "};
-  for (size_t i = 0; i < sizeof(from) / sizeof(from[0]); i++) s.replace(from[i], to[i]);
   String out;
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
@@ -1381,23 +835,52 @@ static int judge(const String& said, const String& answer) {
   return words && hits * 10 >= words * 6 ? 1 : 0;
 }
 
+/** Glosförhöret: "hunden / en hund" – något av svaren räcker, med eller utan en/ett/att framför. */
+static String withoutArticle(const String& in) {
+  String t = normalize(in);
+  for (const char* a : {"en ", "ett ", "att ", "den ", "det ", "de "})
+    if (t.startsWith(a)) { t = t.substring(strlen(a)); break; }
+  return t;
+}
+static int judgeVocab(const String& said, const String& back) {
+  String b = back;
+  b.replace(" eller ", "/");
+  b.replace(",", "/");
+  b.replace(";", "/");
+  String s = withoutArticle(said);
+  bool any = false;
+  int start = 0;
+  while (true) {
+    int sl = b.indexOf('/', start);
+    String alt = b.substring(start, sl < 0 ? b.length() : sl);
+    alt.trim();
+    if (alt.length()) {
+      any = true;
+      String a = withoutArticle(alt);
+      if (a.length() && (s == a || judge(s, a) == 1 || judge(said, alt) == 1)) return 1;
+    }
+    if (sl < 0) break;
+    start = sl + 1;
+  }
+  return any ? 0 : -1;
+}
+
 /** Inspelningen på ett kort: skicka till servern (KB-Whisper), visa vad som hördes och rätt svar. */
 static void gameVoice(const String& said);
 static void gameBusy(const String& what);
 
 /** Skickar inspelningen till servern (lokal KB-Whisper) och ger tillbaka texten. */
-static String transcribeRecording(const char* lang = "", const String& hint = "") {
+static String transcribeRecording() {
   uint32_t bytes = recSamples * 2;
   writeWavHeader((uint8_t*)recBuf, bytes);
   String said;
   if (WiFi.status() == WL_CONNECTED) {
     WiFiClient client;
     HTTPClient http;
-    String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID +
-                 (*lang ? String("&lang=") + lang : String()) + (hint.length() ? "&hint=" + urlEncode(hint) : String());
+    String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + "/api/speech/transcribe?deviceId=" + cfg.device.c_str();
     if (http.begin(client, url)) {
       http.setTimeout(20000);
-      http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+      http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
       http.addHeader("Content-Type", "audio/wav");
       int code = http.POST((uint8_t*)recBuf, 44 + bytes);
       if (code == 200) {
@@ -1423,20 +906,21 @@ static void answerByVoice(bool send) {
   spokenAnswer = "...";
   dirtyOva = true;
   redraw();
-  String said = langVoiceCard ? transcribeRecording(answerLang, qBack) : transcribeRecording();
+  String said = transcribeRecording();
   spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
-  voiceVerdict = said.length() ? judge(said, qBack) : -1;
+  voiceVerdict = !said.length() ? -1 : oralDeck ? judgeVocab(said, qBack) : judge(said, qBack);
   revealed = true;
   if (voiceVerdict == 1) SFX_OK();
   dirtyOva = true;
-  if (*answerLang) { redraw(); delay(300); sayCardSide(qBack); }   // hör hur ordet uttalas
 }
 
 
 /** Pluggis (Claude) gör frågorna av läxans material – tar en stund – och övningen startar direkt. */
 static void makeQuiz(long homeworkId, const char* mode) {
-  makeBusy = strcmp(mode, "cloze") == 0 ? "Pluggis gör en lucktext av materialet ...\n\nDet kan ta en halv minut."
-                                       : "Pluggis gör ett snabbquiz av materialet ...\n\nDet kan ta en halv minut.";
+  bool vocab = strcmp(mode, "vocab") == 0;
+  makeBusy = vocab ? "Pluggis plockar ut glosorna ...\n\nDet kan ta en halv minut."
+           : strcmp(mode, "cloze") == 0 ? "Pluggis gör en lucktext av materialet ...\n\nDet kan ta en halv minut."
+                                        : "Pluggis gör ett snabbquiz av materialet ...\n\nDet kan ta en halv minut.";
   dirtyOva = true;
   redraw();
   JsonDocument doc;
@@ -1444,6 +928,11 @@ static void makeQuiz(long homeworkId, const char* mode) {
   int code = api("POST", "/api/flashcards/quiz", "{\"homeworkId\":" + String(homeworkId) + ",\"mode\":\"" + mode +
                  "\",\"count\":10" + (focus.length() ? ",\"focus\":\"" + jsonEscape(focus) + "\"" : String()) + "}", &doc, 120000);
   makeBusy = "";
+  if (code == 422 && vocab) {
+    ovaMessage = clean(doc["error"] | "Hittade inga glosor i läxan.") + "\n\nLägg till ett foto på glosorna i Pluggis-appen.";
+    dirtyOva = true;
+    return;
+  }
   if (code != 200) {
     ovaMessage = String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.";
     dirtyOva = true;
@@ -1457,7 +946,8 @@ static void makeQuiz(long homeworkId, const char* mode) {
   d.cards = 10;
   d.due = 10;
   d.homeworkId = homeworkId;
-  d.name = String(strcmp(mode, "cloze") == 0 ? "Lucktext: " : "Snabbquiz: ") + d.name;
+  d.name = String(vocab ? "Glosförhör: " : strcmp(mode, "cloze") == 0 ? "Lucktext: " : "Snabbquiz: ") + d.name;
+  oralNext = vocab;
   lastHw = homeworkId;
   lastFocus = focus;
   if (!d.id) { loadDecks(); dirtyOva = true; return; }
@@ -1470,7 +960,6 @@ static void makeQuiz(long homeworkId, const char* mode) {
 static long gameHw = 0;
 static String gameTitle, gameMsg, gameHeard;
 static bool gameDone = false;
-static Button gBtn[10], gSay, gNext;
 static uint32_t gWrongUntil = 0;
 static int gWrongA = -1, gWrongB = -1;
 
@@ -1503,11 +992,6 @@ static void gameBusy(const String& what) {
   redraw();
 }
 
-static void layoutGame() {
-  int gap = 20;
-  gSay = {gap, H - 112 - gap, W - 2 * gap, 112, "", ACCENT};
-  gNext = gSay;
-}
 
 static void gameDoneReport(const char* kind) {
   api("POST", "/api/games/done", String("{\"kind\":\"") + kind + "\",\"what\":\"" + jsonEscape(gameTitle) + "\"}", nullptr);
@@ -1694,111 +1178,6 @@ static void examSubmit() {
   for (JsonVariant v : doc["review"].as<JsonArray>()) examReview.push_back(clean(v.as<const char*>()));
 }
 
-static void drawGame() {
-  auto& d = *G;
-  d.setFont(F_SMALL);
-  d.setTextColor(MUTED);
-  d.drawString(gameTitle, 28, TOP_H + 14);
-  if (gameMsg.length()) { drawWrapped(gameMsg + (gameMsg.endsWith("...") || gameMsg.indexOf("...\n") >= 0 ? "" : "\n\nTryck för att gå tillbaka."), 48, TOP_H + 90, W - 96, 400, ACCENT, F_BIG, true); return; }
-  int top = TOP_H + 56;
-  bool talk = false;
-  String talkLabel = "Håll in och svara";
-
-  if (game == Game::Explain) {
-    d.setFont(F_MID);
-    d.setTextColor(ACCENT);
-    d.drawString("Förklara: " + exConcept, 28, top);
-    int y = top + 52;
-    if (gameHeard.length()) { drawWrapped("Du: " + gameHeard, 28, y, W - 56, 64, MUTED, F_SMALL); y += 68; }
-    if (!gameDone) {
-      drawWrapped(exReply, 28, y, W - 56, gSay.y - y - 20, INK, F_BIG);
-      talk = true;
-      talkLabel = "Håll in och förklara";
-    } else {
-      drawWrapped(exReply, 28, y, W - 56, 110, INK, F_MID);
-      y += 120;
-      for (auto& c : exCovered) { if (y > H - 60) break; drawWrapped("OK  " + c, 48, y, W - 96, 40, GOOD, F_SMALL); y += 40; }
-      for (auto& m : exMissing) { if (y > H - 60) break; drawWrapped("+  " + m, 48, y, W - 96, 40, WARN, F_SMALL); y += 40; }
-      drawWrapped("Tryck för att gå tillbaka.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
-    }
-  } else if (game == Game::Exam) {
-    if (gameDone) {
-      drawWrapped("Testprov klart!\n" + String(examPoints) + " av " + String(examMax) + " poäng (" + String(examPct) + " %)", 48, top + 10, W - 96, 150, GOOD, F_BIG, true);
-      int y = top + 180;
-      if (!examReview.empty()) { drawWrapped("Det här ska du kolla igen:", 48, y, W - 96, 40, INK, F_MID); y += 50; }
-      for (auto& r : examReview) { if (y > H - 80) break; drawWrapped("-  " + r, 68, y, W - 136, 40, WARN, F_SMALL); y += 40; }
-      drawWrapped("Rätta svar finns i Pluggis-appen. Tryck för att gå tillbaka.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
-      return;
-    }
-    auto& q = examQs[examI];
-    d.setFont(F_SMALL);
-    d.setTextColor(MUTED);
-    d.setTextDatum(top_right);
-    d.drawString("Fråga " + String(examI + 1) + " av " + String(examQs.size()), W - 28, TOP_H + 14);
-    d.setTextDatum(top_left);
-    bool hasChoices = q.choices.size() >= 2;
-    int gap = 20, oh = 104, ow = (W - 3 * gap) / 2, oy = H - 2 * oh - 2 * gap;
-    drawWrapped(q.question, 48, top, W - 96, (hasChoices ? oy : gSay.y - 80) - top - 10, INK, F_BIG, true);
-    if (hasChoices) {
-      for (size_t i = 0; i < q.choices.size() && i < 4; i++) {
-        gBtn[i] = {gap + (int)(i % 2) * (ow + gap), oy + (int)(i / 2) * (oh + gap), ow, oh, "", PANEL};
-        drawTextButton(gBtn[i], examAns[examI] == q.choices[i] ? ACCENT : PANEL, q.choices[i]);
-      }
-    } else {
-      if (examAns[examI].length()) drawWrapped("Ditt svar: " + examAns[examI], 48, gSay.y - 76, W - 96, 60, GOOD, F_SMALL, true);
-      int half = (W - 3 * gap) / 2;
-      gBtn[0] = {gap, gSay.y, half, gSay.h, "", ACCENT};
-      gBtn[1] = {2 * gap + half, gSay.y, half, gSay.h, "", PANEL};
-      drawTextButton(gBtn[0], recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
-      drawTextButton(gBtn[1], PANEL, examAns[examI].length() ? (examI + 1 < (int)examQs.size() ? "Nästa" : "Lämna in") : "Hoppa över");
-    }
-    return;
-  } else if (game == Game::Match) {
-    int n = pairs.size(), gap = 14, colW = (W - 3 * 20) / 2;
-    int rowH = (H - top - 20 - (n - 1) * gap) / n;
-    bool all = std::all_of(matched.begin(), matched.end(), [](bool b) { return b; });
-    for (int i = 0; i < n; i++) {
-      gBtn[i] = {20, top + i * (rowH + gap), colW, rowH, "", PANEL};
-      int j = rightOrder[i];
-      gBtn[5 + i] = {40 + colW, top + i * (rowH + gap), colW, rowH, "", PANEL};
-      bool wrongNow = millis() < gWrongUntil;
-      uint32_t cl = matched[i] ? 0x1E5A3C : (selL == i ? ACCENT : (wrongNow && gWrongA == i) ? BAD : PANEL);
-      uint32_t cr = matched[j] ? 0x1E5A3C : (wrongNow && gWrongB == i) ? BAD : PANEL;
-      drawTextButton(gBtn[i], cl, pairs[i].a);
-      drawTextButton(gBtn[5 + i], cr, pairs[j].b);
-    }
-    if (all) {
-      d.fillRoundRect(W / 2 - 300, H / 2 - 70, 600, 140, 28, GOOD);
-      drawWrapped("Klart på " + String((millis() - matchStart) / 1000) + " s!", W / 2 - 280, H / 2 - 50, 560, 100, BG, F_BIG, true);
-    }
-    return;
-  } else if (game == Game::Order) {
-    auto& sq = seqs[seqI];
-    d.setFont(F_MID);
-    d.setTextColor(ACCENT);
-    d.drawString(sq.title + "  (" + String(seqI + 1) + " av " + String(seqs.size()) + ")", 28, top);
-    drawWrapped(sq.prompt, 28, top + 46, W - 56, 50, MUTED, F_SMALL);
-    int y = top + 100;
-    // de som är på plats
-    for (int k = std::max(0, placed - 3); k < placed; k++) { drawWrapped(String(k + 1) + ". " + sq.steps[k], 48, y, W - 96, 38, GOOD, F_SMALL); y += 38; }
-    if (placed >= (int)sq.steps.size()) {
-      drawWrapped("Rätt ordning!\n" + sq.why, 48, y + 10, W - 96, H - y - 80, INK, F_MID, true);
-      drawWrapped("Tryck för att fortsätta.", 28, H - 50, W - 56, 40, MUTED, F_SMALL, true);
-      return;
-    }
-    int gap = 16, cols = 2, bw = (W - 3 * 20) / 2;
-    int rows = (shownSteps.size() + 1) / 2;
-    int bh = std::min(100, (H - y - 30 - (rows - 1) * gap) / std::max(1, rows));
-    for (size_t k = 0; k < shownSteps.size() && k < 10; k++) {
-      gBtn[k] = {20 + (int)(k % cols) * (bw + 20), y + 10 + (int)(k / cols) * (bh + gap), bw, bh, "", PANEL};
-      bool wrongNow = millis() < gWrongUntil && gWrongA == (int)k;
-      drawTextButton(gBtn[k], wrongNow ? BAD : PANEL, sq.steps[shownSteps[k]]);
-    }
-    return;
-  }
-  if (talk) drawTextButton(gSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : talkLabel);
-}
-
 static void gameExit() {
   if (recording) stopRecording(false);
   practiceEnd();
@@ -1806,161 +1185,6 @@ static void gameExit() {
   screen = Screen::Coach;
   showScreen(Screen::OvaList);
 }
-
-static void gameTouch(int x, int y) {
-  lastTouchAt = millis();
-  bool onText = y > TOP_H + 40 && y < TOP_H + 260 && !gameMsg.length() && !gameDone;
-  if (onText && game == Game::Exam) { examSpoken = -1; examSpeak(); return; }
-  if (onText && game == Game::Explain) { sayAloud(exReply); return; }
-  if (gameMsg.length()) { if (!gameMsg.endsWith("...")) gameExit(); return; }
-  if (game == Game::Explain) {
-    if (gameDone) { gameExit(); return; }
-    if (inside(gSay, x, y)) startRecording();
-  } else if (game == Game::Exam) {
-    if (gameDone) { gameExit(); return; }
-    auto& q = examQs[examI];
-    if (q.choices.size() >= 2) {
-      for (size_t i = 0; i < q.choices.size() && i < 4; i++) {
-        if (!inside(gBtn[i], x, y)) continue;
-        examAns[examI] = q.choices[i];
-        dirtyOva = true;
-        redraw();
-        delay(250);
-        if (++examI >= (int)examQs.size()) { examI = examQs.size() - 1; examSubmit(); }
-        dirtyOva = true;
-        return;
-      }
-    } else if (inside(gBtn[0], x, y)) {
-      startRecording();
-    } else if (inside(gBtn[1], x, y)) {
-      if (++examI >= (int)examQs.size()) { examI = examQs.size() - 1; examSubmit(); }
-      dirtyOva = true;
-    }
-  } else if (game == Game::Match) {
-    if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) { gameExit(); return; }
-    int n = pairs.size();
-    for (int i = 0; i < n; i++) {
-      if (inside(gBtn[i], x, y) && !matched[i]) { selL = i; dirtyOva = true; return; }
-      if (inside(gBtn[5 + i], x, y)) {
-        int j = rightOrder[i];
-        if (matched[j] || selL < 0) return;
-        if (j == selL) {
-          matched[j] = true;
-          SFX_OK();
-          if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) {
-            SFX_DONE();
-            gameDoneReport("match");
-            setLast(4, String((millis() - matchStart) / 1000) + " s");
-          }
-        } else {
-          gWrongA = selL; gWrongB = i; gWrongUntil = millis() + 600;
-          SFX_BAD();
-        }
-        selL = -1;
-        dirtyOva = true;
-        return;
-      }
-    }
-  } else if (game == Game::Order) {
-    auto& sq = seqs[seqI];
-    if (placed >= (int)sq.steps.size()) {
-      if (++seqI >= (int)seqs.size()) { gameDoneReport("order"); setLast(5, "klart"); gameExit(); return; }
-      placed = 0;
-      shownSteps.clear();
-      for (size_t i = 0; i < seqs[seqI].steps.size(); i++) shownSteps.push_back(i);
-      for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
-      sayAloud(seqs[seqI].title + ". " + seqs[seqI].prompt);
-      dirtyOva = true;
-      return;
-    }
-    for (size_t k = 0; k < shownSteps.size() && k < 10; k++) {
-      if (!inside(gBtn[k], x, y)) continue;
-      if (shownSteps[k] == placed) {
-        placed++;
-        shownSteps.erase(shownSteps.begin() + k);
-        if (placed >= (int)sq.steps.size()) { SFX_DONE(); sayAloud("Rätt ordning! " + sq.why); } else SFX_OK();
-      } else {
-        gWrongA = k; gWrongUntil = millis() + 600;
-        SFX_BAD();
-      }
-      dirtyOva = true;
-      return;
-    }
-  }
-}
-
-static void ovaTouch(int x, int y) {
-  lastTouchAt = millis();
-  if (screen == Screen::OvaCard && !noMoreCards && chosen < 0 && y > TOP_H + 40 && y < TOP_H + 260) {
-    if (revealed && *deckLang()) sayCardSide(looksSwedish(qFront) ? qBack : qFront);
-    else sayCardSide(revealed ? qFront + ". " + qBack : qFront);
-    return;
-  }
-  if (screen == Screen::OvaList) {
-    if (!makeList.empty() && !makeBusy.length()) {
-      for (int k = 0; k < LIST_ROWS; k++) {
-        if (listRow[k].w && inside(listRow[k], x, y)) { makeIdx = listTop + k; mkFocus = 0; dirtyOva = true; return; }
-      }
-      if ((int)makeList.size() > LIST_ROWS) {
-        if (inside(btnListUp, x, y) && listTop > 0) { listTop = std::max(0, listTop - LIST_ROWS); dirtyOva = true; return; }
-        if (inside(btnListDown, x, y) && listTop + LIST_ROWS < (int)makeList.size()) { listTop += LIST_ROWS; dirtyOva = true; return; }
-      }
-      if (lastKind >= 0 && inside(btnAgain, x, y)) {
-        for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == lastHw) makeIdx = i;
-        mkFocus = 0;
-        for (size_t i = 0; i < mkTopics.size(); i++) if (mkTopicsFor == lastHw && mkTopics[i] == lastFocus) mkFocus = i + 1;
-        if (lastKind == 0) makeQuiz(lastHw, "quiz");
-        else if (lastKind == 1) makeQuiz(lastHw, "cloze");
-        else startGame(lastKind, lastHw, makeList[makeIdx].label);
-        return;
-      }
-      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
-      bool onLabel = y >= btnMkPrev.y && y < btnMkPrev.y + btnMkPrev.h && x > btnMkPrev.x + btnMkPrev.w && x < btnMkNext.x;
-      if (makeList.size() > 1 && inside(btnMkPrev, x, y)) { makeIdx = (makeIdx + makeList.size() - 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
-      if (makeList.size() > 1 && (inside(btnMkNext, x, y) || onLabel)) { makeIdx = (makeIdx + 1) % makeList.size(); mkFocus = 0; dirtyOva = true; return; }
-      for (int i = 0; i <= (int)mkTopics.size() && i < 7; i++) {
-        if (btnChip[i].w && inside(btnChip[i], x, y)) { mkFocus = i; dirtyOva = true; return; }
-      }
-      for (int i = 0; i < 6; i++) {
-        if (!inside(btnMk[i], x, y)) continue;
-        long hw = makeList[makeIdx].id;
-        if (i == 0) makeQuiz(hw, "quiz");
-        else if (i == 1) makeQuiz(hw, "cloze");
-        else startGame(i, hw, makeList[makeIdx].label);
-        return;
-      }
-    }
-    for (size_t i = 0; i < decks.size(); i++) if (inside(deckTiles[i], x, y)) { openDeck(decks[i]); return; }
-    if (ovaMessage.length()) { decksLoaded = false; dirtyOva = true; redraw(); loadDecks(); dirtyOva = true; }
-    return;
-  }
-  if (noMoreCards) { showScreen(Screen::OvaList, true); return; }
-  bool hasOptions = options.size() >= 2;
-  if (hasOptions) {
-    if (chosen >= 0) { nextCard(); dirtyOva = true; return; }
-    for (size_t i = 0; i < options.size() && i < 4; i++) {
-      if (inside(optBtn[i], x, y)) {
-        chosen = i;
-        bool ok = (int)i == correctIdx;
-        if (ok) SFX_OK(); else SFX_BAD();
-        if (*deckLang()) { delay(450); sayCardSide(looksSwedish(qFront) ? qBack : qFront); }
-        dirtyOva = true;
-        redraw();
-        grade(ok);
-        dirtyOva = true;
-        return;
-      }
-    }
-  } else if (!revealed) {
-    if (isLanguageDeck() && !langVoiceCard) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
-    else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; if (*answerLang) sayCardSide(qBack); }
-    else if (inside(btnSay, x, y)) startRecording();
-  } else {
-    bool knew = inside(btnKnew, x, y), didnt = inside(btnDidnt, x, y);
-    if (knew || didnt) { grade(knew); nextCard(); dirtyOva = true; }
-  }
-}
-
 
 // ---------------------------------------------------------------- Läxor och plan
 static String dateLabel(const String& iso);   // "Idag", "Imorgon", "Fredag 28/11"
@@ -1972,8 +1196,9 @@ struct HwInfo {
   int listenSent;
 };
 static std::vector<HwInfo> hws;
-static Button hwTiles[6];
 static HwInfo hwCur;
+static std::vector<HwInfo> planHws;   // läxorna bakom planens moment (för att kunna läsa upp dem)
+static Screen hwBackTo = Screen::HwList;   // vart Tillbaka går från en läxa (Läxor eller Plan)
 
 // Uppläsning av läxans material, mening för mening (som en ljudbok), sparar var man är på läxan
 struct Sent {
@@ -1984,6 +1209,24 @@ struct Sent {
 static std::vector<Sent> sents;
 static std::vector<String> chapterLabel;
 static std::vector<long> chapterIds;
+static std::vector<int> chapterPage;     // första sidan i boken för varje del (0 = okänt)
+static std::vector<int> chapterPageTo;   // sista sidan (samma som första, eller t.ex. 183 för uppslaget 182–183)
+static int listenEnd = -1;             // läs bara upp hit (meningens index, ej med); -1 = till slutet
+static long readingPlanItem = 0;       // planens moment som läses upp just nu (bockas av när sidorna är klara)
+
+/** Övningen ett moment i planen gäller ("Gör ett snabbquiz" → "quiz"), eller tom. Samma namn som open_practice. */
+static String exerciseFor(const String& task) {
+  String t = task;
+  t.toLowerCase();
+  if (t.indexOf("testprov") >= 0) return "exam";
+  if (t.indexOf("glosförhör") >= 0 || t.indexOf("förhör glosorna") >= 0 || t.indexOf("muntligt förhör") >= 0) return "vocab";
+  if (t.indexOf("snabbquiz") >= 0 || t.indexOf("quiz") >= 0) return "quiz";
+  if (t.indexOf("lucktext") >= 0) return "cloze";
+  if (t.indexOf("förklara för pluggis") >= 0 || t.indexOf("förklara i pluggis") >= 0) return "explain";
+  if (t.indexOf("matcha par") >= 0 || t.indexOf("matcha") >= 0) return "match";
+  if (t.indexOf("rätt ordning") >= 0) return "order";
+  return "";
+}
 static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
 // Nästa mening hämtas i en egen tråd, så att skärmen svarar på tryck medan den laddas
 static SemaphoreHandle_t fetchLock = nullptr;
@@ -1995,19 +1238,51 @@ static uint8_t* fetchedBuf = nullptr;
 static size_t fetchedLen = 0;
 static int fetchedIdx = -1, fetchedGen = -1, fetchedCode = 0;
 static bool listening = false, listenDone = false;
-static Button btnPlay, btnPrev, btnNextCh, btnBack;
 
 // Plan: en dag i taget
 struct PlanRow {
-  long id;
-  String date, task, subject;
+  long id, hwId;
+  String date, task, subject, type;
   int minutes;
   bool done;
+  int pageFrom, pageTo;   // "Läs s. 40–45" → 40, 45 (0 = inga sidor i texten)
 };
+
+/** Sidorna i ett läsmoment: "s. 40–45", "sid 40-45", "sidan 12", "sidorna 3 och 4", "Läs 182–187". */
+static void parsePages(const String& task, int& from, int& to) {
+  from = to = 0;
+  String t = task;
+  t.toLowerCase();
+  int at = -1;
+  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s.", "läs "}) {   // "Läs 182–187" utan "s."
+    at = t.indexOf(key);
+    if (at >= 0) { at += strlen(key); break; }
+  }
+  if (at < 0) return;
+  auto num = [&](int& i) {
+    while (i < (int)t.length() && (t[i] == ' ' || t[i] == '\xA0')) i++;
+    int v = 0, start = i;
+    while (i < (int)t.length() && t[i] >= '0' && t[i] <= '9') v = v * 10 + (t[i++] - '0');
+    return i > start ? v : 0;
+  };
+  int i = at;
+  from = num(i);
+  if (!from) return;
+  to = from;
+  // "–" (en dash, 3 byte i UTF-8), "-", "till" eller "och" före sista sidan
+  String rest = t.substring(i, i + 8);
+  int skip = rest.startsWith("-") ? 1 : rest.startsWith("\xE2\x80\x93") ? 3 : rest.startsWith(" - ") ? 3
+           : rest.startsWith(" till ") ? 6 : rest.startsWith(" och ") ? 5 : 0;
+  if (skip) {
+    int j = i + skip;
+    int v = num(j);
+    if (v >= from) to = v;
+  }
+}
+
 static std::vector<PlanRow> planRows;
 static std::vector<String> planDays;
 static int planDay = 0;
-static Button planRowBtn[7], btnDayPrev, btnDayNext;
 static std::vector<int> planShown;
 
 static int apiBinary(const String& path, const String& body, uint8_t** out, size_t* outLen) {
@@ -2016,11 +1291,11 @@ static int apiBinary(const String& path, const String& body, uint8_t** out, size
   if (WiFi.status() != WL_CONNECTED) return -1;
   WiFiClient client;
   HTTPClient http;
-  String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + path +
-               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
+  String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + path +
+               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + cfg.device.c_str();
   if (!http.begin(client, url)) return -1;
   http.setTimeout(15000);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
+  http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(body);
   if (code == 200) {
@@ -2054,6 +1329,19 @@ static String jsonEscape(const String& t) {
   return o;
 }
 
+static HwInfo hwFromJson(JsonObject x) {
+  HwInfo h;
+  h.id = x["id"] | 0L;
+  h.title = clean(x["title"] | "");
+  h.subject = clean(x["subject"] | "");
+  h.kind = x["kind"] | "";
+  h.due = x["dueDate"] | "";
+  h.about = clean(x["content"].is<const char*>() ? x["content"].as<const char*>() : (x["description"] | ""));
+  h.listenMat = x["listenMaterialId"] | 0L;
+  h.listenSent = x["listenSentence"] | 0;
+  return h;
+}
+
 static void loadHomework() {
   hws.clear();
   ovaMessage = "";
@@ -2061,17 +1349,8 @@ static void loadHomework() {
   int code = api("GET", "/api/homework", "", &doc);
   if (code != 200) { ovaMessage = "Kunde inte hämta läxorna (" + String(code) + ")."; decksLoaded = true; return; }
   for (JsonObject x : doc.as<JsonArray>()) {
-    HwInfo h;
-    h.id = x["id"] | 0L;
-    h.title = clean(x["title"] | "");
-    h.subject = clean(x["subject"] | "");
-    h.kind = x["kind"] | "";
-    h.due = x["dueDate"] | "";
-    h.about = clean(x["content"].is<const char*>() ? x["content"].as<const char*>() : (x["description"] | ""));
-    h.listenMat = x["listenMaterialId"] | 0L;
-    h.listenSent = x["listenSentence"] | 0;
+    HwInfo h = hwFromJson(x);
     if (h.id) hws.push_back(h);
-    if (hws.size() >= 6) break;
   }
   if (hws.empty()) ovaMessage = "Inga läxor eller prov just nu.";
   decksLoaded = true;
@@ -2104,6 +1383,10 @@ static void openHomework(const HwInfo& h) {
   sents.clear();
   chapterLabel.clear();
   chapterIds.clear();
+  chapterPage.clear();
+  chapterPageTo.clear();
+  listenEnd = -1;
+  readingPlanItem = 0;
   listening = listenDone = false;
   listenPos = fetchPos = 0;
   nowPlaying = -1;
@@ -2113,15 +1396,20 @@ static void openHomework(const HwInfo& h) {
   if (api("GET", "/api/homework/" + String(h.id) + "/material", "", &doc) == 200) {
     std::vector<JsonObject> mats;
     for (JsonObject m : doc.as<JsonArray>()) if (m["text"].is<const char*>() && strlen(m["text"].as<const char*>()) > 2) mats.push_back(m);
+    // Boksidans tryckta nummer (bookPage) om det är känt, annars ordningen i uppladdningen (page)
     std::sort(mats.begin(), mats.end(), [](JsonObject a, JsonObject b) {
-      int pa = a["page"] | 100000, pb = b["page"] | 100000;
+      int pa = a["bookPage"] | (a["page"] | 100000), pb = b["bookPage"] | (b["page"] | 100000);
       return pa != pb ? pa < pb : (a["id"] | 0L) < (b["id"] | 0L);
     });
     for (auto& m : mats) {
       long id = m["id"] | 0L;
-      int page = m["page"] | 0;
+      int bookPage = m["bookPage"] | 0;
+      int bookPageTo = m["bookPageTo"] | bookPage;
       chapterIds.push_back(id);
-      chapterLabel.push_back(page ? "Sida " + String(page) : "Del " + String(chapterIds.size()));
+      chapterPage.push_back(bookPage);
+      chapterPageTo.push_back(bookPageTo);
+      chapterLabel.push_back(!bookPage ? "Del " + String(chapterIds.size())
+                             : bookPageTo > bookPage ? "Sida " + String(bookPage) + "–" + String(bookPageTo) : "Sida " + String(bookPage));
       splitSentences(clean(m["text"].as<const char*>()), id);
     }
   }
@@ -2170,6 +1458,56 @@ static void listenStart() {
 }
 
 /** Anropas i loop(): hämta nästa mening medan den förra spelas, och håll reda på var vi är. */
+/** Läsmomentet i planen är uppläst: bocka av det (ger poäng som vanligt). */
+static void readingDone() {
+  if (!readingPlanItem) return;
+  if (api("POST", "/api/plan/items/" + String(readingPlanItem) + "/done", "", nullptr) == 200) {
+    for (auto& r : planRows) if (r.id == readingPlanItem) r.done = true;
+    SFX_DONE();
+    ovaMessage = "Klart! Det är uppläst och bockat i planen.";
+  }
+  readingPlanItem = 0;
+}
+
+static void listenStart();
+
+/** Ett läsmoment i planen: öppna läxans material och läs upp just de sidorna. */
+static void openReading(const PlanRow& r) {
+  HwInfo h;
+  bool found = false;
+  for (auto& x : planHws) if (x.id == r.hwId) { h = x; found = true; }
+  if (!found) return;
+  openHomework(h);
+  hwBackTo = Screen::Plan;
+  if (sents.empty()) return;   // inget inläst material: läxans sida säger det
+  auto firstSentence = [](size_t ch) {
+    for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) return (int)i;
+    return 0;
+  };
+  // Börja på momentets första sida i boken och sluta efter den sista. Finns inte sidorna bland det inlästa
+  // materialet (eller saknas sidnummer) börjar uppläsningen från början.
+  listenPos = 0;
+  listenEnd = -1;
+  int start = -1;
+  // Första delen som täcker någon av momentets sidor (ett uppslag 181–182 täcker 182)
+  if (r.pageFrom)
+    for (size_t c = 0; c < chapterPage.size(); c++)
+      if (chapterPage[c] && chapterPage[c] <= r.pageTo && chapterPageTo[c] >= r.pageFrom) { start = c; break; }
+  if (start >= 0) {
+    listenPos = firstSentence(start);
+    for (size_t c = start + 1; c < chapterPage.size(); c++)
+      if (chapterPage[c] > r.pageTo) { listenEnd = firstSentence(c); break; }
+    if (listenEnd >= 0 && listenEnd <= listenPos) listenEnd = -1;
+  }
+  Serial.printf("[pluggis] läs %s: sidor %d–%d, %s\n", r.task.c_str(), r.pageFrom, r.pageTo,
+                start >= 0 ? ("börjar på " + chapterLabel[start]).c_str() : "sidorna finns inte i materialet – börjar från början");
+  listenDone = false;
+  fetchPos = listenPos;
+  readingPlanItem = r.id;
+  listenStart();
+  dirtyOva = true;
+}
+
 static void pumpListening() {
   if (!listening) return;
   lastTouchAt = millis();   // lyssnande räknas som aktiv övningstid
@@ -2180,12 +1518,24 @@ static void pumpListening() {
     if (++sinceSave >= 4) listenSave();
     dirtyOva = true;
   }
-  if (!playing.data && playQueue.empty() && fetchPos >= (int)sents.size() && fetchedIdx < 0) {
+  int end = listenEnd >= 0 && listenEnd < (int)sents.size() ? listenEnd : sents.size();
+  if (!playing.data && playQueue.empty() && fetchPos >= end && fetchedIdx < 0) {
     listening = false;
+    if (end < (int)sents.size()) {
+      // Sidorna i planens moment är upplästa: spara var eleven är och bocka av momentet
+      listenPos = end;
+      listenSave();
+      practiceEnd();
+      readingDone();
+      listenEnd = -1;
+      dirtyOva = true;
+      return;
+    }
     listenDone = true;
     listenPos = sents.size();
     listenSave();
     practiceEnd();
+    readingDone();
     dirtyOva = true;
     return;
   }
@@ -2196,7 +1546,7 @@ static void pumpListening() {
   int idx = fetchedIdx, code = fetchedCode;
   if (ready) { fetchedBuf = nullptr; fetchedIdx = -1; }
   bool idle = fetchWantIdx < 0 && fetchedIdx < 0;
-  if (!ready && idle && playQueue.size() < 1 && fetchPos < (int)sents.size()) {
+  if (!ready && idle && playQueue.size() < 1 && fetchPos < end) {
     fetchWantIdx = fetchPos;
     fetchWantGen = fetchGen;
     fetchWantText = sents[fetchPos].text;
@@ -2300,12 +1650,14 @@ static void fetchReset() {
 static void loadPlan() {
   planRows.clear();
   planDays.clear();
+  planHws.clear();
   ovaMessage = "";
   JsonDocument hwDoc;
   api("GET", "/api/homework?openOnly=false", "", &hwDoc);
   JsonDocument doc;
   int code = api("GET", "/api/plan/upcoming?days=14", "", &doc);
   if (code != 200) { ovaMessage = "Kunde inte hämta planen (" + String(code) + ")."; decksLoaded = true; return; }
+  for (JsonObject h : hwDoc.as<JsonArray>()) planHws.push_back(hwFromJson(h));
   for (JsonObject x : doc.as<JsonArray>()) {
     PlanRow r;
     r.id = x["id"] | 0L;
@@ -2314,6 +1666,9 @@ static void loadPlan() {
     r.minutes = x["minutes"] | 0;
     r.done = !x["doneAt"].isNull();
     long hwId = x["homeworkId"] | 0L;
+    r.hwId = hwId;
+    r.type = x["type"] | "";
+    parsePages(r.task, r.pageFrom, r.pageTo);
     for (JsonObject h : hwDoc.as<JsonArray>()) if ((h["id"] | 0L) == hwId) { r.subject = clean(h["subject"] | (h["title"] | "")); break; }
     planRows.push_back(r);
     if (std::find(planDays.begin(), planDays.end(), r.date) == planDays.end()) planDays.push_back(r.date);
@@ -2322,200 +1677,6 @@ static void loadPlan() {
   planDay = 0;
   if (planDays.empty()) ovaMessage = "Inget inplanerat de närmaste två veckorna.";
   decksLoaded = true;
-}
-
-static void layoutHwPlan() {
-  int gap = 20, top = TOP_H + 110;
-  int tw = (W - 4 * gap) / 3, th = (H - top - 3 * gap) / 2;
-  for (int i = 0; i < 6; i++) hwTiles[i] = {gap + (i % 3) * (tw + gap), top + (i / 3) * (th + gap), tw, th, "", PANEL};
-  int bh = 110, by = H - bh - gap;
-  btnBack = {gap, by, 220, bh, "Tillbaka", PANEL};
-  btnPrev = {gap * 2 + 220, by, 220, bh, "Förra sida", PANEL};
-  btnPlay = {gap * 3 + 440, by, W - 5 * gap - 440 - 240, bh, "Spela", ACCENT};
-  btnNextCh = {W - gap - 240, by, 240, bh, "Nästa sida", PANEL};
-  int rh = 66, ry = TOP_H + 100;
-  for (int i = 0; i < 7; i++) planRowBtn[i] = {gap, ry + i * (rh + 10), W - 2 * gap, rh, "", PANEL};
-  btnDayPrev = {gap, TOP_H + 16, 90, 70, "<", PANEL};
-  btnDayNext = {W - gap - 90, TOP_H + 16, 90, 70, ">", PANEL};
-}
-
-static void drawHwPlan() {
-  auto& d = *G;
-  if (!decksLoaded && screen != Screen::HwDetail) { drawWrapped("Hämtar ...", 28, TOP_H + 60, W - 56, 80, MUTED, F_MID); return; }
-  if (screen == Screen::HwList) {
-    d.setFont(F_BIG);
-    d.setTextColor(INK);
-    d.drawString("Läxor och prov", 28, TOP_H + 28);
-    if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 120, W - 56, 200, MUTED, F_MID); return; }
-    for (size_t i = 0; i < hws.size(); i++) {
-      auto& b = hwTiles[i];
-      bool test = hws[i].kind == "TEST";
-      d.fillRoundRect(b.x, b.y, b.w, b.h, 24, PANEL);
-      d.fillRoundRect(b.x, b.y, 14, b.h, 7, test ? WARN : ACCENT);
-      d.setFont(F_SMALL);
-      d.setTextColor(test ? WARN : ACCENT);
-      d.drawString((test ? "Prov" : "Läxa") + (hws[i].subject.length() ? String(" · ") + hws[i].subject : String()), b.x + 30, b.y + 16);
-      drawWrapped(hws[i].title, b.x + 30, b.y + 52, b.w - 50, b.h - 110, INK, F_MID);
-      d.setFont(F_SMALL);
-      d.setTextColor(MUTED);
-      if (hws[i].due.length()) d.drawString(dateLabel(hws[i].due), b.x + 30, b.y + b.h - 44);
-    }
-    return;
-  }
-  if (screen == Screen::HwDetail) {
-    d.setFont(F_SMALL);
-    d.setTextColor(hwCur.kind == "TEST" ? WARN : ACCENT);
-    d.drawString((hwCur.kind == "TEST" ? "Prov" : "Läxa") + (hwCur.subject.length() ? String(" · ") + hwCur.subject : String()) +
-                 (hwCur.due.length() ? String(" · ") + dateLabel(hwCur.due) : String()), 28, TOP_H + 14);
-    drawWrapped(hwCur.title, 28, TOP_H + 46, W - 56, 60, INK, F_BIG);
-    int y = TOP_H + 110;
-    if (hwCur.about.length()) { drawWrapped(hwCur.about, 28, y, W - 56, 76, MUTED, F_SMALL); y += 86; }
-    // Spelaren
-    int boxH = btnBack.y - 20 - y;
-    d.fillRoundRect(20, y, W - 40, boxH, 24, PANEL);
-    if (sents.empty()) {
-      drawWrapped("Det finns inget inläst material att lyssna på. Fota sidorna i Pluggis-appen.", 48, y + 20, W - 96, boxH - 40, MUTED, F_MID);
-    } else {
-      int ch = chapterOf(listenDone ? -1 : listenPos);
-      d.setFont(F_MID);
-      d.setTextColor(INK);
-      String head = listenDone ? "Allt uppläst!" : chapterLabel[ch] + "  ·  " + String(ch + 1) + " av " + String(chapterIds.size());
-      d.drawString(head, 48, y + 18);
-      int pct = listenDone ? 100 : 100 * listenPos / sents.size();
-      d.setFont(F_SMALL);
-      d.setTextColor(MUTED);
-      d.setTextDatum(top_right);
-      d.drawString(String(pct) + " %", W - 48, y + 24);
-      d.setTextDatum(top_left);
-      d.fillRoundRect(48, y + 64, W - 96, 12, 6, BG);
-      if (pct > 0) d.fillRoundRect(48, y + 64, (W - 96) * pct / 100, 12, 6, ACCENT);
-      String line = listenDone ? "Tryck Spela för att lyssna igen från början."
-                  : ovaMessage.length() ? ovaMessage
-                  : listening || listenPos > 0 ? sents[std::min(listenPos, (int)sents.size() - 1)].text
-                  : "Tryck Spela för att lyssna på allt material.";
-      drawWrapped(line, 48, y + 92, W - 96, boxH - 110, listening ? INK : MUTED, F_MID);
-    }
-    drawTextButton(btnBack, PANEL, "Tillbaka");
-    if (!sents.empty()) {
-      drawTextButton(btnPrev, PANEL, "Förra sida");
-      drawTextButton(btnPlay, listening ? WARN : ACCENT, listening ? "Paus" : listenPos > 0 && !listenDone ? "Fortsätt" : "Spela");
-      drawTextButton(btnNextCh, PANEL, "Nästa sida");
-    }
-    return;
-  }
-  // Planen
-  if (ovaMessage.length()) { drawWrapped(ovaMessage, 28, TOP_H + 60, W - 56, 200, MUTED, F_MID); return; }
-  String day = planDays[planDay];
-  int total = 0, left = 0;
-  planShown.clear();
-  for (size_t i = 0; i < planRows.size(); i++) if (planRows[i].date == day) {
-    planShown.push_back(i);
-    total += planRows[i].minutes;
-    if (!planRows[i].done) left += planRows[i].minutes;
-  }
-  if (planDay > 0) drawTextButton(btnDayPrev, PANEL, "<");
-  if (planDay + 1 < (int)planDays.size()) drawTextButton(btnDayNext, PANEL, ">");
-  d.setFont(F_BIG);
-  d.setTextColor(INK);
-  d.setTextDatum(top_center);
-  d.drawString(dateLabel(day), W / 2, TOP_H + 18);
-  d.setFont(F_SMALL);
-  d.setTextColor(MUTED);
-  d.drawString(left ? String(left) + " min kvar av " + String(total) : "Allt klart!", W / 2, TOP_H + 66);
-  d.setTextDatum(top_left);
-  for (size_t k = 0; k < planShown.size() && k < 7; k++) {
-    auto& r = planRows[planShown[k]];
-    auto& b = planRowBtn[k];
-    d.fillRoundRect(b.x, b.y, b.w, b.h, 18, PANEL);
-    // kryssruta
-    d.drawRoundRect(b.x + 16, b.y + 13, 40, 40, 8, r.done ? GOOD : INK);
-    if (r.done) {
-      d.fillRoundRect(b.x + 16, b.y + 13, 40, 40, 8, GOOD);
-      d.drawLine(b.x + 26, b.y + 33, b.x + 34, b.y + 42, BG);
-      d.drawLine(b.x + 34, b.y + 42, b.x + 48, b.y + 22, BG);
-      d.drawLine(b.x + 26, b.y + 34, b.x + 34, b.y + 43, BG);
-      d.drawLine(b.x + 34, b.y + 43, b.x + 48, b.y + 23, BG);
-    }
-    d.setFont(F_SMALL);
-    d.setTextColor(ACCENT);
-    int tx = b.x + 76;
-    if (r.subject.length()) { d.drawString(r.subject, tx, b.y + 19); tx += d.textWidth(r.subject) + 18; }
-    d.setTextDatum(top_right);
-    d.setTextColor(MUTED);
-    d.drawString(String(r.minutes) + " min", b.x + b.w - 20, b.y + 19);
-    d.setTextDatum(top_left);
-    String task = r.task;
-    int maxW = b.x + b.w - 130 - tx;
-    d.setFont(F_SMALL);
-    while (task.length() > 4 && d.textWidth(task) > maxW) task = task.substring(0, task.length() - 4) + "...";
-    d.setTextColor(r.done ? MUTED : INK);
-    d.drawString(task, tx, b.y + 19);
-  }
-  if (planShown.size() > 7) {
-    d.setFont(F_SMALL);
-    d.setTextColor(MUTED);
-    d.drawString("+ " + String(planShown.size() - 7) + " till i Pluggis-appen", 28, planRowBtn[6].y + 76);
-  }
-}
-
-static void hwPlanTouch(int x, int y) {
-  if (screen == Screen::HwList) {
-    for (size_t i = 0; i < hws.size(); i++) if (inside(hwTiles[i], x, y)) { openHomework(hws[i]); return; }
-    return;
-  }
-  if (screen == Screen::HwDetail) {
-    if (inside(btnBack, x, y)) { showScreen(Screen::HwList); return; }
-    if (sents.empty()) return;
-    if (inside(btnPlay, x, y)) {
-      ovaMessage = "";
-      if (listening) listenStop(true); else listenStart();
-      dirtyOva = true;
-    } else if (inside(btnPrev, x, y)) {
-      bool was = listening;
-      listenStop(false);
-      listenDone = false;
-      int ch = chapterOf(listenPos);
-      int first = 0;
-      for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) { first = i; break; }
-      if (listenPos - first <= 1 && ch > 0) {   // redan i början: sidan innan
-        for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch - 1]) { first = i; break; }
-      }
-      listenPos = first;
-      fetchPos = listenPos;
-      listenSave();
-      if (was) listenStart();
-      dirtyOva = true;
-    } else if (inside(btnNextCh, x, y)) {
-      bool was = listening;
-      listenStop(false);
-      int ch = chapterOf(listenPos);
-      if (ch + 1 < (int)chapterIds.size()) {
-        for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch + 1]) { listenPos = i; break; }
-        listenDone = false;
-      }
-      fetchPos = listenPos;
-      listenSave();
-      if (was) listenStart();
-      dirtyOva = true;
-    }
-    return;
-  }
-  // Planen
-  if (planDays.empty()) return;
-  if (planDay > 0 && inside(btnDayPrev, x, y)) { planDay--; dirtyOva = true; return; }
-  if (planDay + 1 < (int)planDays.size() && inside(btnDayNext, x, y)) { planDay++; dirtyOva = true; return; }
-  for (size_t k = 0; k < planShown.size() && k < 7; k++) {
-    if (inside(planRowBtn[k], x, y)) {
-      auto& r = planRows[planShown[k]];
-      if (r.done) return;
-      if (api("POST", "/api/plan/items/" + String(r.id) + "/done", "", nullptr) == 200) {
-        r.done = true;
-        SFX_OK();
-      }
-      dirtyOva = true;
-      return;
-    }
-  }
 }
 
 static const char* WEEKDAYS[] = {"Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"};
@@ -2542,10 +1703,16 @@ static String dateLabel(const String& iso) {
 
 
 static void setLast(int kind, const String& result) {
+  // Övningen startades från planen: bocka av momentet (poäng som vanligt)
+  if (practicePlanItem && api("POST", "/api/plan/items/" + String(practicePlanItem) + "/done", "", nullptr) == 200) {
+    for (auto& r : planRows) if (r.id == practicePlanItem) r.done = true;
+    ui::toast("Bockat i planen");
+  }
+  practicePlanItem = 0;
   lastKind = kind;
   String name;
   for (auto& m : makeList) if (m.id == lastHw) name = m.title;
-  lastText = String(MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
+  lastText = String(kind == 2 && oralDeck ? "Glosförhör" : MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
              (name.length() ? " · " + name : String()) + (result.length() ? " · " + result : String());
 }
 
@@ -2595,7 +1762,1227 @@ static void tickPractice() {
   }
 }
 
+// ---------------------------------------------------------------- vad som syns (modeller till ui.cpp)
+static std::string S(const String& s) { return std::string(s.c_str()); }
+
+static uint32_t bootStart = 0;
+static int timerDrawn = -2;
+
+static int timerLeftNow() {
+  if (!sessionActive || !timerAt) return timerRemaining;
+  int left = timerRemaining - (int)((millis() - timerAt) / 1000);
+  return left < 0 ? 0 : left;
+}
+
+static void drawBoot() {
+  bool wifi = WiFi.status() == WL_CONNECTED;
+  String line = !wifi ? String("Ansluter till WiFi \"") + wifiSsidSaved() + "\" ..." : String("Hämtar läxor ...");
+  String warn;
+  if (millis() - bootStart > 30000) {
+    warn = !wifi ? String("Hittar inget WiFi. Tryck Välj WiFi och välj nätverk (bara 2,4 GHz). (WiFi-status ") +
+                       String((int)WiFi.status()) + ", " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB ledigt)"
+                 : String("Får inget svar från Pluggis på ") + cfg.host.c_str() + ":" + String(cfg.port) + ". Är servern igång?" +
+                       (lastError.length() ? "\n" + lastError : String());
+  }
+  ui::showBoot(S(line), S(warn), !wifi && millis() - bootStart > 15000);
+}
+
+// ---------------------------------------------------------------- fokustimern
+// Ett pass med nedräkning. Räknas som övningstid (poäng som vanligt) och bockar av planens moment när det är klart.
+// Medan timern går stängs Tab5 inte av; utan tryck dämpas skärmen efter en minut.
+struct FocusState {
+  bool on = false, paused = false, done = false, onBreak = false, choose = false, warned = false;
+  int total = 0;                 // sekunder
+  uint32_t startedAt = 0, pausedAt = 0, pausedMs = 0;
+  long planItem = 0, hwId = 0;
+  String title, subject, reward, practice;
+  uint32_t color = ui::ACCENT;
+  int minutes = 0;
+};
+static FocusState fz;
+static Screen focusReturn = Screen::Plan;
+static bool focusDim = false;
+
+static int focusLeft() {
+  if (!fz.on) return 0;
+  uint32_t now = fz.paused ? fz.pausedAt : millis();
+  int gone = (int)((now - fz.startedAt - fz.pausedMs) / 1000);
+  return std::max(0, fz.total - gone);
+}
+/** Det som visas i toppraden: -1 när ingen timer går. */
+static int focusShownLeft() { return fz.on && !fz.done ? focusLeft() : -1; }
+static int focusedSeconds() { return fz.onBreak ? 0 : std::max(0, fz.total - focusLeft()); }
+
+static void focusPracticeEnd() {
+  if (!fz.practice.length()) return;
+  String id = fz.practice;
+  fz.practice = "";
+  JsonDocument r;
+  api("POST", "/api/practice/" + id + "/end", "{\"activeSeconds\":" + String(focusedSeconds()) + "}", &r);
+}
+
+static void focusBegin(int minutes, bool onBreak) {
+  fz.on = true;
+  fz.paused = fz.done = fz.warned = false;
+  fz.onBreak = onBreak;
+  fz.choose = false;
+  fz.total = minutes * 60;
+  fz.startedAt = millis();
+  fz.pausedMs = 0;
+  if (!onBreak) {
+    fz.minutes = minutes;
+    String what = "Fokus: " + (fz.title.length() ? fz.title : String("fritt pass"));
+    what.replace("\"", "'");
+    what.replace("\\", "/");
+    JsonDocument doc;
+    String body = "{\"what\":\"" + what + "\"" + (fz.hwId ? ",\"homeworkId\":" + String(fz.hwId) : "") + "}";
+    fz.practice = api("POST", "/api/practice/start", body, &doc) == 200 ? String((const char*)(doc["id"] | "")) : "";
+  }
+  Serial.printf("[pluggis] fokus: %s %d min\n", onBreak ? "paus" : "pass", minutes);
+  if (screen != Screen::Focus) showScreen(Screen::Focus);
+  dirtyAll = true;
+}
+
+static void focusStartFor(const String& title, const String& subject, uint32_t color, int minutes, long planItem, long hwId) {
+  if (fz.on && !fz.done) focusPracticeEnd();
+  if (screen != Screen::Focus) focusReturn = screen;
+  fz = FocusState();
+  fz.title = title;
+  fz.subject = subject;
+  fz.color = color;
+  fz.planItem = planItem;
+  fz.hwId = hwId;
+  focusBegin(std::max(5, std::min(60, minutes)), false);
+}
+
+/** Passet är slut: belöning, övningstid och bocken i planen. */
+static void focusFinished() {
+  if (fz.onBreak) {
+    fz.done = true;
+    SFX_OK();
+    dirtyAll = true;
+    return;
+  }
+  focusPracticeEnd();
+  fz.done = true;
+  String reward = String(fz.minutes) + " min plugg";
+  if (fz.planItem && api("POST", "/api/plan/items/" + String(fz.planItem) + "/done", "", nullptr) == 200) {
+    reward += " · bockad i planen";
+    for (auto& r : planRows) if (r.id == fz.planItem) r.done = true;
+  }
+  fz.reward = reward;
+  SFX_DONE();
+  M5.Display.setBrightness(cfg.bright);
+  focusDim = false;
+  if (screen != Screen::Focus) showScreen(Screen::Focus);
+  dirtyAll = true;
+}
+
+static void focusStop() {
+  if (!fz.done) focusPracticeEnd();
+  int min = focusedSeconds() / 60;
+  bool early = fz.on && !fz.done && !fz.onBreak;
+  fz = FocusState();
+  if (focusDim) { focusDim = false; M5.Display.setBrightness(cfg.bright); }
+  Screen back = focusReturn == Screen::Focus ? Screen::Plan : focusReturn;
+  showScreen(back, back == Screen::Plan || back == Screen::OvaList || back == Screen::HwList);
+  if (early && min > 0) ui::toast(std::to_string(min) + " min fokus");
+}
+
+/** Varje varv i loop(): sekunder, 5 minuter kvar, slut och dämpning. */
+static void focusLoop() {
+  if (!fz.on || fz.done) return;
+  static int lastLeft = -1;
+  int left = focusLeft();
+  if (left != lastLeft) {
+    lastLeft = left;
+    ui::topTimer(left, fz.paused);
+    if (screen == Screen::Focus) ui::focusTick(left, fz.total, fz.paused, fz.onBreak);
+  }
+  if (!fz.paused && !fz.onBreak && !fz.warned && fz.total > 10 * 60 && left <= 5 * 60) {
+    fz.warned = true;
+    playMelody(MEL_TICK, 1);
+    ui::toast("5 minuter kvar");
+  }
+  if (left <= 0 && !fz.paused) { focusFinished(); return; }
+  bool running = !fz.paused;
+  if (running && !focusDim && millis() - lastTouchAt > 60000) {
+    focusDim = true;
+    M5.Display.setBrightness(std::max(20, cfg.bright / 4));
+  }
+}
+
+static void drawFocus() {
+  ui::Focus m;
+  m.choose = fz.choose || !fz.on;
+  m.subject = S(fz.subject);
+  m.title = S(fz.title);
+  m.color = fz.color;
+  m.total = fz.total;
+  m.left = focusLeft();
+  m.paused = fz.paused;
+  m.done = fz.done;
+  m.onBreak = fz.onBreak;
+  m.reward = S(fz.reward);
+  ui::buildFocus(m);
+}
+
+// ---------------------------------------------------------------- klockläget
+// På laddaren, under pluggtid och när ingen rör Tab5: klockan, nästa prov och vad som är kvar idag, med låg ljusstyrka.
+// På batteri gäller avstängningen som vanligt.
+static bool clockOn = false;
+static uint32_t clockFetchedAt = 0;
+static ui::Clock clockData;
+static constexpr int CLOCK_BRIGHT = 25;
+
+static bool onUsb() {
+  if (M5.Power.isCharging() == m5::Power_Class::is_charging) return true;
+  int v = M5.Power.getVBUSVoltage();
+  return v > 4300;
+}
+/** Är det tid för klockan (enligt inställningen)? */
+static bool clockHours() {
+  if (cfg.clockMode <= 0) return false;
+  struct tm now;
+  if (!getLocalTime(&now, 0)) return false;
+  int from = cfg.clockMode == 2 ? 7 : 15, to = cfg.clockMode == 2 ? 22 : 21;
+  return now.tm_hour >= from && now.tm_hour < to;
+}
+
+static const char* MONTHS[] = {"januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september",
+                               "oktober", "november", "december"};
+
+static void clockFetch() {
+  clockFetchedAt = millis();
+  clockData.next = clockData.nextWhen = "";
+  clockData.nextSoon = false;
+  clockData.items.clear();
+  JsonDocument hw;
+  if (api("GET", "/api/homework", "", &hw) == 200) {
+    int best = 9999;
+    for (JsonObject x : hw.as<JsonArray>()) {
+      if (String(x["kind"] | "") != "TEST") continue;
+      String due = x["dueDate"] | "";
+      if (!due.length()) continue;
+      int d = daysUntil(due);
+      if (d < 0 || d >= best) continue;
+      best = d;
+      String subj = clean(x["subject"] | ""), title = clean(x["title"] | "");
+      clockData.next = S(subj.length() && title.indexOf(subj) < 0 ? subj + ": " + title : title);
+      clockData.nextWhen = d == 0 ? "idag" : d == 1 ? "imorgon" : "om " + std::to_string(d) + " dagar";
+      clockData.nextSoon = d <= 1;
+    }
+  }
+  JsonDocument plan;
+  int total = 0, left = 0, count = 0, open = 0;
+  if (api("GET", "/api/plan/upcoming?days=1", "", &plan) == 200) {
+    for (JsonObject x : plan.as<JsonArray>()) {
+      if (daysUntil(x["planDate"] | "") != 0) continue;
+      int min = x["minutes"] | 0;
+      bool done = !x["doneAt"].isNull();
+      count++;
+      total += min;
+      if (!done) {
+        open++;
+        left += min;
+        if (clockData.items.size() < 3) clockData.items.push_back(S(clean(x["task"] | "")));
+      }
+    }
+  }
+  clockData.today = !count ? std::string("Inget inplanerat idag")
+                  : !open ? std::string("Allt klart idag!")
+                          : std::to_string(open) + " av " + std::to_string(count) + " kvar · " + std::to_string(left) + " min";
+}
+
+static void clockDraw() {
+  struct tm now;
+  if (getLocalTime(&now, 0)) {
+    char t[8];
+    snprintf(t, sizeof(t), "%02d:%02d", now.tm_hour, now.tm_min);
+    clockData.time = t;
+    clockData.date = std::string(WEEKDAYS[now.tm_wday]) + " " + std::to_string(now.tm_mday) + " " + MONTHS[now.tm_mon];
+  } else {
+    clockData.time = "--:--";
+    clockData.date = "";
+  }
+  ui::clockShow(&clockData);
+  lv_refr_now(lvDisp);
+}
+
+static void clockEnter() {
+  if (clockOn) return;
+  Serial.println("[pluggis] klockläge (laddaren)");
+  if (screen == Screen::HwDetail) listenStop(true);
+  if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
+  stopPlayback();
+  sayStop();
+  clockOn = true;
+  asleep = false;
+  idleWarned = false;
+  ui::idleWarning(false);
+  M5.Display.setBrightness(CLOCK_BRIGHT);
+  clockFetch();
+  clockDraw();
+}
+
+static void clockLeave() {
+  if (!clockOn) return;
+  clockOn = false;
+  ui::clockShow(nullptr);
+  M5.Display.setBrightness(cfg.bright);
+  lastActivity = millis();
+  dirtyAll = true;
+}
+
+/** I klockläget: ny minut, ny data var 15:e minut, och släck när pluggtiden är slut eller laddaren dras ur. */
+static void clockLoop() {
+  if (!clockOn) {
+    // Släckt på laddaren (avstängningen gick inte): visa klockan när pluggtiden börjar
+    static uint32_t lastCheck = 0;
+    if (asleep && millis() - lastCheck > 30000) {
+      lastCheck = millis();
+      if (clockHours() && onUsb()) clockEnter();
+    }
+    return;
+  }
+  static int lastMin = -1;
+  struct tm now;
+  if (getLocalTime(&now, 0) && now.tm_min != lastMin) {
+    lastMin = now.tm_min;
+    if (millis() - clockFetchedAt > 15UL * 60000) clockFetch();
+    int v = M5.Power.getVBUSVoltage();
+    if (!clockHours() || (v > 0 && v < 4000)) {
+      clockOn = false;
+      ui::clockShow(nullptr);
+      goToSleep();
+      return;
+    }
+    clockDraw();
+  }
+}
+
+static void drawTop() {
+  ui::Top t;
+  t.tab = (screen == Screen::Wifi || screen == Screen::Settings || screen == Screen::Entry || screen == Screen::Focus) ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
+        : screen == Screen::Plan ? 3 : 0;
+  t.status = WiFi.status() != WL_CONNECTED ? "Inget WiFi" : !wsUp ? "Ansluter" : "";
+  t.volume = volume;
+  t.battery = batteryLevel;
+  t.charging = batteryCharging;
+  t.points = weekPoints >= 0 && pointsOn ? weekPoints : -1;
+  t.focusLeft = focusShownLeft();
+  t.focusPaused = fz.paused;
+  ui::setTop(t);
+}
+
+/** "Pluggis gör ...\n\nDet kan ta en halv minut." → rubrik och liten text under. */
+static void drawMessage(const String& msg, bool busy, const char* fallbackHint = "") {
+  int br = msg.indexOf("\n\n");
+  String text = br >= 0 ? msg.substring(0, br) : msg;
+  String hint = br >= 0 ? msg.substring(br + 2) : String(fallbackHint);
+  ui::buildMessage(S(text), busy, S(hint));
+}
+
+static void drawCoach() {
+  ui::Coach m;
+  m.cardMode = mode == Mode::Card;
+  m.say = S(sayText);
+  m.heard = S(heardText);
+  m.thinking = thinking;
+  m.front = S(cardFront);
+  m.hint = S(cardHint);
+  m.back = S(cardBack);
+  m.answered = cardAnswered;
+  m.correct = cardCorrect;
+  m.box = cardBox;
+  m.session = sessionActive;
+  m.recording = recording;
+  ui::buildCoach(m);
+  timerDrawn = -2;
+}
+
+static void drawTimer() {
+  int left = timerLeftNow();
+  if (left == timerDrawn) return;
+  timerDrawn = left;
+  ui::coachTimer(sessionActive, left, timerTotal, S(sessionTask));
+}
+
+static void drawOvaList() {
+  if (!decksLoaded) { ui::buildMessage("Hämtar läxor ...", true); return; }
+  if (makeBusy.length()) { drawMessage(makeBusy, true); return; }
+  if (ovaMessage.length()) { drawMessage(ovaMessage, false); return; }
+  ui::Ova m;
+  for (auto& x : makeList) {
+    int days = x.due.length() ? daysUntil(x.due) : 999;
+    ui::OvaRow r;
+    r.title = S((x.test ? "Prov: " : "") + x.title);
+    r.when = S(!x.due.length() ? String() : x.startNow ? String("börja nu") : days < 0 ? String("försenad") : dateLabel(x.due));
+    r.whenTone = x.startNow ? ui::Tone::Good : days < 0 ? ui::Tone::Bad : days <= 2 ? ui::Tone::Warn : ui::Tone::Muted;
+    r.color = subjectColor(x.subject, x.title);
+    r.soon = days <= 7;
+    m.rows.push_back(r);
+  }
+  auto& sel = makeList[makeIdx];
+  m.selected = makeIdx;
+  m.title = S((sel.test ? "Prov: " : "Läxa: ") + sel.title);
+  m.meta = S((sel.subject.length() ? sel.subject : String("Ämne saknas")) + (sel.due.length() ? "  ·  " + dateLabel(sel.due) : String()));
+  m.color = subjectColor(sel.subject, sel.title);
+  m.topicsLoading = mkTopicsFor != sel.id;
+  if (!m.topicsLoading) for (auto& t : mkTopics) m.topics.push_back(S(t));
+  m.focus = mkFocus;
+  m.last = S(lastText);
+  m.canAgain = lastKind >= 0;
+  m.language = sel.language;
+  ui::buildOva(m);
+}
+
+static void drawCard() {
+  ui::Card m;
+  m.deck = S(cur.name);
+  m.answered = answered;
+  m.round = ROUND;
+  m.right = rightCount;
+  m.done = noMoreCards;
+  m.doneText = answered ? S("Bra jobbat! " + String(rightCount) + " av " + String(answered) + " rätt.") : "Inga kort att öva just nu.";
+  m.question = S(qFront);
+  m.hint = S(qHint);
+  m.answer = S(qBack);
+  for (auto& o : options) m.options.push_back(S(o));
+  m.chosen = chosen;
+  m.correct = correctIdx;
+  m.revealed = revealed;
+  m.languageDeck = isLanguageDeck() && !oralDeck;
+  if (oralDeck) m.talk = "Håll in och säg det på svenska";
+  m.spoken = S(spokenAnswer);
+  m.verdict = voiceVerdict;
+  m.recording = recording;
+  ui::buildCard(m);
+}
+
+static uint32_t matchSecs = 0;   // tiden när alla par var klara (fryses)
+
+static void drawGame() {
+  if (gameMsg.length()) {
+    bool busy = gameMsg.endsWith("...") || gameMsg.indexOf("...\n") >= 0;
+    drawMessage(gameMsg, busy, busy ? "" : "Tryck för att gå tillbaka");
+    return;
+  }
+  ui::Game m;
+  m.title = S(gameTitle);
+  m.recording = recording;
+  m.done = gameDone;
+  if (game == Game::Explain) {
+    m.kind = 2;
+    m.term = S(exConcept);
+    m.heard = S(gameHeard);
+    m.reply = S(exReply);
+    for (auto& c : exCovered) m.covered.push_back(S(c));
+    for (auto& c : exMissing) m.missing.push_back(S(c));
+  } else if (game == Game::Exam) {
+    m.kind = 3;
+    if (!gameDone && examI < (int)examQs.size()) {
+      auto& q = examQs[examI];
+      m.qIndex = examI;
+      m.qCount = examQs.size();
+      m.question = S(q.question);
+      for (auto& c : q.choices) m.choices.push_back(S(c));
+      m.answer = S(examAns[examI]);
+      m.lastQuestion = examI + 1 >= (int)examQs.size();
+    }
+    m.points = examPoints;
+    m.maxPoints = examMax;
+    m.percent = examPct;
+    for (auto& r : examReview) m.review.push_back(S(r));
+  } else if (game == Game::Match) {
+    m.kind = 4;
+    bool wrongNow = millis() < gWrongUntil;
+    bool all = std::all_of(matched.begin(), matched.end(), [](bool b) { return b; });
+    for (size_t i = 0; i < pairs.size(); i++) {
+      int j = rightOrder[i];
+      m.left.push_back(S(pairs[i].a));
+      m.right.push_back(S(pairs[j].b));
+      m.leftState.push_back(matched[i] ? ui::CellState::Matched : selL == (int)i ? ui::CellState::Selected
+                            : wrongNow && gWrongA == (int)i ? ui::CellState::Wrong : ui::CellState::Normal);
+      m.rightState.push_back(matched[j] ? ui::CellState::Matched : wrongNow && gWrongB == (int)i ? ui::CellState::Wrong
+                             : ui::CellState::Normal);
+    }
+    if (all && !pairs.empty()) m.doneText = S("Klart på " + String(matchSecs) + " s!");
+  } else {
+    m.kind = 5;
+    auto& sq = seqs[seqI];
+    m.seqTitle = S(sq.title);
+    m.prompt = S(sq.prompt);
+    m.why = S(sq.why);
+    m.seqIndex = seqI;
+    m.seqCount = seqs.size();
+    for (int k = 0; k < placed && k < (int)sq.steps.size(); k++) m.placed.push_back(S(sq.steps[k]));
+    if (placed < (int)sq.steps.size())
+      for (int s : shownSteps) m.steps.push_back(S(sq.steps[s]));
+    m.wrongStep = millis() < gWrongUntil ? gWrongA : -1;
+  }
+  ui::buildGame(m);
+}
+
+static void drawHwList() {
+  if (!decksLoaded) { ui::buildMessage("Hämtar läxor ...", true); return; }
+  if (ovaMessage.length()) { drawMessage(ovaMessage, false); return; }
+  std::vector<ui::HwTile> tiles;
+  for (auto& h : hws) {
+    bool test = h.kind == "TEST";
+    tiles.push_back({S((test ? "Prov" : "Läxa") + (h.subject.length() ? String(" · ") + h.subject : String())), test, S(h.title),
+                     S(h.due.length() ? dateLabel(h.due) : String()), subjectColor(h.subject, h.title)});
+  }
+  ui::buildHwList(tiles);
+}
+
+static void drawHwDetail() {
+  ui::HwDetail m;
+  bool test = hwCur.kind == "TEST";
+  m.test = test;
+  m.meta = S((test ? "Prov" : "Läxa") + (hwCur.subject.length() ? String(" · ") + hwCur.subject : String()) +
+             (hwCur.due.length() ? String(" · ") + dateLabel(hwCur.due) : String()));
+  m.title = S(hwCur.title);
+  m.about = S(hwCur.about);
+  m.hasMaterial = !sents.empty();
+  if (m.hasMaterial) {
+    int ch = chapterOf(listenDone ? -1 : listenPos);
+    m.head = S(listenDone ? String("Allt uppläst!") : chapterLabel[ch] + "  ·  " + String(ch + 1) + " av " + String(chapterIds.size()));
+    m.percent = listenDone ? 100 : 100 * listenPos / sents.size();
+    m.line = S(listenDone ? String("Tryck Spela för att lyssna igen från början.")
+               : ovaMessage.length() ? ovaMessage
+               : listening || listenPos > 0 ? sents[std::min(listenPos, (int)sents.size() - 1)].text
+               : String("Tryck Spela för att lyssna på allt material."));
+  }
+  m.listening = listening;
+  m.playLabel = listening ? "Paus" : listenPos > 0 && !listenDone ? "Fortsätt" : "Spela";
+  ui::buildHwDetail(m);
+}
+
+static void drawPlan() {
+  if (!decksLoaded) { ui::buildMessage("Hämtar planen ...", true); return; }
+  if (ovaMessage.length()) { drawMessage(ovaMessage, false); return; }
+  String day = planDays[planDay];
+  ui::Plan m;
+  planShown.clear();
+  for (size_t i = 0; i < planRows.size(); i++) {
+    auto& r = planRows[i];
+    if (r.date != day) continue;
+    planShown.push_back(i);
+    m.totalMinutes += r.minutes;
+    if (r.done) m.doneMinutes += r.minutes;
+    int action = !r.hwId ? 0 : r.type == "READ" ? 1 : exerciseFor(r.task).length() ? 2 : 0;
+    m.items.push_back({S(r.subject), S(r.task), subjectColor(r.subject, r.task), r.minutes, r.done, action});
+  }
+  int left = m.totalMinutes - m.doneMinutes;
+  m.day = S(dateLabel(day));
+  m.summary = left ? S(String(left) + " min kvar av " + String(m.totalMinutes)) : std::string("Allt klart!");
+  m.hasPrev = planDay > 0;
+  m.hasNext = planDay + 1 < (int)planDays.size();
+  ui::buildPlan(m);
+}
+
+// ---------------------------------------------------------------- WiFi-skärmen
+static void drawWifi() {
+  ui::Wifi m;
+  m.scanning = wifiScanning;
+  m.nets = wifiNets;
+  m.busy = wifiTryAt != 0;
+  m.ssid = S(wifiPick);
+  m.manual = wifiManual;
+  m.status = S(wifiMsg);
+  m.statusTone = wifiMsgTone;
+  ui::buildWifi(m);
+}
+
+static void wifiSay(const String& text, ui::Tone tone, bool busy) {
+  wifiMsg = text;
+  wifiMsgTone = tone;
+  if (screen == Screen::Wifi) ui::wifiStatus(S(text), tone, busy);
+}
+
+static void wifiScan() {
+  if (wifiScanning) return;
+  wifiScanning = true;
+  wifiSay("Söker ...", ui::Tone::Muted, true);
+  // Medan WiFi försöker ansluta får man inte söka: stoppa försöket (det sparade nätet tas upp igen om 20 s)
+  if (WiFi.status() != WL_CONNECTED) { WiFi.disconnect(); delay(50); }
+  dirtyOva = true;
+  int r = WiFi.scanNetworks(true);   // i bakgrunden; resultatet hämtas i pumpWifi()
+  if (r == WIFI_SCAN_FAILED) {
+    wifiScanning = false;
+    wifiSay("Kunde inte söka efter nätverk", ui::Tone::Bad, false);
+  }
+}
+
+static void openWifi() {
+  wifiPick = "";
+  wifiManual = false;
+  wifiMsg = WiFi.status() == WL_CONNECTED ? "Ansluten till " + WiFi.SSID() : String("Inte ansluten");
+  wifiMsgTone = WiFi.status() == WL_CONNECTED ? ui::Tone::Good : ui::Tone::Warn;
+  showScreen(Screen::Wifi);
+  dirtyAll = true;
+  wifiScan();
+}
+
+/** Försök med ett nytt nätverk. Sparas först när det lyckats; annars tillbaka till det gamla. */
+static void wifiConnect(const String& ssid, const String& pass) {
+  Serial.printf("[pluggis] ansluter till WiFi \"%s\"\n", ssid.c_str());
+  wifiTrySsid = ssid;
+  wifiTryPass = pass;
+  wifiTryAt = millis();
+  wifiSay("Ansluter till " + ssid + " ...", ui::Tone::Muted, true);
+  WiFi.disconnect();
+  delay(100);
+  WiFi.begin(ssid.c_str(), pass.c_str());
+}
+
+static void pumpWifi() {
+  if (wifiScanning) {
+    int n = WiFi.scanComplete();
+    if (n == WIFI_SCAN_FAILED) {
+      wifiScanning = false;
+      wifiSay("Kunde inte söka efter nätverk", ui::Tone::Bad, false);
+      dirtyOva = screen == Screen::Wifi && !wifiPick.length() && !wifiManual;
+    } else if (n >= 0) {
+      wifiNets.clear();
+      String cur = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String();
+      for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        if (!ssid.length()) continue;   // dolda nätverk syns inte (använd "Dolt nätverk")
+        auto dup = std::find_if(wifiNets.begin(), wifiNets.end(), [&](const ui::WifiNet& w) { return w.ssid == ssid.c_str(); });
+        if (dup != wifiNets.end()) { dup->rssi = std::max(dup->rssi, (int)WiFi.RSSI(i)); continue; }
+        wifiNets.push_back({S(ssid), (int)WiFi.RSSI(i), WiFi.encryptionType(i) != WIFI_AUTH_OPEN, ssid == cur});
+      }
+      std::sort(wifiNets.begin(), wifiNets.end(), [](const ui::WifiNet& a, const ui::WifiNet& b) {
+        return a.current != b.current ? a.current : a.rssi > b.rssi;
+      });
+      WiFi.scanDelete();
+      wifiScanning = false;
+      Serial.printf("[pluggis] hittade %d WiFi-nätverk\n", (int)wifiNets.size());
+      wifiSay(wifiNets.empty() ? String("Hittade inga nätverk") : String(wifiNets.size()) + " nätverk",
+              wifiNets.empty() ? ui::Tone::Warn : ui::Tone::Muted, false);
+      // bygg om listan bara om den syns (inte mitt i ett lösenord)
+      if (screen == Screen::Wifi && !wifiPick.length() && !wifiManual) dirtyOva = true;
+    }
+  }
+  if (!wifiTryAt) return;
+  if (WiFi.status() == WL_CONNECTED && WiFi.SSID() == wifiTrySsid) {
+    prefs.putString("wifiSsid", wifiTrySsid);
+    prefs.putString("wifiPass", wifiTryPass);
+    Serial.printf("[pluggis] ansluten till \"%s\" – sparat\n", wifiTrySsid.c_str());
+    ui::toast("Ansluten till " + std::string(wifiTrySsid.c_str()));
+    wifiTryAt = 0;
+    wifiPick = "";
+    wifiManual = false;
+    dirtyTop = true;
+    showScreen(Screen::OvaList, true);   // hämta läxorna på nya nätet
+  } else if (millis() - wifiTryAt > 20000) {
+    Serial.printf("[pluggis] kom inte in på \"%s\"\n", wifiTrySsid.c_str());
+    wifiTryAt = 0;
+    wifiSay("Kom inte in på " + wifiTrySsid + ". Fel lösenord?", ui::Tone::Bad, false);
+    WiFi.disconnect();
+    WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());   // tillbaka till det sparade nätet
+  }
+}
+
+// ---------------------------------------------------------------- inställningar
+static void connectServer();
+static void markActive();
+enum class EntryField { Code, Server };
+static EntryField entryField = EntryField::Code;
+
+static void drawSettings() {
+  ui::Settings m;
+  bool wifi = WiFi.status() == WL_CONNECTED;
+  m.wifi = wifi ? S(WiFi.SSID()) : "";
+  m.rssi = wifi ? WiFi.RSSI() : -100;
+  m.server = S(cfg.host + ":" + String(cfg.port));
+  m.serverOk = wsUp;
+  m.serverNote = wsUp ? "Ansluten" : S(lastError.length() ? lastError : String("Ansluter ..."));
+  m.code = cfg.code ? S(cfg.auth) : "";
+  m.student = S(studentName);
+  m.idleMin = cfg.idleMin;
+  m.brightness = cfg.bright;
+  m.clockMode = cfg.clockMode;
+  m.version = "Pluggis Tab5 · " __DATE__;
+  ui::buildSettings(m);
+}
+
+static void drawEntry() {
+  ui::Entry m;
+  if (entryField == EntryField::Code) {
+    m.title = "Elevens kod";
+    m.code = true;
+    m.value = cfg.code ? S(cfg.auth) : "";
+    m.placeholder = "5 tecken";
+    m.hint = "Samma kod som eleven loggar in med i Pluggis-appen (föräldravyn: Inställningar > Elever). "
+             "Koden bestämmer vilken elev skärmen visar.";
+  } else {
+    m.title = "Serverns adress";
+    m.value = S(cfg.host + (cfg.port != 8080 ? ":" + String(cfg.port) : String()));
+    m.placeholder = "192.168.1.20";
+    m.hint = "IP-adressen till datorn där Pluggis körs (hostname -I på servern), t.ex. 192.168.1.20. "
+             "Annan port än 8080: 192.168.1.20:9090.";
+  }
+  ui::buildEntry(m);
+}
+
+/** Provar en kod eller adress mot servern innan den sparas (GET /api/chat/me). */
+static bool tryServer(const String& host, int port, const String& auth, String& name) {
+  WiFiClient client;
+  HTTPClient http;
+  String url = "http://" + host + ":" + String(port) + "/api/chat/me";
+  if (!http.begin(client, url)) return false;
+  http.setTimeout(6000);
+  http.addHeader("X-Pluggis-Token", auth.c_str());
+  int code = http.GET();
+  if (code == 200) {
+    JsonDocument d;
+    if (!deserializeJson(d, http.getString())) name = d["name"] | "";
+  }
+  http.end();
+  Serial.printf("[pluggis] provar %s med %s: %d\n", url.c_str(), auth.length() == 5 ? "elevkod" : "token", code);
+  lastError = code == 200 ? String() : code <= 0 ? "ingen kontakt med " + host + ":" + String(port) : "servern svarade " + String(code);
+  return code == 200;
+}
+
+/** Ny elev eller server: spara, koppla om och hämta allt på nytt. */
+static void applyServer() {
+  meLoaded = false;
+  studentName = "";
+  connectServer();
+  dirtyTop = true;
+}
+
+static void entryOk() {
+  String v = String(ui::entryText().c_str());
+  v.trim();
+  if (entryField == EntryField::Code) {
+    v.toUpperCase();
+    if (v.length() != 5) { ui::entryStatus("Koden är 5 tecken", ui::Tone::Warn, false); return; }
+    ui::entryStatus("Provar koden ...", ui::Tone::Muted, true);
+    lv_refr_now(lvDisp);
+    String name;
+    if (!tryServer(cfg.host, cfg.port, v, name)) {
+      ui::entryStatus(lastError.startsWith("servern svarade 401") || lastError.startsWith("servern svarade 403")
+                          ? "Koden finns inte – kolla den i föräldravyn" : S("Kunde inte prova koden: " + lastError),
+                      ui::Tone::Bad, false);
+      return;
+    }
+    prefs.putString("code", v);
+    cfg.auth = v;
+    cfg.device = "elevkod";
+    cfg.code = true;
+    applyServer();
+    ui::toast("Nu är det " + std::string(name.length() ? name.c_str() : "eleven") + "s Pluggis");
+  } else {
+    String host = v;
+    int port = 8080;
+    host.replace("http://", "");
+    if (host.endsWith("/")) host = host.substring(0, host.length() - 1);
+    int colon = host.indexOf(':');
+    if (colon > 0) { port = host.substring(colon + 1).toInt(); host = host.substring(0, colon); }
+    if (!host.length() || port <= 0 || port > 65535) { ui::entryStatus("Skriv t.ex. 192.168.1.20", ui::Tone::Warn, false); return; }
+    ui::entryStatus("Provar " + std::string(host.c_str()) + " ...", ui::Tone::Muted, true);
+    lv_refr_now(lvDisp);
+    String name;
+    if (!tryServer(host, port, cfg.auth, name)) {
+      ui::entryStatus(S("Får ingen kontakt: " + lastError), ui::Tone::Bad, false);
+      return;
+    }
+    prefs.putString("host", host);
+    prefs.putInt("port", port);
+    cfg.host = host;
+    cfg.port = port;
+    applyServer();
+    ui::toast("Servern sparad");
+  }
+  showScreen(Screen::OvaList, true);   // hämta läxorna med den nya inställningen
+}
+
+static void drawScreen() {
+  switch (screen) {
+    case Screen::Coach: drawCoach(); break;
+    case Screen::OvaList: drawOvaList(); break;
+    case Screen::OvaCard: drawCard(); break;
+    case Screen::Game: drawGame(); break;
+    case Screen::HwList: drawHwList(); break;
+    case Screen::HwDetail: drawHwDetail(); break;
+    case Screen::Plan: drawPlan(); break;
+    case Screen::Wifi: drawWifi(); break;
+    case Screen::Settings: drawSettings(); break;
+    case Screen::Entry: drawEntry(); break;
+    case Screen::Focus: drawFocus(); break;
+  }
+}
+
+/** Bygger om det som ändrats och ritar direkt (så att "Hämtar …" syns innan ett långt anrop). */
+static void redraw() {
+  if (booting) { drawBoot(); lv_refr_now(lvDisp); return; }
+  if (dirtyAll) {
+    dirtyTop = true;
+    if (screen == Screen::Coach) dirtyMain = true; else dirtyOva = true;
+    dirtyAll = false;
+  }
+  bool any = dirtyTop || dirtyMain || dirtyTimer || dirtyOva;
+  if (dirtyTop) { drawTop(); dirtyTop = false; }
+  if (screen == Screen::Coach) {
+    if (dirtyMain) { drawCoach(); dirtyMain = false; dirtyTimer = true; }
+    if (dirtyTimer) { drawTimer(); dirtyTimer = false; }
+  } else {
+    dirtyMain = dirtyTimer = false;
+    if (dirtyOva) { drawScreen(); dirtyOva = false; }
+  }
+  if (any) lv_refr_now(lvDisp);
+}
+
+/** Läser inställningarna: sparade i Tab5 först, annars config.h. */
+static void loadCfg() {
+  cfg.host = prefs.getString("host", PLUGGIS_HOST);
+  cfg.port = prefs.getInt("port", PLUGGIS_PORT);
+  String code = prefs.getString("code", "");
+#if defined(PLUGGIS_CODE)
+  if (!code.length()) code = PLUGGIS_CODE;
+#endif
+  if (code.length()) {
+    cfg.auth = code;
+    cfg.device = "elevkod";   // servern byter till elevens eget enhets-id
+    cfg.code = true;
+  } else {
+#if defined(PLUGGIS_TOKEN)
+    cfg.auth = PLUGGIS_TOKEN;   // äldre config.h: fungerar om PLUGGIS_TOKEN är elevens kod
+    cfg.device = "elevkod";
+    cfg.code = true;
+#endif
+  }
+  cfg.idleMin = prefs.getInt("idleMin", PLUGGIS_IDLE_MINUTES);
+  cfg.bright = prefs.getInt("bright", 200);
+  cfg.clockMode = prefs.getInt("clockMode", 1);
+}
+
+/** (Om)startar WebSocket mot servern med nuvarande adress och kod. */
+static void connectServer() {
+  ws.disconnect();
+  wsUp = false;
+  String url = String("/ws/device?deviceId=") + cfg.device + "&token=" + cfg.auth;
+  ws.begin(cfg.host.c_str(), cfg.port, url.c_str());
+}
+
+static void setVolume(int v) {
+  volume = v < 0 ? 0 : v > 255 ? 255 : v;
+  M5.Speaker.setVolume(volume);
+  prefs.putInt("volume", volume);
+  if (!M5.Speaker.isPlaying()) playMelody(MEL_TICK, 1);
+  dirtyTop = true;
+}
+
+// ---------------------------------------------------------------- vad eleven tryckte på (från ui.cpp)
+static void startExercise(int i, long hw) {
+  if (i == 0) makeQuiz(hw, "quiz");
+  else if (i == 1) makeQuiz(hw, "cloze");
+  else if (i == 2 && makeIdx < (int)makeList.size() && makeList[makeIdx].language) makeQuiz(hw, "vocab");
+  else startGame(i, hw, makeList[makeIdx].label);
+}
+
+static void examNext() {
+  if (++examI >= (int)examQs.size()) { examI = examQs.size() - 1; examSubmit(); }
+  dirtyOva = true;
+}
+
+static void orderNextSeq() {
+  if (++seqI >= (int)seqs.size()) { gameDoneReport("order"); setLast(5, "klart"); gameExit(); return; }
+  placed = 0;
+  shownSteps.clear();
+  for (size_t i = 0; i < seqs[seqI].steps.size(); i++) shownSteps.push_back(i);
+  for (int i = shownSteps.size() - 1; i > 0; i--) std::swap(shownSteps[i], shownSteps[esp_random() % (i + 1)]);
+  sayAloud(seqs[seqI].title + ". " + seqs[seqI].prompt);
+  dirtyOva = true;
+}
+
+/** Tryck på en tom yta: gå tillbaka, nästa, eller försök igen – beroende på skärmen. */
+static void onBackground() {
+  switch (screen) {
+    case Screen::Coach:
+      if (mode == Mode::Card && cardAnswered) { mode = Mode::Coach; dirtyMain = true; }
+      break;
+    case Screen::OvaList:
+      if (ovaMessage.length()) { decksLoaded = false; dirtyOva = true; redraw(); loadDecks(); dirtyOva = true; }
+      break;
+    case Screen::OvaCard:
+      if (noMoreCards) showScreen(Screen::OvaList, true);
+      else if (options.size() >= 2 && chosen >= 0) { nextCard(); dirtyOva = true; }
+      break;
+    case Screen::Game:
+      if (gameMsg.length()) { if (!gameMsg.endsWith("...")) gameExit(); break; }
+      if (game == Game::Order && placed >= (int)seqs[seqI].steps.size()) { orderNextSeq(); break; }
+      if (gameDone || (game == Game::Match && std::all_of(matched.begin(), matched.end(), [](bool b) { return b; }))) gameExit();
+      break;
+    default:
+      if (ovaMessage.length()) showScreen(screen, true);   // försök hämta igen
+      break;
+  }
+}
+
+static void onAction(const ui::Action& a) {
+  lastTouchAt = millis();
+  switch (a.act) {
+    case ui::Act::Tab: {
+      static const Screen tabs[4] = {Screen::OvaList, Screen::Coach, Screen::HwList, Screen::Plan};
+      showScreen(tabs[a.a & 3]);
+      break;
+    }
+    case ui::Act::VolDown: setVolume(volume - 32); break;
+    case ui::Act::VolUp: setVolume(volume + 32); break;
+    case ui::Act::Background: onBackground(); break;
+    case ui::Act::WifiOpen: openWifi(); break;
+    case ui::Act::SetOpen: showScreen(Screen::Settings); break;
+    case ui::Act::SetBack: showScreen(Screen::OvaList); break;
+    case ui::Act::SetWifi: openWifi(); break;
+    case ui::Act::SetServer: entryField = EntryField::Server; showScreen(Screen::Entry); break;
+    case ui::Act::SetCode: entryField = EntryField::Code; showScreen(Screen::Entry); break;
+    case ui::Act::EntryOk: entryOk(); break;
+    case ui::Act::EntryBack: showScreen(Screen::Settings); break;
+    case ui::Act::SetClock:
+      cfg.clockMode = std::max(0, std::min(2, a.a));
+      prefs.putInt("clockMode", cfg.clockMode);
+      dirtyOva = true;
+      break;
+    case ui::Act::FocusTop:
+      if (fz.on) { if (screen != Screen::Focus) showScreen(Screen::Focus); }
+      else {
+        if (screen != Screen::Focus) focusReturn = screen;
+        fz = FocusState();
+        fz.choose = true;
+        showScreen(Screen::Focus, true);
+      }
+      break;
+    case ui::Act::FocusStart: focusStartFor("", "", ui::ACCENT, a.a, 0, 0); break;
+    case ui::Act::FocusPause:
+      if (!fz.on || fz.done) break;
+      if (fz.paused) { fz.pausedMs += millis() - fz.pausedAt; fz.paused = false; }
+      else { fz.pausedAt = millis(); fz.paused = true; }
+      dirtyAll = true;
+      break;
+    case ui::Act::FocusEnd: focusStop(); break;
+    case ui::Act::FocusBreak: focusBegin(5, true); break;
+    case ui::Act::FocusAgain: {
+      // ett pass till med samma sak (planens moment är redan bockat)
+      FocusState keep = fz;
+      fz = FocusState();
+      fz.title = keep.title; fz.subject = keep.subject; fz.color = keep.color; fz.hwId = keep.hwId;
+      focusBegin(keep.minutes > 0 ? keep.minutes : 25, false);
+      break;
+    }
+    case ui::Act::FocusDone: focusStop(); break;
+    case ui::Act::PlanTimer: {
+      if (a.a >= (int)planShown.size()) break;
+      auto& r = planRows[planShown[a.a]];
+      if (r.done) break;
+      focusStartFor(r.task, r.subject, subjectColor(r.subject, r.task), r.minutes > 0 ? r.minutes : 25, r.id, r.hwId);
+      break;
+    }
+    case ui::Act::SetIdle:
+      cfg.idleMin = a.a;
+      prefs.putInt("idleMin", cfg.idleMin);
+      markActive();
+      dirtyOva = true;
+      break;
+    case ui::Act::SetBright:
+      cfg.bright = std::max(30, std::min(255, a.a));
+      M5.Display.setBrightness(cfg.bright);
+      break;
+    case ui::Act::SetBrightDone:
+      cfg.bright = std::max(30, std::min(255, a.a));
+      M5.Display.setBrightness(cfg.bright);
+      prefs.putInt("bright", cfg.bright);
+      break;
+    case ui::Act::SetRestart:
+      ui::buildMessage("Startar om ...", true);
+      lv_refr_now(lvDisp);
+      delay(300);
+      ESP.restart();
+      break;
+    case ui::Act::WifiScan: wifiScan(); break;
+    case ui::Act::WifiPick:
+      if (a.a >= (int)wifiNets.size()) break;
+      if (!wifiNets[a.a].secure) { wifiConnect(String(wifiNets[a.a].ssid.c_str()), ""); break; }
+      wifiPick = wifiNets[a.a].ssid.c_str();
+      wifiManual = false;
+      wifiMsg = "";
+      dirtyOva = true;
+      break;
+    case ui::Act::WifiManual: wifiManual = true; wifiPick = ""; wifiMsg = ""; dirtyOva = true; break;
+    case ui::Act::WifiConnect: {
+      String ssid = wifiManual ? String(ui::wifiSsidInput().c_str()) : wifiPick;
+      ssid.trim();
+      if (!ssid.length()) { ui::wifiStatus("Skriv nätverkets namn", ui::Tone::Warn, false); break; }
+      wifiConnect(ssid, String(ui::wifiPassword().c_str()));
+      break;
+    }
+    case ui::Act::WifiBack:
+      if (wifiPick.length() || wifiManual) { wifiPick = ""; wifiManual = false; wifiMsg = ""; dirtyOva = true; }
+      else showScreen(Screen::OvaList, true);
+      break;
+    case ui::Act::Status:
+    case ui::Act::SetDetails: {   // anslutningsdetaljer (även "Detaljer" i inställningarna)
+      bool wifi = WiFi.status() == WL_CONNECTED;
+      String t = wifi ? "WiFi: ansluten till \"" + WiFi.SSID() + "\" (" + WiFi.localIP().toString() + ", signal " +
+                            String(WiFi.RSSI()) + " dBm)"
+                      : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + wifiSsidSaved() + "\"";
+      t += "\nServer: " + cfg.host + ":" + String(cfg.port) +
+           (cfg.code ? " med elevkod " + cfg.auth : " som \"" + cfg.device + "\"") +
+           (studentName.length() ? " (" + studentName + ")" : String());
+      t += "\nChatten (WebSocket): " + String(wsUp ? "uppe" : "nere") + " – " + wsLast +
+           (wsLastAt ? " för " + String((millis() - wsLastAt) / 1000) + " s sedan" : String()) + ", " + String(wsTries) + " försök";
+      t += "\nLäxor hämtade: " + String(decksLoaded ? "ja" : "nej");
+      if (lastError.length()) t += "\nSenaste fel: " + lastError;
+      t += "\nLedigt minne: " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB internt, " +
+           String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024)) + " kB PSRAM";
+      Serial.printf("[pluggis] status:\n%s\n", t.c_str());
+      t += "\nVersion: " __DATE__ " " __TIME__;
+      ui::info("Anslutning", S(t), "Byt WiFi", ui::Act::WifiOpen);
+      break;
+    }
+    case ui::Act::TalkPress: startRecording(); break;
+
+    // --- Öva
+    case ui::Act::OvaSelect:
+      if (a.a >= 0 && a.a < (int)makeList.size() && !makeBusy.length()) { makeIdx = a.a; mkFocus = 0; dirtyOva = true; }
+      break;
+    case ui::Act::OvaFocus: mkFocus = a.a; dirtyOva = true; break;
+    case ui::Act::OvaExercise:
+      if (!makeList.empty() && !makeBusy.length()) startExercise(a.a, makeList[makeIdx].id);
+      break;
+    case ui::Act::OvaAgain:
+      if (lastKind < 0) break;
+      for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == lastHw) makeIdx = i;
+      mkFocus = 0;
+      for (size_t i = 0; i < mkTopics.size(); i++) if (mkTopicsFor == lastHw && mkTopics[i] == lastFocus) mkFocus = i + 1;
+      startExercise(lastKind, lastHw);
+      break;
+
+    // --- ett kort
+    case ui::Act::CardSpeak:
+      if (noMoreCards) break;
+      if (options.size() >= 2 && chosen >= 0) { nextCard(); dirtyOva = true; break; }
+      if (revealed && *deckLang()) sayCardSide(looksSwedish(qFront) ? qBack : qFront);
+      else sayCardSide(revealed ? qFront + ". " + qBack : qFront);
+      break;
+    case ui::Act::CardOption: {
+      if (chosen >= 0 || a.a >= (int)options.size()) break;
+      chosen = a.a;
+      bool ok = a.a == correctIdx;
+      if (ok) SFX_OK(); else SFX_BAD();
+      dirtyOva = true;
+      redraw();
+      if (*deckLang()) { delay(450); sayCardSide(looksSwedish(qFront) ? qBack : qFront); }
+      grade(ok);
+      dirtyOva = true;
+      break;
+    }
+    case ui::Act::CardNext: nextCard(); dirtyOva = true; break;
+    case ui::Act::CardReveal:
+      revealed = true;
+      dirtyOva = true;
+      if (isLanguageDeck()) sayCardSide(looksSwedish(qFront) ? qBack : qFront);
+      break;
+    case ui::Act::CardKnew:
+    case ui::Act::CardDidnt:
+      grade(a.act == ui::Act::CardKnew);
+      nextCard();
+      dirtyOva = true;
+      break;
+
+    // --- Förklara, Testprov, Matcha par, Rätt ordning
+    case ui::Act::GameSpeak:
+      if (game == Game::Exam) { examSpoken = -1; examSpeak(); }
+      else if (game == Game::Explain) sayAloud(exReply);
+      break;
+    case ui::Act::GameChoice: {
+      if (game != Game::Exam || gameDone || examI >= (int)examQs.size()) break;
+      auto& q = examQs[examI];
+      if (a.a >= (int)q.choices.size()) break;
+      examAns[examI] = q.choices[a.a];
+      dirtyOva = true;
+      redraw();
+      delay(250);
+      examNext();
+      break;
+    }
+    case ui::Act::GameSkip:
+      if (game == Game::Exam && !gameDone) examNext();
+      break;
+    case ui::Act::GameLeft:
+      if (game == Game::Match && a.a < (int)matched.size() && !matched[a.a]) { selL = a.a; dirtyOva = true; }
+      break;
+    case ui::Act::GameRight: {
+      if (game != Game::Match || a.a >= (int)rightOrder.size()) break;
+      int j = rightOrder[a.a];
+      if (matched[j] || selL < 0) break;
+      if (j == selL) {
+        matched[j] = true;
+        SFX_OK();
+        if (std::all_of(matched.begin(), matched.end(), [](bool b) { return b; })) {
+          matchSecs = (millis() - matchStart) / 1000;
+          SFX_DONE();
+          gameDoneReport("match");
+          setLast(4, String(matchSecs) + " s");
+        }
+      } else {
+        gWrongA = selL;
+        gWrongB = a.a;
+        gWrongUntil = millis() + 600;
+        SFX_BAD();
+      }
+      selL = -1;
+      dirtyOva = true;
+      break;
+    }
+    case ui::Act::GameStep: {
+      if (game != Game::Order || seqs.empty()) break;
+      auto& sq = seqs[seqI];
+      size_t k = a.a;
+      if (placed >= (int)sq.steps.size() || k >= shownSteps.size()) break;
+      if (shownSteps[k] == placed) {
+        placed++;
+        shownSteps.erase(shownSteps.begin() + k);
+        if (placed >= (int)sq.steps.size()) { SFX_DONE(); sayAloud("Rätt ordning! " + sq.why); } else SFX_OK();
+      } else {
+        gWrongA = k;
+        gWrongUntil = millis() + 600;
+        SFX_BAD();
+      }
+      dirtyOva = true;
+      break;
+    }
+
+    // --- Läxor
+    case ui::Act::HwOpen:
+      if (a.a < (int)hws.size()) { openHomework(hws[a.a]); hwBackTo = Screen::HwList; }
+      break;
+    case ui::Act::HwBack:
+      if (listening) listenStop(true);
+      showScreen(hwBackTo);
+      break;
+    case ui::Act::HwPlay:
+      if (sents.empty()) break;
+      ovaMessage = "";
+      if (listening) listenStop(true); else listenStart();
+      dirtyOva = true;
+      break;
+    case ui::Act::HwPrev: {
+      if (sents.empty()) break;
+      bool was = listening;
+      listenStop(false);
+      listenDone = false;
+      int ch = chapterOf(listenPos);
+      int first = 0;
+      for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch]) { first = i; break; }
+      if (listenPos - first <= 1 && ch > 0) {   // redan i början: sidan innan
+        for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch - 1]) { first = i; break; }
+      }
+      listenPos = first;
+      fetchPos = listenPos;
+      listenSave();
+      if (was) listenStart();
+      dirtyOva = true;
+      break;
+    }
+    case ui::Act::HwNext: {
+      if (sents.empty()) break;
+      bool was = listening;
+      listenStop(false);
+      int ch = chapterOf(listenPos);
+      if (ch + 1 < (int)chapterIds.size()) {
+        for (size_t i = 0; i < sents.size(); i++) if (sents[i].matId == chapterIds[ch + 1]) { listenPos = i; break; }
+        listenDone = false;
+      }
+      fetchPos = listenPos;
+      listenSave();
+      if (was) listenStart();
+      dirtyOva = true;
+      break;
+    }
+
+    // --- Plan
+    case ui::Act::PlanPrev: if (planDay > 0) { planDay--; dirtyOva = true; } break;
+    case ui::Act::PlanNext: if (planDay + 1 < (int)planDays.size()) { planDay++; dirtyOva = true; } break;
+    case ui::Act::PlanRow:
+    case ui::Act::PlanCheck: {
+      if (a.a >= (int)planShown.size()) break;
+      auto& r = planRows[planShown[a.a]];
+      // Tryck på ett läsmoment: läs upp sidorna. Bocken bockar alltid av.
+      if (a.act == ui::Act::PlanRow && r.type == "READ" && r.hwId) { openReading(r); break; }
+      // Tryck på en övning ("Gör ett snabbquiz"): starta den för läxan
+      if (a.act == ui::Act::PlanRow && r.hwId && !r.done && exerciseFor(r.task).length()) {
+        pendingKind = exerciseFor(r.task);
+        pendingHw = r.hwId;
+        pendingPractice = true;
+        practicePlanItem = r.id;
+        break;
+      }
+      if (r.done) break;
+      if (api("POST", "/api/plan/items/" + String(r.id) + "/done", "", nullptr) == 200) {
+        r.done = true;
+        SFX_OK();
+      }
+      dirtyOva = true;
+      break;
+    }
+
+    // --- Chat
+    case ui::Act::CoachStart: sendButton(sessionActive ? "double" : "click"); break;
+    case ui::Act::CoachEnd: stopPlayback(); sendButton("long"); break;
+    default: break;
+  }
+}
+
+// ---------------------------------------------------------------- LVGL: skärm och pekskärm
+static void lvFlush(lv_display_t* d, const lv_area_t* a, uint8_t* px) {
+  int w = a->x2 - a->x1 + 1, h = a->y2 - a->y1 + 1;
+  M5.Display.startWrite();
+  M5.Display.pushImage(a->x1, a->y1, w, h, (const lgfx::rgb565_t*)px);
+  M5.Display.endWrite();
+  lv_display_flush_ready(d);
+}
+
+static void lvTouch(lv_indev_t*, lv_indev_data_t* data) {
+  data->point.x = touchX;
+  data->point.y = touchY;
+  data->state = touchDown && !swallowTouch ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+static uint32_t lvTick() { return millis(); }
+
+static void setupLvgl() {
+  lv_init();
+  lv_tick_set_cb(lvTick);
+  W = M5.Display.width();
+  H = M5.Display.height();
+  lvDisp = lv_display_create(W, H);
+  // Två bitar på 1/10 av skärmen i PSRAM. Det interna minnet behövs till WiFi (ESP32-C6 över SDIO).
+  size_t bytes = W * (H / 10) * 2;
+  uint8_t* b1 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  uint8_t* b2 = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  lv_display_set_buffers(lvDisp, b1, b2, bytes, LV_DISPLAY_RENDER_MODE_PARTIAL);
+  lv_display_set_flush_cb(lvDisp, lvFlush);
+  lv_indev_t* touch = lv_indev_create();
+  lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(touch, lvTouch);
+  ui::init();
+  ui::setBrand(LOGO_PNG, LOGO_PNG_LEN, AVATAR_PNG, AVATAR_PNG_LEN);
+}
+
 // ---------------------------------------------------------------- start
+static String wifiSsidSaved() {
+  String s = prefs.getString("wifiSsid", "");
+  return s.length() ? s : String(PLUGGIS_WIFI_SSID);
+}
+static String wifiPassSaved() {
+  return prefs.getString("wifiSsid", "").length() ? prefs.getString("wifiPass", "") : String(PLUGGIS_WIFI_PASS);
+}
+
 static void connectWifi() {
 #if defined(BOARD_SDIO_ESP_HOSTED_CLK)
   WiFi.setPins(BOARD_SDIO_ESP_HOSTED_CLK, BOARD_SDIO_ESP_HOSTED_CMD, BOARD_SDIO_ESP_HOSTED_D0,
@@ -2607,27 +2994,22 @@ static void connectWifi() {
 #endif
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(PLUGGIS_WIFI_SSID, PLUGGIS_WIFI_PASS);
+  WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());
 }
 
 void setup() {
-  auto cfg = M5.config();
-  cfg.serial_baudrate = 115200;
-  M5.begin(cfg);
+  auto m5cfg = M5.config();
+  m5cfg.serial_baudrate = 115200;
+  M5.begin(m5cfg);
   M5.Display.setRotation(1);   // liggande
-  M5.Display.setBrightness(200);
-  frame.setPsram(true);
-  frame.setColorDepth(16);
-  if (frame.createSprite(M5.Display.width(), M5.Display.height())) G = &frame;
-  else Serial.println("[pluggis] ingen bild i minnet – ritar direkt");
+  M5.Display.setBrightness(cfg.bright);
   prefs.begin("pluggis", false);
+  loadCfg();
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
-  layout();
-  layoutOva();
-  layoutHwPlan();
-  layoutGame();
+  setupLvgl();
   fetchLock = xSemaphoreCreateMutex();
   xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
+  bootStart = millis();
   dirtyAll = true;
   redraw();
 
@@ -2641,10 +3023,11 @@ void setup() {
 
   lastActivity = millis();
   bootStart = millis();
-  connectWifi();
+  Serial.printf("[pluggis] startar: WiFi \"%s\", server %s:%d, %s\n", wifiSsidSaved().c_str(), cfg.host.c_str(), cfg.port,
+                cfg.code ? "med elevkod" : cfg.device.c_str());
+  connectWifi();   // sist, som i den gamla firmware: WiFi-chippet (ESP32-C6) behöver hinna starta efter M5.begin()
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
-  String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_TOKEN;
-  ws.begin(PLUGGIS_HOST, PLUGGIS_PORT, url.c_str());
+  connectServer();
   ws.onEvent(onWs);
   ws.setReconnectInterval(3000);
   ws.enableHeartbeat(20000, 5000, 2);
@@ -2653,7 +3036,7 @@ void setup() {
 // ---------------------------------------------------------------- stäng av när den inte används
 static void markActive() {
   lastActivity = millis();
-  if (idleWarned) { idleWarned = false; M5.Display.setBrightness(200); dirtyAll = true; }
+  if (idleWarned) { idleWarned = false; M5.Display.setBrightness(cfg.bright); ui::idleWarning(false); }
 }
 
 static void goToSleep() {
@@ -2662,39 +3045,36 @@ static void goToSleep() {
   if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
   stopPlayback();
   sayStop();
+  if (fz.on) { focusPracticeEnd(); fz = FocusState(); }
+  // På laddaren under pluggtid: klockan i stället
+  if (clockHours() && onUsb()) { clockEnter(); return; }
   Serial.println("[pluggis] inaktiv – stänger av");
   M5.Display.setBrightness(0);
   delay(200);
   M5.Power.powerOff();
-  // Går det inte att stänga av (t.ex. på USB-ström): släck skärmen och vakna vid tryck
+  // Går det inte att stänga av så sitter den på USB-ström: klockan under pluggtid, annars släckt tills man trycker
   delay(1500);
+  if (clockHours()) { clockEnter(); return; }
   asleep = true;
   idleWarned = false;
+  ui::idleWarning(false);
 }
 
 static void checkIdle(bool touched) {
-  if (PLUGGIS_IDLE_MINUTES <= 0) return;
+  if (cfg.idleMin <= 0) return;
   if (asleep) {
-    if (touched) { asleep = false; activeSec = 0; M5.Display.setBrightness(200); markActive(); dirtyAll = true; }
+    if (touched) { asleep = false; M5.Display.setBrightness(cfg.bright); markActive(); dirtyAll = true; }
     return;
   }
-  bool busy = sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
+  if (clockOn) return;
+  bool busy = (fz.on && !fz.paused && !fz.done) || sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
               makeBusy.length() || (gameMsg.length() && gameMsg.endsWith("..."));
   if (touched || busy) { markActive(); return; }
-  uint32_t idle = millis() - lastActivity, limit = (uint32_t)PLUGGIS_IDLE_MINUTES * 60000;
+  uint32_t idle = millis() - lastActivity, limit = (uint32_t)cfg.idleMin * 60000;
   if (!idleWarned && idle > limit - 30000) {
     idleWarned = true;
     M5.Display.setBrightness(60);
-    auto& d = *G;
-    d.fillRoundRect(W / 2 - 360, H / 2 - 80, 720, 160, 28, WARN);
-    d.setFont(F_BIG);
-    d.setTextColor(BG);
-    d.setTextDatum(middle_center);
-    d.drawString("Stänger av om 30 s", W / 2, H / 2 - 24);
-    d.setFont(F_MID);
-    d.drawString("Tryck för att fortsätta", W / 2, H / 2 + 30);
-    d.setTextDatum(top_left);
-    present();
+    ui::idleWarning(true);
   }
   if (idle > limit) goToSleep();
 }
@@ -2703,8 +3083,30 @@ void loop() {
   M5.update();
   ws.loop();
 
+  // Pekskärmen: LVGL läser läget härifrån (lvTouch)
+  auto t = M5.Touch.getDetail();
+  touchDown = t.isPressed();
+  if (touchDown) { touchX = t.x; touchY = t.y; }
+  if (swallowTouch && !touchDown) swallowTouch = false;
+
+  // Kommer WiFi inte upp: börja om anslutningen var 20:e sekund
+  static uint32_t wifiTry = millis();
+  if (WiFi.status() == WL_CONNECTED || wifiTryAt || wifiScanning) wifiTry = millis();
+  else if (millis() - wifiTry > 20000) {
+    wifiTry = millis();
+    Serial.println("[pluggis] inget WiFi – försöker igen");
+    WiFi.disconnect();
+    WiFi.begin(wifiSsidSaved().c_str(), wifiPassSaved().c_str());
+  }
+  pumpWifi();
+
   static wl_status_t lastWifi = WL_IDLE_STATUS;
-  if (WiFi.status() != lastWifi) { lastWifi = WiFi.status(); dirtyTop = true; }
+  if (WiFi.status() != lastWifi) {
+    lastWifi = WiFi.status();
+    dirtyTop = true;
+    Serial.printf("[pluggis] WiFi-status %d, ledigt internt minne %u byte\n", (int)lastWifi,
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+  }
 
   static bool firstOva = false;
   if (!firstOva && WiFi.status() == WL_CONNECTED) {
@@ -2713,56 +3115,51 @@ void loop() {
   }
   if (booting) {
     // klar när WiFi är uppe och läxorna hämtats (eller det gått att svara att något är fel)
-    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; dirtyAll = true; }
+    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; ui::hideBoot(); dirtyAll = true; }
     else {
-      static uint32_t lastBootFrame = 0;
-      if (millis() - lastBootFrame > 90) { lastBootFrame = millis(); drawBoot(); }
+      static uint32_t lastBootText = 0;
+      if (millis() - lastBootText > 500) { lastBootText = millis(); drawBoot(); }
       // försök hämta läxorna igen om första försöket misslyckades
       static uint32_t lastRetry = 0;
       if (WiFi.status() == WL_CONNECTED && firstOva && !decksLoaded && millis() - lastRetry > 5000) { lastRetry = millis(); showScreen(Screen::OvaList, true); }
-      ws.loop();
+      lv_timer_handler();
+      ui::Action ba;
+      while (ui::poll(ba))
+        if (ba.act == ui::Act::WifiOpen) { booting = false; ui::hideBoot(); openWifi(); }
       delay(2);
       return;
     }
   }
 
-  // Pekskärmen
-  auto t = M5.Touch.getDetail();
+  if (t.wasPressed() && clockOn) {
+    swallowTouch = true;   // trycket väcker bara, gör inget annat
+    clockLeave();
+    ui::clearQueue();
+    return;
+  }
   if (t.wasPressed() && (asleep || idleWarned)) {
+    swallowTouch = true;   // trycket väcker bara, gör inget annat
     checkIdle(true);
-    return;   // trycket väcker bara, gör inget annat
+    ui::clearQueue();
+    return;
   }
+  if (t.wasPressed() && focusDim) {
+    focusDim = false;
+    M5.Display.setBrightness(cfg.bright);
+    lastTouchAt = millis();
+  }
+  clockLoop();
+  if (clockOn) { lv_timer_handler(); delay(20); return; }
+  focusLoop();
   checkIdle(t.wasPressed() || t.isPressed());
-  if (t.wasPressed() && t.y < TOP_H) {
-    if (inside(tabCoach, t.x, t.y)) showScreen(Screen::Coach);
-    else if (inside(tabOva, t.x, t.y)) showScreen(Screen::OvaList);
-    else if (inside(tabHw, t.x, t.y)) showScreen(Screen::HwList);
-    else if (inside(tabPlan, t.x, t.y)) showScreen(Screen::Plan);
-    else if (inside(btnVolDown, t.x, t.y)) setVolume(volume - 32);
-    else if (inside(btnVolUp, t.x, t.y)) setVolume(volume + 32);
-  } else if (t.wasPressed() && screen == Screen::Game) {
-    gameTouch(t.x, t.y);
-  } else if (t.wasPressed() && (screen == Screen::OvaList || screen == Screen::OvaCard)) {
-    ovaTouch(t.x, t.y);
-  } else if (t.wasPressed() && screen != Screen::Coach) {
-    hwPlanTouch(t.x, t.y);
-  } else if (t.wasPressed()) {
-    if (inside(btnTalk, t.x, t.y)) startRecording();
-    else if (inside(btnStart, t.x, t.y)) { drawButton(btnStart, true); present(); sendButton(sessionActive ? "double" : "click"); delay(80); drawButton(btnStart); present(); }
-    else if (inside(btnEnd, t.x, t.y)) {
-      drawButton(btnEnd, true, "Avslutar ...");
-      present();
-      stopPlayback();
-      sendButton("long");
-      delay(150);
-      drawButton(btnEnd);
-      present();
-    }
-    else if (mode == Mode::Card && cardAnswered) { mode = Mode::Coach; dirtyMain = true; }
-  }
+
+  lv_timer_handler();
+  ui::Action act;
+  while (ui::poll(act)) onAction(act);
+
   if (recording) {
     pumpRecording();
-    bool released = t.isReleased() || t.wasReleased();
+    bool released = t.isReleased() || t.wasReleased() || !touchDown;
     if (released || millis() - recStarted > 30000) stopRecording(true);
   }
 
@@ -2772,7 +3169,7 @@ void loop() {
   pumpMelody();
   if (screen == Screen::OvaList && decksLoaded && !makeBusy.length() && !makeList.empty() && mkTopicsFor != makeList[makeIdx].id) {
     long id = makeList[makeIdx].id;
-    redraw();
+    redraw();   // "Letar delområden ..."
     JsonDocument t;
     mkTopics.clear();
     if (api("GET", "/api/homework/" + String(id) + "/topics", "", &t, 60000) == 200)
@@ -2789,7 +3186,7 @@ void loop() {
     for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == pendingHw) idx = i;
     if (idx >= 0) {
       makeIdx = idx;
-      if (pendingKind == "quiz" || pendingKind == "cloze") makeQuiz(pendingHw, pendingKind.c_str());
+      if (pendingKind == "quiz" || pendingKind == "cloze" || pendingKind == "vocab") makeQuiz(pendingHw, pendingKind.c_str());
       else startGame(pendingKind == "explain" ? 2 : pendingKind == "exam" ? 3 : pendingKind == "match" ? 4 : 5, pendingHw, makeList[idx].label);
     }
     dirtyAll = true;
@@ -2798,7 +3195,11 @@ void loop() {
   if (wsUp && !meLoaded) {
     meLoaded = true;
     JsonDocument me;
-    if (api("GET", "/api/chat/me", "", &me) == 200) pointsOn = me["pointsEnabled"] | false;
+    if (api("GET", "/api/chat/me", "", &me) == 200) {
+      pointsOn = me["pointsEnabled"] | false;
+      studentName = me["name"] | "";
+      Serial.printf("[pluggis] inloggad som %s (%s)\n", studentName.c_str(), (const char*)(me["deviceId"] | ""));
+    }
     dirtyTop = true;
   }
   tickPractice();
@@ -2812,27 +3213,16 @@ void loop() {
     if (lvl != batteryLevel || ch != batteryCharging) { batteryLevel = lvl; batteryCharging = ch; dirtyTop = true; }
   }
 
-  // Animationer och nedräkning
+  // Nedräkning och "fel"-blinkningar i spelen
   static uint32_t lastTick = 0;
   if (millis() - lastTick > 400) {
     lastTick = millis();
-    if (thinking && mode == Mode::Coach) dirtyDots = true;
     static bool wasWrong = false;
     bool wrongNow = millis() < gWrongUntil;
     if (wasWrong && !wrongNow && screen == Screen::Game) dirtyOva = true;
     wasWrong = wrongNow;
     if (sessionActive) dirtyTimer = true;
-    if (millis() - activeTickAt >= 1000) {
-      uint32_t steps = (millis() - activeTickAt) / 1000;
-      activeTickAt += steps * 1000;
-      if (!asleep && millis() - lastActivity < 120000) {
-        uint32_t before = activeSec / 60;
-        activeSec += steps;
-        if (!sessionActive && activeSec / 60 != before) dirtyTimer = true;
-      }
-    }
-    if (pointsBanner.length() && millis() > pointsBannerUntil) { pointsBanner = ""; dirtyMain = true; }
   }
-  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyDots || dirtyOva) redraw();
+  if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyOva) redraw();
   delay(2);
 }

@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dir: [tab5, tab5-lvgl]
+        dir: [tab5]
     name: ${{ matrix.dir }}
     defaults:
       run:

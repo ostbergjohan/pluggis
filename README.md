@@ -30,7 +30,7 @@ påminnelser, poäng och svensk uppläsning.
 | Planen från materialet: lästid per sida, bara läxor med innehåll planeras | ✅ |
 | Från planen: 🎧 Lyssna på läsmomentets sidor, ▶ Starta övningen (appen och Tab5) | ✅ |
 | Sidnummer i boken på materialet (Claude läser av dem, rättas för hand, uppslag 182–183) | ✅ |
-| Skrivbordsskärm M5Stack Tab5 med LVGL: Öva, Chat, Läxor, Plan, välj WiFi på skärmen ([firmware/tab5-lvgl](firmware/tab5-lvgl)) | ✅ |
+| Skrivbordsskärm M5Stack Tab5: Öva, Chat, Läxor, Plan, fokustimer, klocka på laddaren, WiFi och inställningar på skärmen ([firmware/tab5](firmware/tab5)) | ✅ |
 
 ## Så ser elevchatten ut
 
@@ -421,23 +421,79 @@ Coachens ADHD-anpassade svarsform bygger på reglerna i [i-have-adhd](https://gi
 
 ## Skrivbordsskärmen (M5Stack Tab5)
 
-En Tab5 på skrivbordet pratar med servern som elevchatten: **Öva** (sex övningar per läxa), **Chat** (håll in och
-prata med coachen), **Läxor** (lyssna på materialet) och **Plan** (bocka av, 🎧 Lyssna och ▶ Starta som i appen).
-Två versioner finns: [firmware/tab5-lvgl](firmware/tab5-lvgl) med gränssnitt i LVGL 9 (den som används) och den
-äldre [firmware/tab5](firmware/tab5). Båda byggs av GitHub Actions.
+En Tab5 på skrivbordet pratar med servern som elevchatten och når bara elevens egen data (den loggar in med
+elevens kod). Firmware i [firmware/tab5](firmware/tab5), gränssnittet ritat med LVGL 9 i loggans färger och
+typsnittet Atkinson Hyperlegible (byggt för att vara lättläst).
 
-- Kopiera `include/config.example.h` till `include/config.h` och fyll i serverns adress och **elevens kod**
-  (`PLUGGIS_CODE`, samma som i elevchatten). Koden räcker – Tab5 når bara den elevens data, precis som mobilen. Använd serverns
-  **IP-adress**, inte datorns namn – Tab5 kan oftast inte slå upp namn som `debian` på hemnätet.
-- **WiFi väljs på skärmen:** WiFi-ikonen uppe till höger → *Byt WiFi* (eller *Välj WiFi* på startskärmen). Tab5
-  söker, man trycker på ett nät och skriver lösenordet på skärmens tangentbord. Det sparas i Tab5 först när det
-  fungerar och går sedan före `config.h`. Bara 2,4 GHz.
-- **Felsökning:** tryck på WiFi-ikonen eller *Ansluter* för WiFi, IP, server, om chatten är uppe, senaste fel och
-  ledigt minne. Startskärmen visar själv varför den fastnar. Servern loggar nekade skärmar (fel elevkod) och okända
-  enhets-id (`docker compose logs pluggis | grep -i enhet`).
-- Skärmarna går att se utan Tab5: `firmware/tab5-lvgl/sim/run.sh` ritar dem till PNG.
+- **Öva** – läxor och prov till vänster, de sex övningarna till höger (Snabbquiz, Lucktext, Förklara/Glosförhör,
+  Testprov, Matcha par, Rätt ordning), *Öva på:* delområden. Frågorna läses upp; svar kan sägas med rösten.
+- **Chat** – coachen: svaret på skärmen och i högtalaren, *Håll in och prata*, timer för passet.
+- **Läxor** – allt material läses upp sida för sida, och var man är sparas (även i appen).
+- **Plan** – en dag i taget; bocka av, 🎧 Lyssna på läsmoment, ▶ Starta övningar, ⏱ fokustimer på vanliga moment.
+- **Fokustimer** (15/25/45 min eller momentets tid), **klocka på laddaren** med nästa prov och det som är kvar idag,
+  volym, batteri, och WiFi, server, elevkod, avstängningstid och ljusstyrka under ⚙.
 
-Mer i [firmware/tab5-lvgl/README.md](firmware/tab5-lvgl/README.md).
+Bilderna är ritade med simulatorn (`firmware/tab5/sim/run.sh`, testdata):
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tab5/start.png" width="300" alt="Startskärmen"><br><sub>Startskärmen</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/ova.png" width="300" alt="Öva: läxor och sex övningar"><br><sub>Öva: läxor och sex övningar</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/snabbquiz-svar.png" width="300" alt="Snabbquiz"><br><sub>Snabbquiz</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tab5/glosforhor.png" width="300" alt="Glosförhör (svara med rösten)"><br><sub>Glosförhör (svara med rösten)</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/forklara.png" width="300" alt="Förklara för Pluggis"><br><sub>Förklara för Pluggis</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/testprov.png" width="300" alt="Testprov"><br><sub>Testprov</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tab5/matcha.png" width="300" alt="Matcha par"><br><sub>Matcha par</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/ordning.png" width="300" alt="Rätt ordning"><br><sub>Rätt ordning</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/lyssna.png" width="300" alt="Lyssna på läxan sida för sida"><br><sub>Lyssna på läxan sida för sida</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tab5/plan.png" width="300" alt="Plan med Lyssna och Starta"><br><sub>Plan med Lyssna och Starta</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/chat.png" width="300" alt="Chat med coachen"><br><sub>Chat med coachen</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/fokustimer.png" width="300" alt="Fokustimer"><br><sub>Fokustimer</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/tab5/klocka.png" width="300" alt="Klockan på laddaren"><br><sub>Klockan på laddaren</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/wifi.png" width="300" alt="Välj WiFi på skärmen"><br><sub>Välj WiFi på skärmen</sub></td>
+    <td align="center"><img src="docs/screenshots/tab5/installningar.png" width="300" alt="Inställningar"><br><sub>Inställningar</sub></td>
+  </tr>
+</table>
+
+### Hårdvara som stöds
+
+Bara **M5Stack Tab5** (ESP32-P4), med eller utan batteri:
+
+| Modell | Vad |
+|---|---|
+| Tab5 Kit (K145) | Med löstagbart NP-F550-batteri – rekommenderas, går att ha på skrivbordet utan sladd |
+| Tab5 (C145) | Utan batteri – drivs via USB-C (eller ett batteri köpt separat) |
+
+| Del i Tab5 | Används av Pluggis |
+|---|---|
+| ESP32-P4 (två RISC-V-kärnor), 16 MB flash, 32 MB PSRAM | ✅ firmware och skärmbuffertar (i PSRAM) |
+| 5" IPS-skärm 1280×720 med pekskärm (GT911, eller ST7123/ST7121 på nyare exemplar) | ✅ via M5Unified/M5GFX |
+| ESP32-C6 för WiFi (2,4 GHz) | ✅ bara 2,4 GHz-nät |
+| Två mikrofoner (ES7210) | ✅ *Håll in och prata* / svara med rösten (talet tolkas lokalt på servern) |
+| Högtalare 1 W (ES8388 + NS4150B) | ✅ coachens röst, uppläsning, ljud vid rätt/fel |
+| Batteri och laddning (INA226) | ✅ batterinivå, laddning, avstängning, klockläget på laddaren |
+| Kamera 2 MP (SC2356), realtidsklocka (RX8130CE, tiden tas från nätet), microSD, USB-A, RS485, Grove/M5-Bus, rörelsesensor (BMI270), hörlursuttag | – används inte (läxor fotas med telefonen) |
+
+Andra ESP32-skärmar (Core2, CoreS3, Cardputer m.fl.) stöds inte: gränssnittet är byggt för Tab5:s 1280×720.
+
+### Komma igång med Tab5
+
+- Kopiera `include/config.example.h` till `include/config.h` och fyll i serverns **IP-adress** och **elevens kod**
+  (`PLUGGIS_CODE`, samma som i elevchatten). WiFi, server och kod kan också väljas på skärmen under ⚙ – det sparas
+  i Tab5 och går före `config.h`.
+- Flasha med PlatformIO: koppla USB-C, håll reset ~2 s tills den gröna lampan blinkar snabbt, `pio run -t upload`.
+- **Felsökning:** tryck på WiFi-ikonen eller *Ansluter* för WiFi, IP, server, chatten, senaste fel och minne.
+  Servern loggar nekade skärmar (`docker compose logs pluggis | grep -i enhet`).
+
+Mer i [firmware/tab5/README.md](firmware/tab5/README.md).
 
 ## Säkerhet och integritet
 
