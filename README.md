@@ -7,7 +7,9 @@
 An AI study buddy for students with ADHD: a student chat on the phone (as an app on the home screen) and a
 parent view in the browser. The brain is Claude, which coaches with questions instead of ready-made answers and
 helps the student get started, keep time and take one step at a time – with a study plan, flashcards,
-reminders, points and read-aloud.
+reminders, points and read-aloud. The coach's way of answering follows the ADHD-friendly rules of the
+[i-have-adhd](https://github.com/ayghri/i-have-adhd) Claude skill (next step first, one thing at a time, no filler),
+rewritten for a Swedish voice coach (see [Thanks](#thanks)).
 
 Pluggis was built for a Swedish school, so the app, the Tab5 screen and the prompts are in Swedish by default.
 A student can be switched to **English** (see [Language](#language)).
@@ -509,8 +511,9 @@ invoice is in the Claude Console.
 
 ## Thanks
 
-The coach's ADHD-friendly way of answering is based on the rules in [i-have-adhd](https://github.com/ayghri/i-have-adhd)
-(MIT), rewritten for a Swedish voice coach.
+The coach's ADHD-friendly way of answering is based on the rules in the Claude skill
+[i-have-adhd](https://github.com/ayghri/i-have-adhd) (MIT), rewritten for a Swedish voice coach in
+`src/main/resources/prompts/coach-system.md`.
 
 ## The desk screen (M5Stack Tab5)
 
