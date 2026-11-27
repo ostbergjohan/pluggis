@@ -158,7 +158,13 @@ static const Note MEL_TICK[] = {{880, 40}};
 // Pluggis egen lugna starttrudelutt (spelas en gång när Tab5 är redo)
 static void quietRestart();
 static void powerOffNow();
-static const Note MEL_HELLO[] = {{392, 220}, {494, 220}, {587, 260}, {0, 80}, {784, 520}};
+// Startljud: ackorden C – Em – Dm – C, lugnt brutna (en ton i taget)
+static const Note MEL_HELLO[] = {
+  {262, 170}, {330, 170}, {392, 300}, {0, 60},    // C
+  {330, 170}, {392, 170}, {494, 300}, {0, 60},    // Em
+  {294, 170}, {349, 170}, {440, 300}, {0, 60},    // Dm
+  {262, 170}, {330, 170}, {392, 170}, {523, 600}  // C
+};
 static const Note* mel = nullptr;
 static int melN = 0, melI = 0;
 static uint32_t melNext = 0;
@@ -3490,7 +3496,7 @@ void loop() {
   }
   if (booting) {
     // klar när WiFi är uppe och läxorna hämtats (eller det gått att svara att något är fel)
-    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; ui::hideBoot(); dirtyAll = true; playMelody(MEL_HELLO, 5); }
+    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; ui::hideBoot(); dirtyAll = true; playMelody(MEL_HELLO, sizeof(MEL_HELLO) / sizeof(MEL_HELLO[0])); }
     else {
       static uint32_t lastBootText = 0;
       if (millis() - lastBootText > 500) { lastBootText = millis(); drawBoot(); }
