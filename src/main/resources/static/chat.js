@@ -525,10 +525,39 @@ function setThinking(on) {
 }
 function scrollDown() { const l = $('#msgs'); if (l) requestAnimationFrame(() => { l.scrollTop = l.scrollHeight; }); }
 
+// Aktiv tid i den här sessionen: appen syns och eleven har tryckt/skrivit de senaste 2 min, eller ljud spelas.
+// Efter 30 min utan att appen används börjar en ny session.
+const Active = {
+  seconds: 0, last: Date.now(),
+  tick() {
+    const now = Date.now();
+    if (now - this.last > 30 * 60000) this.seconds = 0;
+    const listening = Practice.passive && Practice.passive();
+    if (listening || (document.visibilityState === 'visible' && now - this.last < 120000)) {
+      const before = Math.floor(this.seconds / 60);
+      this.seconds++;
+      if (Math.floor(this.seconds / 60) !== before && !S.session) paintStatus();
+    }
+  },
+};
+setInterval(() => Active.tick(), 1000);
+['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => {
+  if (Date.now() - Active.last > 30 * 60000) { Active.seconds = 0; if (!S.session) paintStatus(); }
+  Active.last = Date.now();
+}, { passive: true, capture: true }));
+
 function paintStatus() {
   const box = $('#status');
   if (!box) return;
-  if (!S.session) { box.hidden = true; return; }
+  if (!S.session) {
+    // Inget pass igång: visa aktiv tid sedan appen öppnades
+    const min = Math.floor(Active.seconds / 60);
+    box.hidden = false;
+    box.classList.add('idle');
+    box.replaceChildren(`🕒 Aktiv tid nu: ${min < 1 ? 'under 1' : min} min`);
+    return;
+  }
+  box.classList.remove('idle');
   box.hidden = false;
   const min = Math.max(0, Math.ceil(S.session.left / 60));
   const pct = S.session.total ? Math.max(0, Math.round(100 * S.session.left / S.session.total)) : 0;

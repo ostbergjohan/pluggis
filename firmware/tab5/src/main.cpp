@@ -31,6 +31,7 @@
 #endif
 
 static uint32_t lastActivity = 0;
+static uint32_t activeSec = 0, activeTickAt = 0;   // aktiv tid sedan Tab5 startade/vaknade
 static bool pendingPractice = false;   // coachen bad om en övning (startas från loop())
 static String pendingKind;
 static long pendingHw = 0;
@@ -442,8 +443,17 @@ static void drawTimer() {
   int y = H - BTN_H - 16 - TIMER_H - 6;
   int x = 48, w = W - 96;
   if (!sessionActive) {
-    if (timerDrawn != -1) d.fillRect(0, y - 4, W, TIMER_H + 8, BG);
-    timerDrawn = -1;
+    // Inget pass igång: visa hur länge Tab5 använts nu (räknas när någon tryckt de senaste 2 min)
+    int mins = activeSec / 60;
+    if (timerDrawn == -100 - mins) return;
+    timerDrawn = -100 - mins;
+    d.fillRect(0, y - 4, W, TIMER_H + 8, BG);
+    d.drawRoundRect(x, y, w, TIMER_H, 18, PANEL);
+    d.setFont(F_MID);
+    d.setTextColor(MUTED);
+    d.setTextDatum(middle_left);
+    d.drawString(mins < 1 ? "Aktiv tid nu: under 1 min" : "Aktiv tid nu: " + String(mins) + " min", x + 22, y + TIMER_H / 2);
+    d.setTextDatum(top_left);
     return;
   }
   int left = timerLeftNow();
@@ -2623,7 +2633,7 @@ static void goToSleep() {
 static void checkIdle(bool touched) {
   if (PLUGGIS_IDLE_MINUTES <= 0) return;
   if (asleep) {
-    if (touched) { asleep = false; M5.Display.setBrightness(200); markActive(); dirtyAll = true; }
+    if (touched) { asleep = false; activeSec = 0; M5.Display.setBrightness(200); markActive(); dirtyAll = true; }
     return;
   }
   bool busy = sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
@@ -2770,6 +2780,15 @@ void loop() {
     if (wasWrong && !wrongNow && screen == Screen::Game) dirtyOva = true;
     wasWrong = wrongNow;
     if (sessionActive) dirtyTimer = true;
+    if (millis() - activeTickAt >= 1000) {
+      uint32_t steps = (millis() - activeTickAt) / 1000;
+      activeTickAt += steps * 1000;
+      if (!asleep && millis() - lastActivity < 120000) {
+        uint32_t before = activeSec / 60;
+        activeSec += steps;
+        if (!sessionActive && activeSec / 60 != before) dirtyTimer = true;
+      }
+    }
     if (pointsBanner.length() && millis() > pointsBannerUntil) { pointsBanner = ""; dirtyMain = true; }
   }
   if (dirtyAll || dirtyTop || dirtyMain || dirtyTimer || dirtyDots || dirtyOva) redraw();
