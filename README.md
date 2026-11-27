@@ -11,6 +11,21 @@ reminders, points and read-aloud. The coach's way of answering follows the ADHD-
 [i-have-adhd](https://github.com/ayghri/i-have-adhd) Claude skill (next step first, one thing at a time, no filler),
 rewritten for a Swedish voice coach (see [Thanks](#thanks)).
 
+## How it works
+
+1. **Homework and tests come in** from the school's InfoMentor calendar, a screenshot of the weekly plan, a file or
+   pasted text.
+2. **Photograph the pages from the book** (or upload Word, PDF or a screenshot) on the homework or test. Claude reads
+   them – text, book page numbers, sections and concepts – and they become the **material**: what's included, what
+   gets read aloud, and what every exercise is made from.
+3. **Pluggis makes the plan – when and what to study.** From the material and the date, Claude spreads the work over
+   the student's study days, within the daily max: which pages to read which day ("Läs s. 40–45"), practice sessions
+   in between, repetition and a mock test before the test, with everything new done 1–2 days before. One block per
+   subject per day, 15–25 minute tasks, a buffer, and what's behind is replanned every night.
+4. **The student follows the plan** in the app or on the Tab5: 🎧 listen to the reading tasks, ▶ start the practice
+   sessions, tick things off – with the coach to get started, reminders at study time, points and a weekly report for
+   the parent.
+
 Pluggis was built for a Swedish school, so the app, the Tab5 screen and the prompts are in Swedish by default.
 A student can be switched to **English** (see [Language](#language)).
 
@@ -22,6 +37,8 @@ A student can be switched to **English** (see [Language](#language)).
 
 | Part | Status |
 |---|---|
+| **Study plan: when and what to study**, day by day from the material and the date, within the daily max, replanned every night | ✅ |
+| **Photos of the book's pages as material** (also Word, PDF, screenshots): read by Claude with page numbers, read aloud, used for every exercise | ✅ |
 | Coach with Claude + tools (start/end sessions, save/list/complete homework) | ✅ |
 | Study sessions with a timer owned by the backend | ✅ |
 | Photo → Claude extracts tasks as JSON → saved as homework | ✅ |
