@@ -1428,6 +1428,10 @@ function subscriptionBox(st, refresh) {
 /** 5-timmarsgränsen och veckogränsen i procent, med när de nollställs. */
 function usageBars(u) {
   if (!u) return null;
+  if (u.error === 'token') {
+    return h('p', { class: 'item-meta' }, 'Procenten för 5 timmar och vecka går inte att läsa med en token från "claude setup-token" (den får bara köra Claude). ',
+      'Den visas här när Claude Code själv rapporterar den, vilket brukar ske när gränsen närmar sig. Hela bilden finns i Claude-appen under Inställningar → Användning.');
+  }
   if (u.error && !u.fiveHour && !u.sevenDay) {
     return h('p', { class: 'item-meta' }, `Procent av gränsen går inte att hämta just nu (${u.error}).`);
   }

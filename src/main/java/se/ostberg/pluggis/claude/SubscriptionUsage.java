@@ -43,7 +43,9 @@ public class SubscriptionUsage {
         if (token == null || token.isBlank()) {
             return null;
         }
-        if (!force && cached != null && cachedAt != null && cachedAt.plus(CACHE).isAfter(Instant.now())) {
+        // nekad token frågas om högst var sjätte timme (den blir inte behörig av sig själv)
+        Duration keep = cached != null && "token".equals(cached.get("error")) ? Duration.ofHours(6) : CACHE;
+        if (!force && cached != null && cachedAt != null && cachedAt.plus(keep).isAfter(Instant.now())) {
             return cached;
         }
         Map<String, Object> out = new LinkedHashMap<>();
@@ -53,7 +55,10 @@ public class SubscriptionUsage {
                     .header("anthropic-beta", "oauth-2025-04-20")
                     .header("User-Agent", "pluggis")
                     .GET().build(), HttpResponse.BodyHandlers.ofString());
-            if (r.statusCode() != 200) {
+            if (r.statusCode() == 401 || r.statusCode() == 403) {
+                // token från "claude setup-token" får bara köra Claude, inte läsa användningen
+                out.put("error", "token");
+            } else if (r.statusCode() != 200) {
                 out.put("error", "svarade " + r.statusCode());
             } else {
                 parse(mapper.readTree(r.body()), out);

@@ -267,6 +267,8 @@ I18N.add({
   'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
   'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
   'Inställningar': 'Settings',
+  'Procenten för 5 timmar och vecka går inte att läsa med en token från "claude setup-token" (den får bara köra Claude).': 'The 5-hour and weekly percentages can\'t be read with a token from "claude setup-token" (it can only run Claude).',
+  'Den visas här när Claude Code själv rapporterar den, vilket brukar ske när gränsen närmar sig. Hela bilden finns i Claude-appen under Inställningar → Användning.': 'It shows here when Claude Code itself reports it, which usually happens as the limit gets close. The full picture is in the Claude app under Settings → Usage.',
   'Procent av gränsen går inte att hämta just nu ({0}).': "The percentage of the limit can't be fetched right now ({0}).",
   'nollställs {0}': 'resets {0}', '5 timmar': '5 hours', 'Vecka': 'Week', 'Vecka (Opus)': 'Week (Opus)',
   'Claude och kostnad ›': 'Claude and cost ›',
