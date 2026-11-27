@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/brand/icon-512.png" width="160" alt="Pluggis logo"></p>
+
 # Pluggis
 
 [![build](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/build.yml) [![docker](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml/badge.svg)](https://github.com/ostbergjohan/pluggis/actions/workflows/docker.yml)
