@@ -1,0 +1,314 @@
+/* Föräldravyn på engelska (se i18n.js). Nyckeln är den svenska texten som den visas, {0} … är det som varierar. */
+I18N.add({
+  // toppen och menyn
+  'Översikt': 'Overview', 'Läxor & prov': 'Homework & tests', 'Eleven': 'Student', 'System': 'System',
+  'Vilken elev du tittar på': 'Which student you are looking at', 'Språk i föräldravyn': 'Language of the parent view',
+  'Tab5-status': 'Tab5 status', 'Elev {0}': 'Student {0}', 'elev': 'student', 'elev {0}': 'student {0}',
+  ' – läxor, prov, kalender, plan, material och poäng här gäller bara den här eleven.': ' – homework, tests, calendar, plan, material and points here only apply to this student.',
+  'Byt till {0}': 'Switch to {0}',
+  'Kunde inte ladda': "Couldn't load", 'Inte inloggad – ladda om sidan och logga in.': 'Not logged in – reload the page and log in.',
+  'Inte inloggad – ladda om sidan och logga in': 'Not logged in – reload the page and log in',
+  'Okänt fel': 'Unknown error', 'Fel: {0}': 'Error: {0}',
+  '○ Tab5 av': '○ Tab5 off', '● Tab5 ansluten': '● Tab5 connected',
+  '{0}s Tab5 är ansluten': "{0}'s Tab5 is connected",
+  '{0}s Tab5 är inte ansluten just nu (avstängd, sover eller utan WiFi). Detaljer finns under ⚙ på Tab5.':
+    "{0}'s Tab5 isn't connected right now (switched off, asleep or without WiFi). Details under ⚙ on the Tab5.",
+
+  // inloggning
+  'Lösenord': 'Password', 'Föräldravyn i Pluggis.': 'The Pluggis parent view.',
+  'Glömt lösenordet? Sätt ett nytt med PLUGGIS_ADMIN_PASSWORD i .env och starta om servern.':
+    'Forgot the password? Set a new one with PLUGGIS_ADMIN_PASSWORD in .env and restart the server.',
+  'Välj lösenord': 'Choose a password',
+  'Föräldravyn har inget lösenord än. Lägg till en rad i .env bredvid docker-compose.yml:':
+    "The parent view doesn't have a password yet. Add a line to .env next to docker-compose.yml:",
+  'PLUGGIS_ADMIN_PASSWORD=ditt-lösenord': 'PLUGGIS_ADMIN_PASSWORD=your-password',
+  'Kör sedan': 'Then run',
+  'och ladda om sidan. Minst 8 tecken. Raden kan tas bort efteråt – lösenordet sparas krypterat i Pluggis.':
+    'and reload the page. At least 8 characters. The line can be removed afterwards – the password is stored hashed in Pluggis.',
+  'Ladda om': 'Reload', 'Logga in först.': 'Log in first.', 'Fel lösenord': 'Wrong password',
+
+  // översikt
+  'Läxa {0}': 'Homework {0}',
+  'vad som ingår saknas – ingen plan än': "what's included is missing – no plan yet",
+  '{0} {1} efter i planen': '{0} {1} behind in the plan',
+  'moment': 'tasks',
+  'Flytta till en annan dag, eller planera om.': 'Move to another day, or replan.',
+  'Till planen': 'To the plan', 'Behöver dig': 'Needs you',
+  'Pluggtid 14 dagar': 'Study time 14 days', '{0} pass och övningar': '{0} sessions and exercises',
+  'Aktiva dagar': 'Active days', '{0} av 14': '{0} of 14',
+  'Besvarade frågor': 'Answered questions', 'inga än': 'none yet', '{0} % rätt': '{0} % right',
+  'Poäng denna vecka': 'Points this week', 'Intjänat denna vecka': 'Earned this week',
+  'Kommande läxor och prov': 'Upcoming homework and tests', 'Inget inom tre veckor.': 'Nothing within three weeks.',
+  'Senaste passen och övningarna': 'Latest sessions and exercises', 'Inget de senaste två veckorna.': 'Nothing in the last two weeks.',
+  'Pluggminuter per dag': 'Study minutes per day', 'min': 'min',
+  'Besvarade frågor per dag': 'Answered questions per day', 'rätt': 'right',
+  'Inget planerat.': 'Nothing planned.', 'Klicka för att ångra': 'Click to undo', 'Bocka av': 'Tick off',
+  'Bra jobbat! +3 poäng': 'Well done! +3 points',
+  'Ångra att "{0}" är gjort? Poängen för det tas bort.': 'Undo that "{0}" is done? The points for it are removed.',
+  'Ångrat – momentet är inte gjort': "Undone – the task isn't done",
+
+  // läxor och prov
+  'Prenumerera på InfoMentors kalender, lägg till för hand, klistra in text eller ladda upp skärmdumpar, Word-filer och PDF:er.':
+    "Subscribe to InfoMentor's calendar, add by hand, paste text or upload screenshots, Word files and PDFs.",
+  'Högst {0} filer åt gången – tar de första {1}': 'At most {0} files at a time – taking the first {1}',
+  '+ Ny läxa eller prov': '+ New homework or test', '📅 Kalender': '📅 Calendar', 'Visa klara': 'Show done',
+  '📎 Ladda upp fil': '📎 Upload file', '📋 Klistra in': '📋 Paste',
+  'Inga läxor här än.': 'No homework here yet.', 'Inget kommande.': 'Nothing upcoming.',
+  'Markera {0} passerade som klara?': 'Mark {0} past items as done?', '{0} markerade som klara': '{0} marked as done',
+  '✓ Markera {0} som klara': '✓ Mark {0} as done',
+  'Ny läxa eller prov': 'New homework or test', 'Ange en titel': 'Enter a title', 'Sparad och planerad': 'Saved and planned',
+  'Ny läxa eller prov – läs av allt i filen': 'New homework or test – read everything in the file',
+  'Gör också flashkort av materialet': 'Also make flashcards from the material',
+  'Vad är det här?': 'What is this?',
+  'Koppla till en läxa eller ett prov: Claude läser vad som ingår (avsnitt, sidor, begrepp), lägger in det och gör om planen.':
+    "Attach to homework or a test: Claude reads what's included (sections, pages, concepts), adds it and redoes the plan.",
+  'La till {0} st{1}': 'Added {0}{1}',
+  'Klistra in veckoplanen eller veckobrevet från InfoMentor…': 'Paste the weekly plan or the weekly letter from InfoMentor…',
+  'Klistra in från InfoMentor': 'Paste from InfoMentor', 'Läs av med Claude': 'Read with Claude',
+  'T.ex. NO-prov fotosyntes': 'E.g. science test photosynthesis',
+  'Läxa / inlämning': 'Homework / assignment', 'Prov / förhör': 'Test / quiz', 'Annat (räknas inte)': "Other (doesn't count)",
+  'Ta bort datumet': 'Remove the date',
+  'Vad ingår? T.ex. "Utkik kap 4 s. 40–72 + begreppslistan"': 'What\'s included? E.g. "Utkik ch. 4 p. 40–72 + the list of concepts"',
+  'Ett per rad (valfritt) – avsnitt eller delsteg': 'One per line (optional) – sections or steps',
+  'Ämne': 'Subject', 'Titel': 'Title', 'Typ': 'Type', 'Datum': 'Date', 'Vikt': 'Weight', 'Delsteg': 'Steps',
+  'Datum (inlämning/prov)': 'Date (hand-in/test)',
+  'Hur viktigt det är. Högre vikt ger mer tid och fler repetitioner i planen.': 'How important it is. Higher weight gives more time and more repetitions in the plan.',
+  'Vad som ingår': "What's included", 'Tryck för att fylla i vad som ingår': "Tap to fill in what's included",
+  '✎ fyll i vad som ingår': "✎ fill in what's included",
+  '➕ Lägg till fler sidor': '➕ Add more pages',
+  'Claude läser {0} filer…': 'Claude is reading {0} files…', 'Claude läser materialet…': 'Claude is reading the material…',
+  'Ny plan gjord': 'New plan made', 'Markerad som klar': 'Marked as done', '✓ Klar': '✓ Done',
+  'Öppnad igen': 'Reopened', 'Öppna igen': 'Reopen', 'Planera': 'Plan', 'Ändra': 'Edit', 'Material': 'Material',
+  'Ta bort "{0}" och dess plan?': 'Delete "{0}" and its plan?',
+  'Inget material än. Ladda upp en skärmdump, Word-fil, PDF eller text så läser Claude vad som ingår.':
+    "No material yet. Upload a screenshot, Word file, PDF or text and Claude reads what's included.",
+  'Sida {0}{1} ·': 'Page {0}{1} ·',
+  'Sidnummer finns nu på {0} av {1} delar': 'Page numbers are now on {0} of {1} parts',
+  'Hittade inga sidnummer på fotona – ange dem för hand': "Didn't find any page numbers on the photos – enter them by hand",
+  '🔢 Läs av sidnummer': '🔢 Read page numbers',
+  'Claude läser sidnumret på fotona. Rätta eller fyll i för hand vid varje sida (uppslag: t.ex. 182–183).':
+    'Claude reads the page number on the photos. Correct or fill in by hand on each page (spread: e.g. 182–183).',
+  'Första sidan i boken': 'First page in the book', 'Sista sidan ska vara större än första': 'The last page must be greater than the first',
+  'Sida i boken:': 'Page in the book:',
+  'Ingen plan än – fyll i vad som ingår och tryck Planera.': "No plan yet – fill in what's included and press Plan.",
+  'Ange datum och vad som ingår, tryck sedan Planera.': "Enter the date and what's included, then press Plan.",
+
+  // planen
+  '🔄 Planera om allt': '🔄 Replan everything', 'Hoppades över:': 'Skipped:', 'Gick inte:': 'Failed:',
+  '⏳ Planerar om {0} av {1}…': '⏳ Replanning {0} of {1}…', '⏳ Planerar om…': '⏳ Replanning…',
+  'Planerade om {0} av {1}': 'Replanned {0} of {1}', 'Inget att planera om': 'Nothing to replan',
+  'Tre veckor framåt. Bocka av när det är gjort. Dra ⠿ för att flytta ett moment till en annan dag eller ändra ordning (eller ⋯ i mobilen). "Planera om allt" gör om planerna med max minuter per dag och pluggdagar.':
+    'Three weeks ahead. Tick off when done. Drag ⠿ to move a task to another day or change the order (or ⋯ on a phone). "Replan everything" redoes the plans with the max minutes per day and the study days.',
+  '✋ Flyttat för hand:': '✋ Moved by hand:',
+  '. Dessa planeras inte om automatiskt på natten – tryck Planera på läxan om Pluggis ska ta över igen.':
+    ". These aren't replanned automatically at night – press Plan on the homework if Pluggis should take over again.",
+  'Dra för att flytta': 'Drag to move', 'Flytta till': 'Move to', '· {0} min': '· {0} min',
+  'inget planerat – släpp här': 'nothing planned – drop here', '– idag': '– today', '{0} / {1} min': '{0} / {1} min',
+  'Dra till en dag nedan, eller tryck ⋯ och välj dag.': 'Drag to a day below, or tap ⋯ and choose a day.',
+  'Inget planerat. Gå till Läxor & prov, fyll i vad som ingår och tryck Planera.': "Nothing planned. Go to Homework & tests, fill in what's included and press Plan.",
+  '▸ {0} – {1}: {2} dagar utan plugg': '▸ {0} – {1}: {2} days without studying',
+
+  // kostnad
+  'Kostnad': 'Cost',
+  'Uppskattat från tokens som Claude rapporterar, med API-prislistan och 1 USD = {0} kr. Den exakta fakturan finns i Claude Console.':
+    'Estimated from the tokens Claude reports, with the API price list and 1 USD = {0} SEK. The exact invoice is in the Claude Console.',
+  'Sparat via abonnemanget': 'Saved via the subscription', 'hade kostat med API-nyckel': 'would have cost with an API key',
+  'Azure-röst': 'Azure voice', '{0} av {1} gratis tecken': '{0} of {1} free characters',
+  'via abonnemanget (kostar inget extra)': 'via the subscription (no extra cost)', '· högsta dagen {0}': '· highest day {0}',
+  'Inga anrop ännu den här månaden.': 'No calls yet this month.', 'Per elev i {0}': 'Per student in {0}',
+  'Priser som används': 'Prices used', 'Cache läs': 'Cache read', 'Cache skriv': 'Cache write',
+  'Denna månad': 'This month', 'Idag': 'Today', 'Per funktion': 'Per function', 'Modell': 'Model', 'Anrop': 'Calls',
+  'USD per miljon token. Ändras under pluggis.costs i application.yml, växelkursen med PLUGGIS_USD_SEK. Kostnadsloggningen startade när den här fliken kom till – äldre anrop finns inte med.':
+    'USD per million tokens. Changed under pluggis.costs in application.yml, the exchange rate with PLUGGIS_USD_SEK. Cost logging started when this tab was added – older calls are not included.',
+  'Allt betalas per token. Snabbast, strömmad röst, inga gränser från abonnemanget.': 'Everything is paid per token. Fastest, streamed voice, no limits from the subscription.',
+  'Rösten ({0}) via API-nyckeln, foto, planer, flashkort och material via abonnemanget. Faller tillbaka till API-nyckeln om abonnemanget inte går.':
+    "The voice ({0}) via the API key, photos, plans, flashcards and material via the subscription. Falls back to the API key if the subscription doesn't work.",
+  'Allt via Claude Code på ditt Pro-abonnemang. Kostar inget extra, men rösten blir någon sekund långsammare och delar gränser med din egen användning.':
+    'Everything via Claude Code on your Pro subscription. No extra cost, but the voice gets about a second slower and shares limits with your own usage.',
+  'Bara API-nyckel': 'API key only', 'Hybrid': 'Hybrid', 'Bara abonnemanget': 'Subscription only',
+  'Claude: API eller abonnemang': 'Claude: API or subscription', 'Claude körs nu: {0}': 'Claude runs now: {0}',
+  '(som i .env)': '(as in .env)', '❌ hittas inte': '❌ not found', '✅ finns': '✅ found', 'Senaste fel': 'Latest error',
+  'Föll tillbaka till API-nyckeln': 'Fell back to the API key', '{0} gånger sedan start': '{0} times since start',
+  'Valet sparas och gäller direkt, även efter omstart. Hur mycket av Pro-abonnemangets gräns som gått åt syns inte här – det ser du i Claude-appen under Inställningar → Användning.':
+    "The choice is saved and applies immediately, also after a restart. How much of the Pro subscription's limit has been used isn't shown here – you see that in the Claude app under Settings → Usage.",
+
+  // kortlekar
+  'Öva – kort och quiz': 'Practise – cards and quizzes', 'eller på Tab5': 'or on the Tab5',
+  'Skapa kortlekar för hand, låt Claude göra dem från ett ämne eller ett foto, och öva här, i elevchatten{0}.':
+    'Create decks by hand, let Claude make them from a topic or a photo, and practise here, in the student chat{0}.',
+  '"{0}": {1} kort': '"{0}": {1} cards', '📎 Från fil (foto, Word, PDF)': '📎 From a file (photo, Word, PDF)',
+  '✨ Generera med Claude': '✨ Generate with Claude', '+ Skriv egen lek': '+ Write your own deck', 'Inga kortlekar än.': 'No decks yet.',
+  'Att repetera': 'To repeat', 'Börja om: alla kort till fack 1': 'Start over: all cards to box 1',
+  'Nollställa framstegen i "{0}"? Alla kort börjar om i fack 1.': 'Reset the progress in "{0}"? All cards start over in box 1.',
+  'Kortleken börjar om': 'The deck starts over', 'Ta bort leken "{0}"?': 'Delete the deck "{0}"?',
+  'T.ex. Engelska glosor kapitel 3, eller Fotosyntesen': 'E.g. English vocabulary chapter 3, or Photosynthesis',
+  'Valfritt: klistra in ordlistan eller anteckningarna som korten ska bygga på': 'Optional: paste the word list or the notes the cards should be based on',
+  'Område': 'Topic', 'Antal kort': 'Number of cards', 'Ange område eller material': 'Enter a topic or material',
+  'Ange namn och minst ett kort (fram ; bak)': 'Enter a name and at least one card (front ; back)',
+  '{0} · fel alternativ: {1}': '{0} · wrong options: {1}', 'Ledtråd': 'Hint', '{0} – {1} kort': '{0} – {1} cards',
+  '+ Lägg till': '+ Add', 'Öva: {0}': 'Practise: {0}', '⚡ Gör quiz': '⚡ Make quiz',
+
+  // poäng
+  'Poäng och veckopeng': 'Points and pocket money',
+  '⏸ Poäng är avstängt för den här eleven – visas inte i chatten{0}. Slå på under Inställningar → Eleven och coachen.':
+    "⏸ Points are off for this student – not shown in the chat{0}. Turn on under Student → Coach.",
+  '{0} poäng = 1 kr': '{0} points = 1 SEK', 'Ingen växelkurs satt': 'No exchange rate set', '· tak {0} per vecka': '· cap {0} per week',
+  '· ändras med PLUGGIS_SEK_PER_POINT och PLUGGIS_WEEKLY_CAP_SEK': '· changed with PLUGGIS_SEK_PER_POINT and PLUGGIS_WEEKLY_CAP_SEK',
+  'vecka från {0}': 'week from {0}', 'Intjänat': 'Earned', 'Kvar att betala': 'Left to pay', 'Betalat': 'Paid',
+  'T.ex. Bra jobbat på provet!': 'E.g. Well done on the test!', 'Ge bonuspoäng': 'Give bonus points',
+  'Senaste poängen': 'Latest points', 'Ta bort de här poängen': 'Remove these points', 'poäng': 'points',
+  'Ta bort {0} poäng ({1})?': 'Remove {0} points ({1})?', 'Inga poäng än.': 'No points yet.',
+  'vecka {0}': 'week {0}', 'Inga utbetalningar än.': 'No payouts yet.', 'Utbetalningar': 'Payouts', 'Markera som betald': 'Mark as paid',
+  'ALLA poäng (även streaken)': 'ALL points (including the streak)', 'den här veckans poäng': "this week's points",
+  'och utbetalningarna': 'and the payouts', 'Nollställa {0}{1}? Det går inte att ångra.': "Reset {0}{1}? It can't be undone.",
+  'Nollställt – {0} poänghändelser borttagna': 'Reset – {0} point events removed', 'Nollställ': 'Reset',
+  'Till exempel efter att ha testat, eller för att börja om en ny period. Enskilda poäng tar du bort med ✕ ovan.':
+    'For example after testing, or to start a new period. Remove individual points with ✕ above.',
+  'Ta även bort utbetalningarna för samma period': 'Also remove the payouts for the same period',
+  'Nollställ veckans poäng': "Reset this week's points", 'Nollställ alla poäng': 'Reset all points',
+
+  // logg
+  'Logg': 'Log', 'Sök i loggen…': 'Search the log…',
+  'Backendens senaste 2 000 loggrader, uppdateras varannan sekund. Ljudtjänstens logg syns med docker compose logs speech.':
+    "The backend's latest 2,000 log lines, updated every other second. The speech service's log is shown with docker compose logs speech.",
+  'Nivå': 'Level', '↓ Till slutet': '↓ To the end', 'Pausa': 'Pause',
+
+  // kalendrar
+  'Kalender': 'Calendar', 'Skolans kalender (InfoMentor)': "The school's calendar (InfoMentor)", 'Hämtar…': 'Fetching…',
+  '📂 Välj .ics-fil': '📂 Choose .ics file', 'utanför tidsfönstret': 'outside the time window',
+  'ser inte ut som läxa/prov': "doesn't look like homework/a test", 'Händelse': 'Event', 'Inget valt': 'Nothing selected',
+  ', planerade om {0}': ', replanned {0}',
+  'InfoMentor: öppna kalendern, välj prenumerera/exportera och kopiera länken (webcals://…). Google Kalender: Inställningar → kalendern → "Hemlig adress i iCal-format". Länken är personlig – behandla den som ett lösenord.':
+    'InfoMentor: open the calendar, choose subscribe/export and copy the link (webcals://…). Google Calendar: Settings → the calendar → "Secret address in iCal format". The link is personal – treat it like a password.',
+  'Bara läxor och prov (hoppa över studiedagar, lov m.m.)': 'Only homework and tests (skip study days, holidays etc.)',
+  'Klistra in en länk': 'Paste a link', 'Förhandsgranska': 'Preview',
+  'Sparad – importerade {0}, hoppade över {1}{2}': 'Saved – imported {0}, skipped {1}{2}', 'Spara och synka': 'Save and sync',
+  'Synkad – {0} nya, {1} ändrade{2}': 'Synced – {0} new, {1} changed{2}', '↻ Synka nu': '↻ Sync now',
+  'Inga dubbletter hittades': 'No duplicates found', 'Sluta prenumerera? Redan importerade läxor ligger kvar.': 'Unsubscribe? Already imported homework stays.',
+  'Sluta prenumerera': 'Unsubscribe', 'Ta bort dubbletter': 'Remove duplicates',
+  'Eller importera en fil': 'Or import a file', 'Du väljer själv vilka händelser som importeras.': 'You choose which events are imported.',
+  'Ingen prenumeration än.': 'No subscription yet.', 'Importera': 'Import',
+  'Senast synkad {0}: {1} läxor och prov ({2} nya, {3} ändrade), {4} annat överhoppat.':
+    'Last synced {0}: {1} homework and tests ({2} new, {3} changed), {4} other skipped.',
+  'Läxor och prov hämtas härifrån till Pluggis. Nedan: Pluggis plan ut till Google Kalender.': 'Homework and tests are fetched from here into Pluggis. Below: the Pluggis plan out to Google Calendar.',
+  'Google Kalender': 'Google Calendar', 'Google Kalender för {0}': 'Google Calendar for {0}',
+  'Planen läggs in som ett pass per dag vid pluggtiden, med dagens moment i beskrivningen och en notis när det är dags. Avbockningar syns i kalendern efter en liten stund.':
+    "The plan is added as one session per day at the study time, with the day's tasks in the description and a notification when it's time. Ticked-off tasks show up in the calendar after a little while.",
+  'Inte påslaget än. Skapa ett tjänstekonto i Google Cloud, ladda ner JSON-nyckeln och lägg den som': 'Not turned on yet. Create a service account in Google Cloud, download the JSON key and put it as',
+  'bredvid docker-compose.yml. Starta sedan om (': 'next to docker-compose.yml. Then restart (',
+  '). Se README → Google Kalender.': '). See README → Google Calendar.',
+  'xxxx@group.calendar.google.com eller elevens gmail-adress': "xxxx@group.calendar.google.com or the student's Gmail address",
+  '1. Dela kalendern med den här adressen (”Gör ändringar i händelser”)': '1. Share the calendar with this address ("Make changes to events")',
+  '2. Kalender-id (Inställningar för kalendern → Integrera kalender)': '2. Calendar ID (Settings for the calendar → Integrate calendar)',
+  'Synkat: {0} nya, {1} ändrade, {2} borttagna': 'Synced: {0} new, {1} changed, {2} removed',
+  'Koppla och synka': 'Connect and sync', '🔄 Synka nu': '🔄 Sync now', 'Koppla bort': 'Disconnect',
+  'Närmaste passen i kalendern': 'The next sessions in the calendar',
+  'Inga kommande pass i kalendern – finns det en plan de närmaste tre veckorna?': 'No upcoming sessions in the calendar – is there a plan for the next three weeks?',
+
+  // planering
+  'Planering': 'Planning', 'Mån': 'Mon', 'Tis': 'Tue', 'Ons': 'Wed', 'Tor': 'Thu', 'Fre': 'Fri', 'Lör': 'Sat', 'Sön': 'Sun',
+  'T.ex. efter mellanmålet': 'E.g. after the snack', 'Planering för {0}': 'Planning for {0}',
+  'Max plugg per dag (alla läxor och prov tillsammans):': 'Max study per day (all homework and tests together):',
+  'Pluggdagar': 'Study days', 'Pluggtid': 'Study time',
+  'För årskurs 8 brukar 20–45 minuter vara lagom en vanlig dag. Inför prov kan planen lägga mer på de sista dagarna, men aldrig över max.':
+    'For year 8, 20–45 minutes is usually about right on an ordinary day. Before a test the plan can put more on the last days, but never over the max.',
+  'När (om-så-plan)': 'When (if-then plan)',
+  'Bestäm gärna tillsammans med eleven: "När jag ätit mellanmål, då tar jag fram boken." Påminnelsen kommer vid pluggtiden och en knuff två timmar senare; passet i Google Kalender läggs då.':
+    'Preferably decide together with the student: "When I\'ve had my snack, I get the book out." The reminder comes at the study time and a nudge two hours later; the session in Google Calendar is put then.',
+  'Gör om befintliga planer med de nya inställningarna': 'Redo existing plans with the new settings',
+  'Välj minst en pluggdag': 'Choose at least one study day',
+  'Sparat – planerna görs om (tar en liten stund)': 'Saved – the plans are being redone (takes a little while)',
+  'Sparat – gäller nya planer': 'Saved – applies to new plans',
+
+  // coachen
+  'Coachen': 'Coach', 'Eleven och coachen': 'The student and the coach',
+  'Valfritt. T.ex. "Han gillar fotboll – använd gärna fotbollsexempel. Påminn om att dricka vatten."':
+    'Optional. E.g. "He likes football – feel free to use football examples. Remind him to drink water."',
+  'Coachen för {0}': 'The coach for {0}', 'Elevens namn': "The student's name", 'Coachens ton': "The coach's tone",
+  'T.ex. Fred': 'E.g. Fred', 'Egna önskemål till coachen': 'Your own wishes for the coach',
+  'Läggs till efter coachens fasta regler. Coachen ger fortfarande inga färdiga svar, oavsett vad som står här.':
+    "Added after the coach's fixed rules. The coach still doesn't give ready-made answers, whatever is written here.",
+  'Språk för eleven': "The student's language", 'Svenska': 'Svenska (Swedish)', 'English': 'English',
+  'Coachen, planer och övningar, elevchatten{0} och rösten. Svenska är standard.': 'The coach, plans and exercises, the student chat{0} and the voice. Swedish is the default.',
+  ', Tab5': ', Tab5',
+  'Använd poäng': 'Use points',
+  'Av: poängen syns inte i elevchatten{0}, och coachen pratar inte om poäng eller veckopeng. De räknas ändå i bakgrunden, så inget försvinner om du slår på igen.':
+    "Off: the points aren't shown in the student chat{0}, and the coach doesn't talk about points or pocket money. They are still counted in the background, so nothing is lost if you turn them on again.",
+  'Sparat – gäller från nästa svar': 'Saved – applies from the next reply', 'Sparat': 'Saved',
+
+  // röst
+  'Röst': 'Voice', 'Hämtar röster…': 'Fetching voices…',
+  'Ljudtjänsten är inte påslagen. Starta med docker compose (eller sätt PLUGGIS_SPEECH_URL) så kan du välja röst här.':
+    "The speech service isn't on. Start with docker compose (or set PLUGGIS_SPEECH_URL) and you can choose a voice here.",
+  'Hej! Jag är Pluggis. Ska vi ta första uppgiften tillsammans?': 'Hej! Jag är Pluggis. Ska vi ta första uppgiften tillsammans?',
+  'Kunde inte läsa upp': "Couldn't read aloud", '▶ Lyssna': '▶ Listen', 'Rösten sparad': 'The voice is saved',
+  'och Tab5': 'and the Tab5', 'Gäller elevchatten med rösten "Pluggis"{0}.': 'Applies to the student chat with the voice "Pluggis"{0}.',
+  'Tempo': 'Speed', 'Provmening': 'Test sentence',
+
+  // system: elever, anslutning, Tab5
+  'Elever och koder': 'Students and codes', 'Claude och kostnad': 'Claude and cost', 'Anslutning': 'Connection', 'Elever': 'Students',
+  'Nytt lösenord (minst 8 tecken)': 'New password (at least 8 characters)', 'Samma igen': 'Same again',
+  'Föräldravyn loggar in med lösenord och kommer ihåg det i 30 dagar per webbläsare.': 'The parent view logs in with a password and remembers it for 30 days per browser.',
+  'Byt lösenord': 'Change password', 'Lösenorden är inte lika': "The passwords don't match", 'Lösenordet är bytt': 'The password is changed',
+  'Spara lösenord': 'Save password', 'Logga ut': 'Log out', 'Logga ut i alla webbläsare och telefoner?': 'Log out in all browsers and phones?',
+  'Logga ut överallt': 'Log out everywhere',
+  'Tab5 (hårdvara)': 'Tab5 (hardware)', 'Visa Tab5: anslutningsstatus uppe till höger': 'Show Tab5: connection status top right',
+  'Dolt så länge ni bara använder elevchatten i mobilen. Inget slutar fungera – det syns bara inte. Gäller den här webbläsaren.':
+    "Hidden as long as you only use the student chat on the phone. Nothing stops working – it just isn't shown. Applies to this browser.",
+  'Kod (mobilchatten och Tab5)': 'Code (phone chat and Tab5)', 'Kod till mobilchatten': 'Code for the phone chat',
+  'Namn': 'Name', 'Länk med kod kopierad': 'Link with code copied', '📋 Kopiera länk': '📋 Copy link', '📤 Dela': '📤 Share',
+  'Din kod till Pluggis: {0}': 'Your Pluggis code: {0}',
+  'Ny kod för {0}? Den gamla slutar fungera.': 'New code for {0}? The old one stops working.', 'Ny kod': 'New code', '🔄 Ny kod': '🔄 New code',
+  'Ta bort {0} med alla läxor, planer och flashkort? Det går inte att ångra.': "Delete {0} with all homework, plans and flashcards? It can't be undone.",
+  'Borttagen': 'Deleted', 'Namn, t.ex. Lisa': 'Name, e.g. Lisa',
+  'Varje elev har egna läxor, plan, flashkort, kalender, ton och poäng. Välj elev uppe till vänster.':
+    'Each student has their own homework, plan, flashcards, calendar, tone and points. Choose the student top left.',
+  'Eleven öppnar': 'The student opens',
+  'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
+  'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
+  'Inställningar': 'Settings',
+
+  // fler texter
+  'Annat': 'Other', 'Fyll i': 'Fill in', 'Totalt {0}': 'Total {0}', 'Obetalt {0}': 'Unpaid {0}', 'Pass': 'Session',
+  '📋 Klistra in text': '📋 Paste text', 'Kommande ({0})': 'Upcoming ({0})', 'Utan datum ({0})': 'Without a date ({0})',
+  'Visa': 'Show', 'Passerat ({0})': 'Past ({0})', 'Sparad': 'Saved', 'Ladda upp: {0}': 'Upload: {0}',
+  'Ladda upp {0} filer': 'Upload {0} files', 'T.ex. NO': 'E.g. Science', '– litet': '– small', '– normalt': '– normal',
+  '– mycket viktigt': '– very important', 'Avsnitt / delsteg': 'Sections / steps', 'Skicka {0} {1}': 'Send {0} {1}',
+  'fil': 'file', 'filer': 'files',
+  '🗓 Planera': '🗓 Plan', 'Del {0} ·': 'Part {0} ·', 'Sista sidan (uppslag)': 'Last page (spread)',
+  'Sidorna sparade': 'The pages are saved', 'Bild': 'Image', 'Flytta': 'Move', 'Upp': 'Up', 'Ner': 'Down',
+  'Ligger efter': 'Behind', 'Betalt i {0}': 'Paid in {0}', 'Senaste 30 dagarna': 'The last 30 days',
+  'betalt via API': 'paid via the API', 'Token in': 'Tokens in', 'Token ut': 'Tokens out', 'Abonnemang': 'Subscription',
+  'Per funktion i {0}': 'Per function in {0}', 'Funktion': 'Function', 'Elev': 'Student', 'In': 'In', 'Ut': 'Out',
+  'API-nyckel (ANTHROPIC_API_KEY)': 'API key (ANTHROPIC_API_KEY)', 'Claude Code-token (CLAUDE_CODE_OAUTH_TOKEN)': 'Claude Code token (CLAUDE_CODE_OAUTH_TOKEN)',
+  'Claude Code-programmet': 'The Claude Code program', 'Anrop via abonnemanget sedan start': 'Calls via the subscription since start',
+  'Senast lyckat via abonnemanget': 'Last success via the subscription',
+  'Lek': 'Deck', 'Kort': 'Cards', 'Sitter': 'Learned', 'Generera kortlek': 'Generate a deck', 'Generera': 'Generate',
+  'T.ex. Tyska glosor v.48': 'E.g. German vocabulary week 48', 'Egen kortlek': 'Your own deck', 'Framsida': 'Front', 'Baksida': 'Back',
+  'En rad per kort: framsida ; baksida ; ledtråd (valfri)\nhund ; der Hund\nkatt ; die Katze ; feminin': 'One line per card: front ; back ; hint (optional)\ndog ; der Hund\ncat ; die Katze ; feminine',
+  'Utbetalt': 'Paid out', 'Anledning': 'Reason', 'Bonus utdelad': 'Bonus given', 'Ge bonus': 'Give bonus',
+  'Markera utbetalning': 'Record a payout', 'Belopp (tomt = hela det obetalda)': 'Amount (empty = all that is unpaid)',
+  'Utbetalt via webben': 'Paid via the web', 'Utbetalning sparad': 'Payout saved', 'Markera utbetalt': 'Mark as paid out',
+  'Borttaget': 'Removed', '{0} rader · uppdaterad {1}': '{0} lines · updated {1}', 'Rensa vyn': 'Clear the view',
+  'Kalendern var tom.': 'The calendar was empty.', 'finns redan – uppdateras': 'already exists – will be updated',
+  'Importerade {0}{1}': 'Imported {0}{1}', 'Importera valda': 'Import selected', 'Prenumerera (synkas varje timme)': 'Subscribe (synced every hour)',
+  'Tog bort {0} dubbletter': 'Removed {0} duplicates', '🧹 Rensa dubbletter': '🧹 Remove duplicates',
+  'Prenumerationen borttagen': 'The subscription is removed', 'Senaste synk misslyckades: {0}': 'The last sync failed: {0}',
+  'Prenumeration sparad – synkas varje timme.': 'Subscription saved – synced every hour.', 'Inloggning': 'Login',
+  'Minst 8 tecken': 'At least 8 characters', 'Kopierad': 'Copied',
+  'Koppla bort kalendern? Kommande pluggpass tas bort ur den.': 'Disconnect the calendar? Upcoming study sessions are removed from it.',
+  // från servern: coachens toner och kostnadens funktioner
+  'Lugn och peppande (standard)': 'Calm and encouraging (default)', 'Rak och kort': 'Direct and short',
+  'Lekfull med humor': 'Playful with humour', 'Som en äldre kompis': 'Like an older friend', 'Som en idrottscoach': 'Like a sports coach',
+  'Lugn, varm och uppmuntrande. Korta meningar, beröm ansträngning, aldrig tjat.': 'Calm, warm and encouraging. Short sentences, praise effort, never nag.',
+  'Rak och kortfattad. Säg direkt vad nästa steg är, inget fluff, men alltid vänlig.': "Direct and brief. Say straight away what the next step is, no fluff, but always friendly.",
+  'Lekfull med lite humor och glimt i ögat – ett skämt ibland är ok – men håll fokus på uppgiften.': 'Playful with a little humour and a twinkle in the eye – a joke now and then is ok – but keep the focus on the task.',
+  'Som en lite äldre kompis eller storasyskon: avslappnad, vardaglig svenska, på samma nivå som eleven.': 'Like a slightly older friend or big sibling: relaxed, everyday language, on the same level as the student.',
+  'Som en idrottscoach: energisk och peppig, sätt små delmål och fira när de klaras.': 'Like a sports coach: energetic and upbeat, set small goals and celebrate when they are reached.',
+  'Coachen (röst och chatt)': 'The coach (voice and chat)', 'Foto av läxa': 'Photo of homework', 'Material (bilder, dokument)': 'Material (images, documents)',
+  'Läxa från text': 'Homework from text', 'Flashkort': 'Flashcards', 'Flashkort från bild': 'Flashcards from an image',
+  'Flashkort från dokument': 'Flashcards from a document', 'Flashkort, rättning': 'Flashcards, corrections', 'Snabbquiz och lucktext': 'Quick quiz and fill in the gap',
+  'Förklara för Pluggis': 'Explain to Pluggis', 'Förklara för Pluggis, svar': 'Explain to Pluggis, answers', 'Testprov, rättning': 'Mock test, marking',
+  'Delområden att öva på': 'Sub-topics to practise',
+  'ledig dag': 'day off', 'Bortkopplad': 'Disconnected', 'Senast synkad {0}': 'Last synced {0}', '– standard': '– default', 'Laddar…': 'Loading…',
+});

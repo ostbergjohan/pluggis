@@ -99,8 +99,8 @@ async function run(fn, button, okMessage) {
   }
 }
 
-const SV_DAY = new Intl.DateTimeFormat('sv-SE', { weekday: 'short', day: 'numeric', month: 'numeric' });
-const SV_LONG = new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+const SV_DAY = new Intl.DateTimeFormat(I18N.locale(), { weekday: 'short', day: 'numeric', month: 'numeric' });
+const SV_LONG = new Intl.DateTimeFormat(I18N.locale(), { weekday: 'long', day: 'numeric', month: 'long' });
 
 function parseDay(iso) {
   if (!iso) return null;
@@ -122,10 +122,10 @@ function daysUntil(iso) {
 function relDays(iso) {
   const n = daysUntil(iso);
   if (n === null) return '';
-  if (n === 0) return 'idag';
-  if (n === 1) return 'imorgon';
-  if (n < 0) return `${-n} dagar sedan`;
-  return `om ${n} dagar`;
+  if (n === 0) return I18N.t('idag');
+  if (n === 1) return I18N.t('imorgon');
+  if (n < 0) return I18N.t(`${-n} dagar sedan`);
+  return I18N.t(`om ${n} dagar`);   // står inne i längre texter, så översätts här
 }
 function kr(v) {
   const n = Number(v || 0);
@@ -294,7 +294,7 @@ views.oversikt = async (main) => {
     const when = new Date(r.startedAt);
     return h('div', { class: 'check' },
       h('div', { class: 'grow' }, h('div', { class: 'task' }, task || 'Pass'),
-        h('div', { class: 'item-meta' }, `${when.toLocaleDateString('sv-SE', { weekday: 'short', day: 'numeric', month: 'numeric' })} ${when.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}`)),
+        h('div', { class: 'item-meta' }, `${when.toLocaleDateString(I18N.locale(), { weekday: 'short', day: 'numeric', month: 'numeric' })} ${when.toLocaleTimeString(I18N.locale(), { hour: '2-digit', minute: '2-digit' })}`)),
       h('span', { class: 'item-meta' }, `${r.minutes} min`));
   });
   const labels = stats.perDay.map(d => fmtDay(d.day).replace('.', ''));
@@ -914,7 +914,7 @@ function claudeBackendPanel(st) {
     ['claude-code', 'Bara abonnemanget', 'Allt via Claude Code på ditt Pro-abonnemang. Kostar inget extra, men rösten blir någon sekund långsammare och delar gränser med din egen användning.'],
   ];
   const ok = (b) => b ? '✅' : '❌';
-  const when = (iso) => iso ? new Date(iso).toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–';
+  const when = (iso) => iso ? new Date(iso).toLocaleString(I18N.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–';
   const panel = h('section', { class: 'panel' }, h('h2', {}, 'Claude: API eller abonnemang'));
   const list = h('div', { class: 'mode-list' });
   for (const [id, title, desc] of MODES) {
@@ -1587,6 +1587,8 @@ function studentPanel() {
       placeholder: 'Valfritt. T.ex. "Han gillar fotboll – använd gärna fotbollsexempel. Påminn om att dricka vatten."' }, s.extra || '');
     const who = (state.students.find(x => String(x.id) === String(state.studentId)) || {}).name;
     const usePoints = h('input', { type: 'checkbox', checked: s.pointsEnabled !== false });
+    const language = h('select', {}, h('option', { value: 'sv' }, 'Svenska'), h('option', { value: 'en' }, 'English'));
+    language.value = s.language === 'en' ? 'en' : 'sv';
     panel.replaceChildren(h('h2', {}, `Coachen för ${who || s.name || 'eleven'}`),
       h('div', { class: 'row' },
         h('div', {}, h('label', {}, 'Elevens namn'), name),
@@ -1594,11 +1596,13 @@ function studentPanel() {
       toneHelp,
       h('label', {}, 'Egna önskemål till coachen'), extra,
       h('p', { class: 'item-meta' }, 'Läggs till efter coachens fasta regler. Coachen ger fortfarande inga färdiga svar, oavsett vad som står här.'),
+      h('div', { class: 'row', style: 'margin-top:12px' }, h('div', {}, h('label', {}, 'Språk för eleven'), language)),
+      h('p', { class: 'item-meta' }, `Coachen, planer och övningar, elevchatten${T5(', Tab5')} och rösten. Svenska är standard.`),
       h('label', { style: 'display:flex;gap:8px;align-items:center;margin-top:12px' }, usePoints, 'Använd poäng'),
       h('p', { class: 'item-meta' }, `Av: poängen syns inte i elevchatten${T5(' eller på Tab5')}, och coachen pratar inte om poäng eller veckopeng. De räknas ändå i bakgrunden, så inget försvinner om du slår på igen.`),
       h('div', { class: 'toolbar', style: 'margin-top:12px' },
         h('button', { class: 'primary', onclick: async (e) => {
-          const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value, pointsEnabled: usePoints.checked } }), e.target, 'Sparat – gäller från nästa svar');
+          const r = await run(() => api('/api/student', { method: 'PUT', body: { name: name.value, tone: tone.value, extra: extra.value, pointsEnabled: usePoints.checked, language: language.value } }), e.target, 'Sparat – gäller från nästa svar');
           if (r) s = r;
         } }, 'Spara')));
   })();
@@ -1827,5 +1831,16 @@ authStatus().then(st => (st.loggedIn ? startAdmin() : showLogin(st)));
     try { localStorage.setItem('pluggis.theme', t); } catch { /* bara den här gången */ }
     paint(t);
     toast(names[t]);
+  });
+})();
+
+// ---- Språk i föräldravyn (svenska/engelska), sparas i webbläsaren. Elevens språk väljs under Coachen. ----
+(function langToggle() {
+  const btn = document.getElementById('langBtn');
+  if (!btn || !window.I18N) return;
+  btn.textContent = I18N.lang === 'en' ? 'EN' : 'SV';
+  btn.addEventListener('click', () => {
+    const next = I18N.lang === 'en' ? 'sv' : 'en';
+    if (!I18N.setLang(next)) location.reload();   // datum och allt ritas om på det nya språket
   });
 })();

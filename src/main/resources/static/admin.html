@@ -26,6 +26,7 @@
       <a href="#system" data-view="system">System</a>
     </nav>
     <button class="ghost small theme-btn" id="theme" title="Ljust eller mörkt">◐</button>
+    <button class="ghost small theme-btn" id="langBtn" title="Språk i föräldravyn">SV</button>
     <div class="device-status" id="deviceStatus" title="Tab5-status" data-tab5 hidden>●</div>
   </header>
 
@@ -33,6 +34,10 @@
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
+  <script>window.I18N_KEY = 'pluggis.admin.lang';</script>
+  <script src="i18n.js"></script>
+  <script src="i18n-chat.js"></script>
+  <script src="i18n-admin.js"></script>
   <script src="subjects.js"></script>
   <script src="app.js"></script>
 </body>

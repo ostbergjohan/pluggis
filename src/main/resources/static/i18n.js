@@ -10,7 +10,7 @@
  * Valet sparas i webbläsaren så att inloggningen visas på rätt språk nästa gång.
  */
 (function () {
-  const KEY = 'pluggis.lang';
+  const KEY = window.I18N_KEY || 'pluggis.lang';   // föräldravyn har ett eget val
   let lang = 'sv';
   try { lang = localStorage.getItem(KEY) === 'en' ? 'en' : 'sv'; } catch (e) { /* privat läge */ }
 
