@@ -242,6 +242,15 @@ views.oversikt = async (main) => {
     loadHomework(false),
   ]);
   const pointsOn = student.pointsEnabled !== false;
+  // Claude-abonnemanget nära eller vid gränsen: syns först på översikten
+  api('/api/claude').then(st => {
+    const sub = st.subscription || {};
+    if (st.mode !== 'api' && (sub.reached || sub.near)) {
+      const box = subscriptionBox(st, () => route());
+      const link = h('a', { href: '#system/kostnad', style: 'margin-left:6px' }, 'Claude och kostnad ›');
+      main.insertBefore(h('div', {}, box.firstChild, link), main.children[1] || null);
+    }
+  }).catch(() => {});
 
   // --- Behöver dig: sådant som väntar på en förälder
   const open = state.homework.filter(x => x.status === 'OPEN' && x.kind !== 'OTHER');
@@ -930,17 +939,7 @@ function claudeBackendPanel(st) {
   }
   const cc = st.claudeCode || {};
   // Abonnemangets gräns, så långt Claude Code berättar det
-  const sub = st.subscription || {};
-  const typeName = { five_hour: '5-timmarsgränsen', seven_day: 'veckogränsen', seven_day_opus: 'veckogränsen (Opus)' }[sub.type] || 'gränsen';
-  const resets = sub.resetsAt ? new Date(sub.resetsAt).toLocaleString(I18N.locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null;
-  const subLine = sub.reached
-    ? h('div', { class: 'notice bad', style: 'margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--bad-bg, #fde8e7);color:#8a1f1a' },
-        h('strong', {}, `⛔ Abonnemangets ${typeName} är nådd`), resets ? ` – släpper ${resets}.` : ' – när den släpper vet vi inte än.',
-        st.apiKey && st.mode === 'hybrid' ? ' API-nyckeln tar jobben så länge.' : st.apiKey ? ' Välj Hybrid nedan så tar API-nyckeln jobben så länge.' : ' Eleven får veta det i appen och på Tab5.')
-    : sub.status && sub.status !== 'unknown'
-      ? h('p', { class: 'item-meta' }, sub.status === 'allowed_warning' ? `⚠️ Nära ${typeName}` : '✅ Abonnemanget går',
-          sub.utilization != null ? ` · ${Math.round(sub.utilization * 100)} % använt` : '', resets ? ` · släpper/nollställs ${resets}` : '')
-      : null;
+  const subLine = st.mode === 'api' ? null : subscriptionBox(st, () => route());
   panel.append(subLine, list,
     st.problems && st.problems.length ? h('p', { style: 'color:var(--red)' }, '⚠️ ', st.problems.join(' ')) : null,
     h('table', { style: 'margin-top:10px' }, h('tbody', {},
@@ -1398,6 +1397,34 @@ views.system = async (main) => {
 };
 
 /** Säkerhetskopior av databasen: varje natt och med knappen, de senaste sparas på servern. */
+/** Läget för Claude-abonnemanget: nådd, nära, ok eller okänt – med "Kolla nu". */
+function subscriptionBox(st, refresh) {
+  const sub = st.subscription || {};
+  const typeName = { five_hour: '5-timmarsgränsen', seven_day: 'veckogränsen', seven_day_opus: 'veckogränsen (Opus)' }[sub.type] || 'gränsen';
+  const resets = sub.resetsAt ? new Date(sub.resetsAt).toLocaleString(I18N.locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+  const used = sub.utilization != null ? ` · ${Math.round(sub.utilization * 100)} % använt` : '';
+  const checked = sub.updatedAt ? ` · kollat ${new Date(sub.updatedAt).toLocaleString(I18N.locale(), { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
+  const style = (bg, fg) => `margin:10px 0;padding:10px 12px;border-radius:10px;background:${bg};color:${fg}`;
+  let box;
+  if (sub.reached) {
+    box = h('div', { style: style('#fde8e7', '#8a1f1a') }, h('strong', {}, `⛔ Abonnemangets ${typeName} är nådd`),
+      resets ? ` – släpper ${resets}.` : ' – när den släpper vet vi inte än.',
+      st.apiKey && st.mode === 'hybrid' ? ' API-nyckeln tar jobben så länge.' : st.apiKey ? ' Välj Hybrid nedan så tar API-nyckeln jobben så länge.' : ' Eleven får veta det i appen och på Tab5.');
+  } else if (sub.near) {
+    box = h('div', { style: style('#fff4dc', '#7a5200') }, h('strong', {}, `⚠️ Nära ${typeName}`), used, resets ? ` · nollställs ${resets}` : '',
+      st.apiKey && st.mode !== 'hybrid' ? '. Välj Hybrid så tar API-nyckeln över om gränsen nås.' : '.');
+  } else if (sub.status && sub.status !== 'unknown') {
+    box = h('p', { class: 'item-meta' }, '✅ Abonnemanget går', used, resets ? ` · nollställs ${resets}` : '', checked);
+  } else {
+    box = h('p', { class: 'item-meta' }, 'Abonnemangets läge är inte känt än – det syns efter nästa anrop via abonnemanget, eller tryck Kolla nu.');
+  }
+  const btn = h('button', { class: 'small', style: 'margin-left:8px', onclick: async (e) => {
+    const r = await run(() => api('/api/claude/subscription/check', { method: 'POST' }), e.target, 'Kollat');
+    if (r) refresh();
+  } }, '🔄 Kolla nu');
+  return h('div', {}, box, h('div', { class: 'item-meta' }, 'Ett litet anrop via abonnemanget visar läget just nu.', btn));
+}
+
 function backupPanel() {
   const panel = h('section', { class: 'panel' }, h('h2', {}, 'Säkerhetskopior'), h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
   const fmt = (iso) => new Date(iso).toLocaleString(I18N.locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });

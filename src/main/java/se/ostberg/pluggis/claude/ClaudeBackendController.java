@@ -2,6 +2,7 @@ package se.ostberg.pluggis.claude;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -41,6 +42,28 @@ public class ClaudeBackendController {
     }
 
     public record ModeRequest(String mode) {
+    }
+
+    /**
+     * Ett litet anrop via abonnemanget (Haiku, några ord) för att få veta läget för gränsen nu. Kostar en
+     * mycket liten del av abonnemanget.
+     */
+    @PostMapping("/subscription/check")
+    public ResponseEntity<Map<String, Object>> checkSubscription() {
+        if ("api".equals(runner.mode()) || !runner.hasToken()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Abonnemanget används inte (läget är bara API-nyckel eller token saknas)"));
+        }
+        try {
+            var req = claude.newRequest(claude.config().coach(), "Svara bara med ordet ok.");
+            req.put("max_tokens", 5);
+            var msg = req.putArray("messages").addObject();
+            msg.put("role", "user");
+            msg.put("content", "ok?");
+            runner.run(req);
+        } catch (RuntimeException e) {
+            // gränsen nådd eller annat fel: läget är uppdaterat ändå (eller felet syns i statusen)
+        }
+        return ResponseEntity.ok(status());
     }
 
     @PutMapping

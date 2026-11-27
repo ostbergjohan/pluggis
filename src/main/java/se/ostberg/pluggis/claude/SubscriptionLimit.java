@@ -41,6 +41,49 @@ public final class SubscriptionLimit {
     private SubscriptionLimit() {
     }
 
+    /** Anropas när läget ändras (sparas så att det finns kvar efter omstart, och loggas). */
+    private static volatile java.util.function.Consumer<Map<String, Object>> listener;
+
+    static void onChange(java.util.function.Consumer<Map<String, Object>> l) {
+        listener = l;
+    }
+
+    private static String lastSignature;
+
+    private static void changed() {
+        String sig = status + "|" + type + "|" + resetsAt + "|" + (utilization == null ? "" : Math.round(utilization * 100));
+        if (sig.equals(lastSignature)) {
+            return;
+        }
+        lastSignature = sig;
+        var l = listener;
+        if (l != null) {
+            l.accept(snapshot());
+        }
+    }
+
+    /** Senast kända läget efter en omstart. */
+    static void restore(Map<String, Object> m) {
+        if (m == null) {
+            return;
+        }
+        Object s = m.get("status");
+        status = s == null ? "unknown" : s.toString();
+        type = m.get("type") == null ? null : m.get("type").toString();
+        utilization = m.get("utilization") instanceof Number n ? n.doubleValue() : null;
+        resetsAt = parseInstant(m.get("resetsAt"));
+        limitedAt = parseInstant(m.get("limitedAt"));
+        updatedAt = parseInstant(m.get("updatedAt"));
+    }
+
+    private static Instant parseInstant(Object o) {
+        try {
+            return o == null ? null : Instant.parse(o.toString());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     /** En {@code rate_limit_event}-rad från Claude Code. */
     static void update(JsonNode event) {
         JsonNode info = event.has("rate_limit_info") ? event.path("rate_limit_info") : event;
@@ -64,6 +107,7 @@ public final class SubscriptionLimit {
         } else if (s.startsWith("allowed")) {
             limitedAt = null;
         }
+        changed();
     }
 
     /** Ett svar som lyckades: gränsen är inte nådd (längre). */
@@ -71,8 +115,11 @@ public final class SubscriptionLimit {
         if (limitedAt != null) {
             limitedAt = null;
             status = "allowed";
+        } else if ("unknown".equals(status)) {
+            status = "allowed";   // svaret kom, även om Claude Code inte skickade någon gränsrad
         }
         updatedAt = Instant.now();
+        changed();
     }
 
     /** Gränsen är nådd. {@code text} är Claude Codes eget svar (kan innehålla när den släpper). */
@@ -84,6 +131,7 @@ public final class SubscriptionLimit {
         if (r != null) {
             resetsAt = r;
         }
+        changed();
         return new Reached(message());
     }
 
@@ -123,6 +171,16 @@ public final class SubscriptionLimit {
         return v > 100_000_000_000L ? Instant.ofEpochMilli(v) : Instant.ofEpochSecond(v);
     }
 
+    /** Närmar sig gränsen (Claude Code varnar, eller över 75 % använt)? */
+    public static boolean nearNow() {
+        if (reachedNow()) {
+            return false;
+        }
+        Instant r = resetsAt;
+        boolean stillValid = r == null || r.isAfter(Instant.now());
+        return stillValid && ("allowed_warning".equals(status) || (utilization != null && utilization >= 0.75));
+    }
+
     /** Är gränsen nådd just nu (och inte redan släppt)? */
     public static boolean reachedNow() {
         Instant l = limitedAt;
@@ -157,6 +215,7 @@ public final class SubscriptionLimit {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("status", status);
         m.put("reached", reachedNow());
+        m.put("near", nearNow());
         m.put("type", type);
         m.put("utilization", utilization);
         m.put("resetsAt", resetsAt == null ? null : resetsAt.toString());
@@ -188,5 +247,7 @@ public final class SubscriptionLimit {
         resetsAt = null;
         limitedAt = null;
         updatedAt = null;
+        lastSignature = null;
+        listener = null;
     }
 }

@@ -39,4 +39,21 @@ class SubscriptionLimitTest {
         SubscriptionLimit.ok();
         assertThat(SubscriptionLimit.reachedNow()).isFalse();
     }
+
+    @Test
+    void naraGransenOchSparas() throws Exception {
+        java.util.List<java.util.Map<String, Object>> saved = new java.util.ArrayList<>();
+        SubscriptionLimit.onChange(saved::add);
+        SubscriptionLimit.update(new ObjectMapper().readTree(
+                "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed_warning\",\"rateLimitType\":\"seven_day\",\"utilization\":0.82}}"));
+        assertThat(SubscriptionLimit.nearNow()).isTrue();
+        assertThat(saved).hasSize(1);
+        SubscriptionLimit.update(new ObjectMapper().readTree(
+                "{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allowed_warning\",\"rateLimitType\":\"seven_day\",\"utilization\":0.82}}"));
+        assertThat(saved).hasSize(1);   // samma läge sparas inte igen
+        var snap = SubscriptionLimit.snapshot();
+        SubscriptionLimit.reset();
+        SubscriptionLimit.restore(snap);
+        assertThat(SubscriptionLimit.nearNow()).isTrue();
+    }
 }
