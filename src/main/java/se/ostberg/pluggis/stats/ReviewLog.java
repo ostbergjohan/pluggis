@@ -28,6 +28,13 @@ public class ReviewLog {
 
     private Instant reviewedAt;
 
+    /** Kortets fråga och svar (korten tas bort efter några timmar – veckorapporten behöver texten). */
+    @jakarta.persistence.Column(length = 200)
+    private String front;
+
+    @jakarta.persistence.Column(length = 120)
+    private String back;
+
     protected ReviewLog() {
     }
 
@@ -38,6 +45,20 @@ public class ReviewLog {
         this.correct = correct;
         this.reviewedOn = reviewedOn;
         this.reviewedAt = reviewedAt;
+    }
+
+    public ReviewLog withText(String front, String back) {
+        this.front = front == null ? null : front.length() > 200 ? front.substring(0, 200) : front;
+        this.back = back == null ? null : back.length() > 120 ? back.substring(0, 120) : back;
+        return this;
+    }
+
+    public String getFront() {
+        return front;
+    }
+
+    public String getBack() {
+        return back;
     }
 
     public Long getId() { return id; }

@@ -662,6 +662,7 @@ function exerciseFor(task) {
   const t = (task || '').toLowerCase();
   if (t.includes('testprov')) return 'exam';
   if (t.includes('öva i pluggis') || t.includes('blandade övningar') || t.includes('övningspass')) return 'mix';
+  if (t.includes('glosförhör') || t.includes('förhör glosorna')) return 'vocab';
   if (t.includes('quiz')) return 'quiz';
   if (t.includes('lucktext')) return 'cloze';
   if (t.includes('förklara för pluggis') || t.includes('förklara i pluggis')) return 'explain';
@@ -695,11 +696,11 @@ function planAction(item) {
 // ---- Övningspass från planen: "Gör ett snabbquiz, 15 min" → timern går i 15 min och övningarna byts av
 // (först den i planen, sedan matcha par, lucktext, rätt ordning, Förklara …). När tiden är slut bockas momentet av.
 const Run = { on: false };
-const RUN_NAMES = { quiz: 'Snabbquiz', match: 'Matcha par', cloze: 'Lucktext', order: 'Rätt ordning', explain: 'Förklara' };
+const RUN_NAMES = { quiz: 'Snabbquiz', match: 'Matcha par', cloze: 'Lucktext', order: 'Rätt ordning', explain: 'Förklara', vocab: 'Glosförhör' };
 
 function runStart(item, first) {
   if (Run.on) runStop(true);
-  const order = ['quiz', 'match', 'cloze', 'order', 'explain'];
+  const order = ['quiz', 'match', 'cloze', 'order', LANG_HW.test(item.task || '') ? 'vocab' : 'explain'];
   const start = first === 'mix' || !order.includes(first) ? 'quiz' : first;
   Object.assign(Run, { on: true, item, homeworkId: item.homeworkId, kinds: [start, ...order.filter(k => k !== start)], next: 1,
     endsAt: Date.now() + Math.max(5, Math.min(60, item.minutes || 15)) * 60000 });
@@ -974,7 +975,12 @@ function quizMaker(list) {
   const sel = h('select', { class: 'quiz-sel' }, list.map(x => h('option', { value: x.id }, `${x.kind === 'TEST' ? 'Prov' : 'Läxa'}: ${x.title}${x.dueDate ? ' · ' + rel(x.dueDate) : ''}`)));
   const go = (mode) => (e) => makeQuiz(Number(sel.value), mode, e.target);
   const focus = focusRow(() => Number(sel.value));
-  sel.addEventListener('change', () => focus.paint());
+  // Glosförhör: bara för språkläxor (spanska, engelska, glosor …)
+  const isLang = () => { const x = list.find(y => String(y.id) === sel.value); return !!x && LANG_HW.test(`${x.subject || ''} ${x.title || ''}`); };
+  const vocabBtn = h('button', { class: 'quiz-btn', onclick: go('vocab') }, '🗣️', h('span', {}, 'Glosförhör'), h('small', {}, 'hör ordet, svara'));
+  const paintVocab = () => { vocabBtn.hidden = !isLang(); };
+  sel.addEventListener('change', () => { focus.paint(); paintVocab(); });
+  paintVocab();
   return h('div', { class: 'box quiz-maker' },
     h('div', { class: 'quiz-title' }, 'Ny övning'), sel, focus.el,
     h('div', { class: 'quiz-btns six' },
@@ -983,19 +989,22 @@ function quizMaker(list) {
       h('button', { class: 'quiz-btn', onclick: (e) => explainFor(Number(sel.value), e.target) }, '🧠', h('span', {}, 'Förklara'), h('small', {}, 'lär ut till Pluggis')),
       h('button', { class: 'quiz-btn', onclick: (e) => startExam(Number(sel.value), e.target) }, '📝', h('span', {}, 'Testprov'), h('small', {}, 'som ett riktigt prov')),
       h('button', { class: 'quiz-btn', onclick: (e) => startMatch(Number(sel.value), e.target) }, '🧩', h('span', {}, 'Matcha par'), h('small', {}, 'slå ditt rekord')),
-      h('button', { class: 'quiz-btn', onclick: (e) => startOrder(Number(sel.value), e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser'))));
+      h('button', { class: 'quiz-btn', onclick: (e) => startOrder(Number(sel.value), e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser')),
+      vocabBtn));
 }
 
 /** Coachen öppnar en övning (eleven bad om ett quiz i chatten): gå till Öva och starta den där. */
 async function openPractice(kind, homeworkId) {
   await show('kort');
   if (!homeworkId) { toast('Välj läxa och övning här'); return; }
-  const start = { quiz: () => makeQuiz(homeworkId, 'quiz'), cloze: () => makeQuiz(homeworkId, 'cloze'),
+  const start = { quiz: () => makeQuiz(homeworkId, 'quiz'), cloze: () => makeQuiz(homeworkId, 'cloze'), vocab: () => makeQuiz(homeworkId, 'vocab'),
     explain: () => explainFor(homeworkId), exam: () => startExam(homeworkId),
     match: () => startMatch(homeworkId), order: () => startOrder(homeworkId) }[kind] || (() => makeQuiz(homeworkId, 'quiz'));
   toast(kind === 'match' ? 'Startar …' : 'Pluggis gör övningen …');
   start();
 }
+
+const LANG_HW = /spansk|engelsk|fransk|tysk|italiensk|språk|glos|english|español|espanol|deutsch|français|vocab/i;
 
 async function makeQuiz(homeworkId, mode, btn) {
   const label = btn ? btn.closest('button').innerHTML : '';
@@ -1003,7 +1012,7 @@ async function makeQuiz(homeworkId, mode, btn) {
   try {
     const r = await api('/api/flashcards/quiz', { method: 'POST', body: { homeworkId, mode, count: 10, focus: focusOf(homeworkId) || null } });
     if (r.note) toast(r.note);
-    practiceDeck({ deck: r.deck, dueNow: r.cardCount });
+    practiceDeck({ deck: r.deck, dueNow: r.cardCount, vocab: mode === 'vocab' });
   } catch (e) {
     toast(e.message || 'Det gick inte att göra frågor just nu', true);
     if (btn) { btn.disabled = false; btn.innerHTML = label; }
@@ -1429,6 +1438,14 @@ function explainSummary(t, homeworkId) {
       h('button', { class: 'quiz-btn', onclick: () => show('kort') }, '🎯', h('span', {}, 'Till Öva'))));
 }
 
+/** Glosförhör: "hunden / en hund" – något av svaren räcker, med eller utan en/ett/att/the/to framför. */
+function vocabRight(said, back) {
+  const strip = (t) => norm(t).replace(/^(en|ett|att|den|det|de|the|a|an|to) /, '');
+  const s = strip(said);
+  if (!s) return false;
+  return String(back).split(/\s*(?:\/|,|;| eller | or )\s*/).map(strip).filter(Boolean)
+    .some(a => a === s || (a.length > 3 && s.includes(a)) || (s.length > 3 && a.includes(s)));
+}
 const norm = (t) => (t || '').toLowerCase().normalize('NFC').replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
 
 /** Öva en lek: vanliga kort (visa svar → rätt/fel) eller flerval/lucktext (tryck på ett alternativ). */
@@ -1496,6 +1513,27 @@ function practiceDeck(d) {
     back.textContent = card.back;
     hintEl.textContent = card.hint ? `Ledtråd: ${card.hint}` : '';
     const hintBtn = card.hint ? h('button', { class: 'small-btn', onclick: (e) => { hintEl.hidden = false; e.target.remove(); } }, '💡 Ledtråd') : null;
+    if (d.vocab) {
+      front.textContent = card.front;
+      const input = h('input', { class: 'fc-answer', placeholder: I18N.lang === 'en' ? 'Write or say it (🎤 on the keyboard)' : 'Skriv eller säg det (🎤 på tangentbordet)',
+        autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', style: 'width:100%;font-size:20px;padding:12px;border-radius:12px;margin:8px 0' });
+      const check = h('button', { class: 'big', onclick: async () => {
+        if (!input.value.trim()) return reveal(card);
+        const ok = vocabRight(input.value, card.back);
+        input.disabled = true;
+        back.hidden = false;
+        back.replaceChildren(h('div', { style: `font-weight:700;color:${ok ? 'var(--good, #2e9e5b)' : 'var(--bad, #d64541)'}` }, ok ? '✓ Rätt!' : '✗ Inte riktigt'),
+          h('div', {}, card.back), ok ? null : h('div', { class: 'meta' }, `Du skrev: ${input.value}`));
+        autoRead([card.front], deckLang);   // hör ordet igen
+        await send(card, ok);
+        controls.replaceChildren(h('button', { class: 'big', onclick: next }, 'Nästa →'));
+      } }, 'Rätta');
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') check.click(); });
+      controls.replaceChildren(input, ...[hintBtn, check].filter(Boolean));
+      autoRead([card.front], deckLang);
+      setTimeout(() => input.focus(), 50);
+      return;
+    }
     if (card.kind === 'BASIC' || !(card.wrongOptions || []).length) {
       front.textContent = card.front;
       controls.replaceChildren(...[hintBtn, h('button', { class: 'big', onclick: () => reveal(card) }, 'Visa svar')].filter(Boolean));

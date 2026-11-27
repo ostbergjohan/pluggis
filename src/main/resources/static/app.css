@@ -350,3 +350,10 @@ label.inline { display: flex; gap: 8px; align-items: center; color: var(--ink); 
 :root[data-theme="dark"] { color-scheme: dark; }
 .theme-btn { min-width: 36px; }
 .login-pre { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 15px; overflow-x: auto; }
+
+/* Veckorapporten skrivs ut utan meny och knappar */
+@media print {
+  .topbar, .subnav, .toasts, .report button { display: none !important; }
+  .main { padding: 0 !important; }
+  .panel { box-shadow: none !important; border: none !important; }
+}

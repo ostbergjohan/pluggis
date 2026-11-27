@@ -463,6 +463,15 @@ The basic idea is to **reward effort more than right answers** – it's the habi
 - Money as a reward can, over time, crowd out the student's own motivation. Consider tapering off the money part once
   the habit is there, and keep the points and streaks.
 
+## Weekly report
+
+**The student's tab → Weekly report** (also *📄 Weekly report* on the Overview): the last seven days – time studied
+and per day, days with studying, how much of the plan was done and what wasn't, how many questions were right,
+points and pocket money – plus **hard right now** (questions and words that were wrong more often than right) and
+**next week** (tests and homework, planned time). ‹ Previous goes back a week at a time, 🖨 Print gives a clean page.
+`GET /api/report/week?weeksAgo=0`. "Hard right now" counts from when this was added (the card text is now kept
+with each answer, since practice decks are removed after a few hours).
+
 ## Backups
 
 **System → Backups** in the parent view: the whole database (homework, plans, material, points, students, settings)

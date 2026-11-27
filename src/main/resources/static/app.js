@@ -233,7 +233,8 @@ function barChart(series, labels, { height = 160, colors = ['bar', 'bar2'], unit
 const views = {};
 
 views.oversikt = async (main) => {
-  main.append(h('h1', {}, 'Översikt'));
+  main.append(h('div', { style: 'display:flex;align-items:center;gap:10px' }, h('h1', { style: 'flex:1' }, 'Översikt'),
+    h('a', { class: 'btn small', href: '#elev/rapport' }, '📄 Veckorapport')));
   const [week, stats, today, student] = await Promise.all([
     api(`/api/devices/${enc(state.deviceId)}/rewards`),
     api(`/api/devices/${enc(state.deviceId)}/stats?days=14`),
@@ -1364,11 +1365,12 @@ function subnav(base, items, active) {
 views.elev = async (main) => {
   let s = {};
   try { s = await api('/api/student'); } catch { /* visas i panelerna */ }
-  const items = [['coachen', 'Coachen'], ['planering', 'Planering'], ['rost', 'Röst'], ['kalender', 'Kalender']];
+  const items = [['rapport', 'Veckorapport'], ['coachen', 'Coachen'], ['planering', 'Planering'], ['rost', 'Röst'], ['kalender', 'Kalender']];
   if (s.pointsEnabled !== false) items.push(['poang', 'Poäng']);
-  const sub = items.some(([id]) => id === state.sub) ? state.sub : 'coachen';
+  const sub = items.some(([id]) => id === state.sub) ? state.sub : 'rapport';
   main.append(h('h1', {}, currentStudentName()), subnav('elev', items, sub));
-  if (sub === 'coachen') main.append(studentPanel());
+  if (sub === 'rapport') main.append(weeklyReport());
+  else if (sub === 'coachen') main.append(studentPanel());
   else if (sub === 'planering') main.append(planningPanel());
   else if (sub === 'rost') main.append(voicePanel());
   else if (sub === 'kalender') {
@@ -1447,6 +1449,53 @@ function usageBars(u) {
         h('div', { style: `height:100%;width:${p}%;background:${color}` })));
   };
   return h('div', { style: 'margin:6px 0 10px' }, row('5 timmar', u.fiveHour), row('Vecka', u.sevenDay), row('Vecka (Opus)', u.sevenDayOpus));
+}
+
+/** Veckorapporten: de senaste sju dagarna och nästa vecka. ‹ › bläddrar bakåt, 🖨 skriver ut. */
+function weeklyReport() {
+  const panel = h('section', { class: 'panel report' }, h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  let weeksAgo = 0;
+  const day = (iso, o) => new Date(iso + 'T12:00').toLocaleDateString(I18N.locale(), o);
+  const minFmt = (m) => m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+  async function paint() {
+    let r;
+    try { r = await api(`/api/report/week?weeksAgo=${weeksAgo}`); } catch (e) { panel.replaceChildren(h('p', {}, e.message)); return; }
+    const pct = r.plan.minutes ? Math.round(100 * r.plan.doneMinutes / r.plan.minutes) : null;
+    const maxMin = Math.max(30, ...r.perDay.map(d => d.minutes));
+    const stat = (big, small) => kpi(small, big);
+    panel.replaceChildren(
+      h('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
+        h('h2', { style: 'margin:0;flex:1' }, `Veckorapport ${day(r.from, { day: 'numeric', month: 'short' })} – ${day(r.to, { day: 'numeric', month: 'short' })}`),
+        h('button', { class: 'small', onclick: () => { weeksAgo++; paint(); } }, '‹ Förra'),
+        weeksAgo ? h('button', { class: 'small', onclick: () => { weeksAgo--; paint(); } }, 'Nästa ›') : null,
+        h('button', { class: 'small', onclick: () => window.print() }, '🖨 Skriv ut')),
+      h('div', { class: 'grid cols-4', style: 'margin-top:12px' },
+        stat(minFmt(r.minutes), 'Pluggat'),
+        stat(`${r.activeDays} av 7`, 'Dagar med plugg'),
+        stat(pct == null ? '–' : `${pct} %`, `Av planen (${r.plan.done} av ${r.plan.items} moment)`),
+        stat(r.cards.reviewed ? `${Math.round(100 * r.cards.correct / r.cards.reviewed)} %` : '–', `Rätt på ${r.cards.reviewed} frågor`),
+        r.reward ? stat(`${r.reward.weekPoints} p`, r.reward.moneyEnabled ? `Poäng (= ${kr(r.reward.earnedSek)})` : 'Poäng') : null),
+      h('h3', { style: 'margin-top:18px' }, 'Pluggtid per dag'),
+      h('div', { class: 'report-bars', style: 'display:flex;gap:6px;align-items:flex-end;height:110px;margin:6px 0 4px' },
+        r.perDay.map(d => h('div', { style: 'flex:1;text-align:center;font-size:12px' },
+          h('div', { title: `${d.minutes} min`, style: `height:${Math.round(80 * d.minutes / maxMin)}px;min-height:2px;background:${d.minutes ? 'var(--accent, #2f62c8)' : 'var(--line, #ddd)'};border-radius:4px 4px 0 0` }),
+          h('div', {}, day(d.day, { weekday: 'short' })), h('div', { class: 'item-meta' }, d.minutes ? `${d.minutes}` : '')))),
+      r.missed.length ? h('div', {}, h('h3', {}, 'Blev inte gjort'), h('ul', {}, r.missed.map(t => h('li', {}, t)))) : null,
+      h('h3', {}, 'Svårt just nu'),
+      r.weak.length
+        ? h('table', {}, h('tbody', {}, r.weak.map(w => h('tr', {}, h('td', {}, w.front), h('td', { class: 'item-meta' }, w.back || ''),
+            h('td', { style: 'white-space:nowrap;text-align:right' }, `${w.wrong} fel, ${w.right} rätt`)))))
+        : h('p', { class: 'item-meta' }, 'Inget som ofta blev fel den här veckan (eller inga frågor besvarade).'),
+      r.practised.length ? h('div', {}, h('h3', {}, 'Övat på'), h('ul', {}, r.practised.map(p => h('li', {}, `${p.task} · ${p.minutes} min`)))) : null,
+      weeksAgo === 0 ? h('div', {},
+        h('h3', {}, 'Nästa vecka'),
+        h('p', {}, `${r.nextWeek.items} moment i planen, ${minFmt(r.nextWeek.minutes)}.`),
+        r.upcoming.length
+          ? h('ul', {}, r.upcoming.map(u => h('li', {}, kindTag(u.kind), ` ${u.title}`, u.subject ? ` · ${u.subject}` : '', ` · ${relDays(u.dueDate)}`)))
+          : h('p', { class: 'item-meta' }, 'Inga läxor eller prov nästa vecka.')) : null);
+  }
+  paint();
+  return panel;
 }
 
 function backupPanel() {

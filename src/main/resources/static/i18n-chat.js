@@ -248,6 +248,8 @@ I18N.add({
   // fler texter från appen
   'Läxa: {0}': 'Homework: {0}', 'Prov: {0}': 'Test: {0}',
   'Senaste': 'Latest',
+  'Glosförhör': 'Vocabulary quiz', 'hör ordet, svara': 'hear the word, answer', 'Rätta': 'Check', '✓ Rätt!': '✓ Right!', '✗ Inte riktigt': '✗ Not quite',
+  'Du skrev: {0}': 'You wrote: {0}', 'Pluggis plockar ut glosorna…': 'Pluggis is picking out the words…',
   'Nästa övning ›': 'Next exercise ›', 'Avsluta passet': 'End the session', 'Avsluta övningspasset?': 'End the practice session?',
   'Nästa: {0}': 'Next: {0}', 'Bra jobbat! 🎉': 'Well done! 🎉', '{0} minuter övning klart.{1}': '{0} minutes of practice done.{1}',
   '{0} minuter övning klart.': '{0} minutes of practice done.', 'Bockat i planen, +3 poäng.': 'Ticked off in the plan, +3 points.',

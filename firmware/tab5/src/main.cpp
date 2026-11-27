@@ -155,6 +155,8 @@ static const Note MEL_OK[] = {{523, 90}, {659, 90}, {784, 90}, {1047, 170}};   /
 static const Note MEL_BAD[] = {{466, 150}, {440, 150}, {415, 150}, {392, 380}};
 static const Note MEL_DONE[] = {{392, 120}, {523, 120}, {659, 120}, {784, 200}, {659, 100}, {784, 380}};
 static const Note MEL_TICK[] = {{880, 40}};
+// Pluggis egen lugna starttrudelutt (spelas en gång när Tab5 är redo)
+static const Note MEL_HELLO[] = {{392, 220}, {494, 220}, {587, 260}, {0, 80}, {784, 520}};
 static const Note* mel = nullptr;
 static int melN = 0, melI = 0;
 static uint32_t melNext = 0;
@@ -164,7 +166,7 @@ static void playMelody(const Note* m, int n) { mel = m; melN = n; melI = 0; melN
 #define SFX_DONE() playMelody(MEL_DONE, 6)
 static void pumpMelody() {
   if (!mel || melI >= melN || millis() < melNext) return;
-  M5.Speaker.tone(mel[melI].f, mel[melI].ms, 7, false);
+  if (mel[melI].f) M5.Speaker.tone(mel[melI].f, mel[melI].ms, 7, false);   // f = 0: kort paus
   melNext = millis() + mel[melI].ms + 15;
   if (++melI >= melN) mel = nullptr;
 }
@@ -3438,7 +3440,7 @@ void loop() {
   }
   if (booting) {
     // klar när WiFi är uppe och läxorna hämtats (eller det gått att svara att något är fel)
-    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; ui::hideBoot(); dirtyAll = true; }
+    if (WiFi.status() == WL_CONNECTED && decksLoaded) { booting = false; ui::hideBoot(); dirtyAll = true; playMelody(MEL_HELLO, 5); }
     else {
       static uint32_t lastBootText = 0;
       if (millis() - lastBootText > 500) { lastBootText = millis(); drawBoot(); }

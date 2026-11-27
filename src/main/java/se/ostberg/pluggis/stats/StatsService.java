@@ -69,7 +69,7 @@ public class StatsService {
     public void onCardGraded(FlashcardService.CardGraded e) {
         Instant now = Instant.now();
         reviews.save(new ReviewLog(e.deviceId(), e.card().getId(), e.card().getDeckId(), e.correct(),
-                LocalDate.now(props.zone()), now));
+                LocalDate.now(props.zone()), now).withText(e.card().getFront(), e.card().getBack()));
     }
 
     @Transactional(readOnly = true)
