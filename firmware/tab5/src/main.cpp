@@ -1312,7 +1312,27 @@ static int apiBinary(const String& path, const String& body, uint8_t** out, size
   int code = http.POST(body);
   if (code == 200) {
     int len = http.getSize();
-    if (len > 0 && len < 4 * 1024 * 1024) {
+    if (len <= 0) {
+      // utan Content-Length: läs tills servern stänger (högst 4 MB)
+      size_t cap = 512 * 1024, got = 0;
+      uint8_t* buf = (uint8_t*)heap_caps_malloc(cap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      WiFiClient* st = http.getStreamPtr();
+      uint32_t t0 = millis();
+      while (buf && millis() - t0 < 15000 && (st->connected() || st->available())) {
+        size_t avail = st->available();
+        if (!avail) { delay(2); continue; }
+        if (got + avail > cap) {
+          if (cap >= 4 * 1024 * 1024) break;
+          uint8_t* bigger = (uint8_t*)heap_caps_realloc(buf, cap * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+          if (!bigger) break;
+          buf = bigger;
+          cap *= 2;
+        }
+        got += st->readBytes(buf + got, std::min(avail, cap - got));
+      }
+      if (buf && got > 44) { *out = buf; *outLen = got; }
+      else if (buf) free(buf);
+    } else if (len < 4 * 1024 * 1024) {
       uint8_t* buf = (uint8_t*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
       WiFiClient* st = http.getStreamPtr();
       size_t got = 0;
@@ -1555,7 +1575,23 @@ static void pumpListening() {
     dirtyOva = true;
     return;
   }
+  // Kommer inget ljud alls stannar uppläsningen med en förklaring i stället för att se ut att spela
+  static uint32_t waitingSince = 0;
+  if (playing.data || !playQueue.empty()) waitingSince = 0;
+  else if (!waitingSince) waitingSince = millis();
+  else if (millis() - waitingSince > 25000) {
+    waitingSince = 0;
+    listening = false;
+    fetchReset();
+    ovaMessage = "Får inget ljud från servern" + String(lastError.length() ? " (" + lastError + ")" : String()) + ". Tryck Spela igen.";
+    Serial.printf("[pluggis] uppläsningen fick inget ljud på 25 s: %s\n", lastError.c_str());
+    practiceEnd();
+    dirtyOva = true;
+    return;
+  }
   xSemaphoreTake(fetchLock, portMAX_DELAY);
+  // ett svar från en hämtning som inte längre gäller (paus, hopp) får inte stoppa nästa
+  if (fetchedIdx >= 0 && fetchedGen != fetchGen) { if (fetchedBuf) free(fetchedBuf); fetchedBuf = nullptr; fetchedIdx = -1; }
   bool ready = fetchedIdx >= 0 && fetchedGen == fetchGen;
   uint8_t* buf = ready ? fetchedBuf : nullptr;
   size_t len = fetchedLen;
@@ -1608,7 +1644,11 @@ static void fetchTask(void*) {
     size_t len;
     String path = "/api/speech/preview?small=true";
     if (lang.length()) path += "&lang=" + lang;
+    uint32_t t0 = millis();
     int code = apiBinary(path, "{\"text\":\"" + jsonEscape(text) + "\"}", &buf, &len);
+    Serial.printf("[pluggis] uppläsning %s: kod %d, %u byte, %lu ms\n", isSay ? "fråga" : "mening", code, (unsigned)len,
+                  (unsigned long)(millis() - t0));
+    if (!buf) lastError = "uppläsning: kod " + String(code) + (code == 200 ? " men inget ljud" : "");
     xSemaphoreTake(fetchLock, portMAX_DELAY);
     if (isSay) {
       if (gen == sayGen && buf) { if (sayBuf) free(sayBuf); sayBuf = buf; sayLen = len; sayBufGen = gen; }
@@ -2746,7 +2786,9 @@ static void firmwareUpdate() {
   if (!Update.begin(size)) { http.end(); fail(Update.errorString()); return; }
   if (md5.length() == 32) Update.setMD5(md5.c_str());
   WiFiClient* in = http.getStreamPtr();
-  static uint8_t buf[4096];
+  const size_t BUF = 16384;
+  uint8_t* buf = (uint8_t*)heap_caps_malloc(BUF, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (!buf) { http.end(); fail("för lite minne"); return; }
   int done = 0, shown = -1;
   uint32_t lastData = millis();
   ui::firmwareProgress(0, "Laddar ner ... 0 %");
@@ -2754,8 +2796,8 @@ static void firmwareUpdate() {
   while (done < size) {
     size_t n = in->available();
     if (n) {
-      n = in->readBytes(buf, std::min(n, sizeof(buf)));
-      if (Update.write(buf, n) != n) { http.end(); fail(Update.errorString()); return; }
+      n = in->readBytes(buf, std::min(n, BUF));
+      if (Update.write(buf, n) != n) { free(buf); http.end(); fail(Update.errorString()); return; }
       done += n;
       lastData = millis();
       int pct = (int)(100LL * done / size);
@@ -2765,10 +2807,11 @@ static void firmwareUpdate() {
         lv_refr_now(lvDisp);
       }
     } else {
-      if (!in->connected() || millis() - lastData > 20000) { http.end(); fail("nedladdningen avbröts"); return; }
+      if (!in->connected() || millis() - lastData > 20000) { free(buf); http.end(); fail("nedladdningen avbröts"); return; }
       delay(2);
     }
   }
+  free(buf);
   http.end();
   if (!Update.end(true)) { fail(Update.errorString()); return; }   // kontrollerar MD5 och byter app-partition
   prefs.putString("fwPending", version.length() ? version : fwNew);
@@ -3211,7 +3254,15 @@ void setup() {
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
   setupLvgl();
   fetchLock = xSemaphoreCreateMutex();
-  xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0);
+  // Uppläsningen hämtar ljud i en egen tråd. Räcker inte det interna minnet läggs dess stack i PSRAM.
+  if (xTaskCreatePinnedToCore(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0) != pdPASS) {
+    Serial.printf("[pluggis] uppläsningens tråd: för lite internt minne (%u byte) – försöker med PSRAM\n",
+                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    if (xTaskCreatePinnedToCoreWithCaps(fetchTask, "pluggis-fetch", 12288, nullptr, 1, nullptr, 0, MALLOC_CAP_SPIRAM) != pdPASS) {
+      Serial.println("[pluggis] uppläsningens tråd kunde inte starta");
+      lastError = "uppläsningen startade inte (minnet)";
+    }
+  }
   bootStart = millis();
   dirtyAll = true;
   redraw();
