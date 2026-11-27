@@ -23,7 +23,7 @@ med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med 
 - **Chat** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
 - **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
 - **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av, läsa upp sidorna eller starta övningen.
-  ⏱ på raden startar fokustimern för momentet.
+  ⏱ på raden startar fokustimern för momentet (inte på övningar som quiz och lucktext – de har *Starta* och mäter tiden själva).
 - ⏱ **Fokustimer** uppe till höger (fritt pass: 15, 25 eller 45 min) – stor nedräkning, *Paus/Fortsätt*, *Avsluta*,
   påminnelse när 5 minuter är kvar och en belöning när passet är klart (övningstid och poäng som vanligt; startat från
   planen bockas momentet av). Sedan *Paus 5 min*, *Ett pass till* eller *Klar*. Timern syns i toppraden på alla

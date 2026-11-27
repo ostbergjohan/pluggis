@@ -1592,8 +1592,10 @@ void buildPlan(const Plan& m) {
     char mn[16];
     snprintf(mn, sizeof(mn), "%d min", r.minutes);
     lv_obj_t* ml = label(b, mn, F_S, MUTED);
-    lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, r.done ? -24 : -24 - TB - 16, 18);
-    if (!r.done) {
+    // Fokustimern bara för vanliga moment – övningar (quiz, lucktext …) har egen Starta och mäter tiden själva
+    bool timerBtn = !r.done && r.action != 2;
+    lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, timerBtn ? -24 - TB - 16 : -24, 18);
+    if (timerBtn) {
       lv_obj_t* tb = button(b, RW - 20 - TB, (rowH - TB) / 2, TB, TB, SYM_CLOCK, Kind::Secondary, Act::PlanTimer, k, nullptr, 999);
       lv_obj_set_ext_click_area(tb, 8);
     }
@@ -1601,7 +1603,7 @@ void buildPlan(const Plan& m) {
       lv_obj_t* lc = chip(b, r.action == 1 ? std::string(LV_SYMBOL_VOLUME_MAX) + "  Lyssna" : std::string(LV_SYMBOL_PLAY) + "  Starta",
                           r.action == 1 ? ACCENT : 0x2FB58C, INK);
       lv_obj_update_layout(ml);
-      lv_obj_align(lc, LV_ALIGN_TOP_RIGHT, -24 - TB - 16 - lv_obj_get_width(ml) - 16, 10);
+      lv_obj_align(lc, LV_ALIGN_TOP_RIGHT, (timerBtn ? -24 - TB - 16 : -24) - lv_obj_get_width(ml) - 16, 10);
     }
     if (!r.subject.empty()) {
       lv_obj_t* sl = oneLine(b, r.subject, F_S, lv_color_to_u32(lv_color_lighten(C(r.color), 110)) & 0xFFFFFF, TW - (r.action && !r.done ? 320 : 140));
