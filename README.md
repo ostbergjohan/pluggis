@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/brand/icon-512.png" width="160" alt="Pluggis logo"></p>
+<p align="center"><img src="docs/brand/pluggis-banner.png" width="600" alt="Pluggis – snap the pages, get a study plan"></p>
 
 # Pluggis
 

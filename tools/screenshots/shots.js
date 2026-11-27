@@ -173,6 +173,7 @@ async function api(route) {
   for (let k = 0; k < 10; k++) { await page.click(EN ? 'button:has-text("Next")' : 'button:has-text("Nästa")'); await page.waitForTimeout(80); }
   await page.click(EN ? 'text=Hand in' : 'text=Lämna in'); await page.waitForTimeout(700);
   await shot('6-testprov-resultat.png');
+  await tab('kort'); await page.selectOption('.quiz-sel', '7'); await page.waitForTimeout(300); await shot('7-ova.png');
   console.log(errs.length ? 'ERRORS ' + errs.join(' | ') : 'OK');
   await browser.close();
 })();
