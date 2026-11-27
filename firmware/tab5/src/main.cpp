@@ -851,6 +851,8 @@ static bool isLanguageDeck();
 static String jsonEscape(const String& t);
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
 static Button btnSay;
+// Glosor vänds så att det främmande ordet visas och eleven svarar på svenska – rösten (KB-Whisper) hör svenska
+static bool cardFlipped = false;
 static constexpr int ROUND = 10;
 static Button optBtn[4], btnReveal, btnKnew, btnDidnt;
 
@@ -971,6 +973,10 @@ static void nextCard() {
       qBack = clean(doc["back"] | "");
       qHint = clean(doc["hint"] | "");
       JsonArray wrong = doc["wrongOptions"].as<JsonArray>();
+      // Glosor (svenska -> målspråk): vänd, så att eleven hör/ser det främmande ordet och kan svara med rösten på svenska
+      cardFlipped = isLanguageDeck() && (wrong.isNull() || wrong.size() == 0) && qBack.length() &&
+                    !(looksSwedish(qBack) && !looksSwedish(qFront));
+      if (cardFlipped) std::swap(qFront, qBack);
       if (!wrong.isNull() && wrong.size() > 0) {
         options.push_back(qBack);
         for (JsonVariant w : wrong) {
@@ -981,7 +987,7 @@ static void nextCard() {
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
       // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
-      if (options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
+      if (!cardFlipped && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
         std::vector<String> pool;
         for (auto& b : deckBacks)
           if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
@@ -1229,12 +1235,13 @@ static void drawOva() {
     }
     if (chosen >= 0) drawWrapped("Tryck för nästa", 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
   } else if (!revealed) {
-    if (isLanguageDeck()) {
+    if (isLanguageDeck() && !cardFlipped) {
       Button full = {btnReveal.x, btnReveal.y, btnSay.x + btnSay.w - btnReveal.x, btnReveal.h, "Visa svar", ACCENT};
       drawTextButton(full, ACCENT, "Visa svar");
     } else {
       drawTextButton(btnReveal, PANEL, "Visa svar");
-      drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar" : "Håll in och svara");
+      drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar"
+                                                       : cardFlipped ? "Håll in, svara på svenska" : "Håll in och svara");
     }
   } else {
     if (spokenAnswer.length()) {
@@ -1910,7 +1917,7 @@ static void ovaTouch(int x, int y) {
       }
     }
   } else if (!revealed) {
-    if (isLanguageDeck()) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
+    if (isLanguageDeck() && !cardFlipped) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
     else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
     else if (inside(btnSay, x, y)) startRecording();
   } else {
