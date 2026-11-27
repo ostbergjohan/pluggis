@@ -95,12 +95,14 @@ public class SpeechController {
 
     /** Tal till text (lokal KB-Whisper) – Tab5 svarar på flashkort med rösten. Kroppen är en wav-fil. */
     @PostMapping(value = "/transcribe", consumes = "audio/wav")
-    public ResponseEntity<java.util.Map<String, String>> transcribe(@RequestBody byte[] audio) {
+    public ResponseEntity<java.util.Map<String, String>> transcribe(@RequestBody byte[] audio,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String lang,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String hint) {
         if (audio == null || audio.length < 1000) {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", "för kort inspelning"));
         }
         try {
-            String text = speech.transcribe(audio, "svar.wav");
+            String text = speech.transcribe(audio, "svar.wav", lang, hint);
             return ResponseEntity.ok(java.util.Map.of("text", text == null ? "" : text.trim()));
         } catch (RuntimeException e) {
             return ResponseEntity.status(503).body(java.util.Map.of("error", "Ljudtjänsten svarade inte"));

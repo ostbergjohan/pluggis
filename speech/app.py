@@ -3,6 +3,7 @@
 Körs lokalt i hemlabbet bredvid Pluggis, så att elevens röst aldrig lämnar huset.
 
     POST /stt   multipart, fält "audio" (wav, webm/opus, ogg, mp3 …)  → {"text": "...", "seconds": 0.42}
+                valfritt: "language" (sv standard; es/de/fr/en → flerspråkig Whisper) och "hint" (väntat svar)
     POST /tts   {"text": "Hej!", "voice": "sv_SE-lisa-medium", "length_scale": 1.0} → audio/wav
     GET  /voices                                                       → [{"id": "sv_SE-nst-medium", "name": "nst", ...}]
     GET  /health                                                       → {"ok": true, ...}
@@ -16,11 +17,13 @@ import tempfile
 import time
 import wave
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 STT_MODEL = os.getenv("STT_MODEL", "KBLab/kb-whisper-small")
+# Flerspråkig modell för glosor som besvaras på spanska, tyska, franska, engelska (KB-Whisper kan bara svenska)
+STT_MULTI_MODEL = os.getenv("STT_MULTI_MODEL", "Systran/faster-whisper-small")
 STT_DEVICE = os.getenv("STT_DEVICE", "cpu")           # "cuda" om det finns ett grafikkort
 STT_COMPUTE = os.getenv("STT_COMPUTE_TYPE", "int8")   # "float16" på GPU
 STT_BEAM = int(os.getenv("STT_BEAM_SIZE", "1"))       # 1 = snabbast
@@ -34,6 +37,7 @@ app = FastAPI(title="pluggis-speech")
 # ---- Tal till text ----------------------------------------------------------
 
 _whisper = None
+_multi = None
 
 
 def whisper():
@@ -44,8 +48,19 @@ def whisper():
     return _whisper
 
 
+def multi_whisper():
+    global _multi
+    if _multi is None:
+        from faster_whisper import WhisperModel
+        _multi = WhisperModel(STT_MULTI_MODEL, device=STT_DEVICE, compute_type=STT_COMPUTE)
+    return _multi
+
+
+LANGS = {"es", "de", "fr", "en"}
+
+
 @app.post("/stt")
-async def stt(audio: UploadFile = File(...)):
+async def stt(audio: UploadFile = File(...), language: str = Form("sv"), hint: str = Form("")):
     data = await audio.read()
     if not data:
         raise HTTPException(400, "Tomt ljud")
@@ -54,12 +69,17 @@ async def stt(audio: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(suffix=suffix) as f:
         f.write(data)
         f.flush()
-        segments, _info = whisper().transcribe(
+        lang = (language or "sv").strip().lower()[:2]
+        foreign = lang in LANGS
+        # Väntat svar som ledtråd: korta ord med elevens uttal tolkas då lättare rätt
+        prompt = hint.strip()[:200] or None
+        segments, _info = (multi_whisper() if foreign else whisper()).transcribe(
             f.name,
-            language="sv",
-            beam_size=STT_BEAM,
+            language=lang if foreign else "sv",
+            beam_size=max(STT_BEAM, 3) if foreign else STT_BEAM,
             vad_filter=True,
             condition_on_previous_text=False,
+            initial_prompt=prompt,
         )
         text = " ".join(s.text.strip() for s in segments).strip()
     return {"text": text, "seconds": round(time.perf_counter() - start, 3)}
@@ -165,5 +185,5 @@ def tts(req: TtsRequest):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "stt_model": STT_MODEL, "default_voice": DEFAULT_VOICE,
+    return {"ok": True, "stt_model": STT_MODEL, "stt_multi_model": STT_MULTI_MODEL, "default_voice": DEFAULT_VOICE,
             "voices": [v["id"] for v in available_voices()]}

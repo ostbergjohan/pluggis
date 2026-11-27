@@ -851,8 +851,11 @@ static bool isLanguageDeck();
 static String jsonEscape(const String& t);
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
 static Button btnSay;
-// Glosor vänds så att det främmande ordet visas och eleven svarar på svenska – rösten (KB-Whisper) hör svenska
-static bool cardFlipped = false;
+// Glosor besvaras med rösten, slumpvis åt båda hållen: svenska -> målspråket (svara på t.ex. spanska,
+// flerspråkig Whisper på servern) eller målspråket -> svenska (KB-Whisper)
+static bool langVoiceCard = false;
+static const char* answerLang = "";   // "" = svara på svenska, annars "es", "de", "fr", "en"
+static const char* langName(const char* l);
 static constexpr int ROUND = 10;
 static Button optBtn[4], btnReveal, btnKnew, btnDidnt;
 
@@ -973,10 +976,15 @@ static void nextCard() {
       qBack = clean(doc["back"] | "");
       qHint = clean(doc["hint"] | "");
       JsonArray wrong = doc["wrongOptions"].as<JsonArray>();
-      // Glosor (svenska -> målspråk): vänd, så att eleven hör/ser det främmande ordet och kan svara med rösten på svenska
-      cardFlipped = isLanguageDeck() && (wrong.isNull() || wrong.size() == 0) && qBack.length() &&
-                    !(looksSwedish(qBack) && !looksSwedish(qFront));
-      if (cardFlipped) std::swap(qFront, qBack);
+      // Glosor utan svarsalternativ: svara med rösten, slumpvis på svenska eller på målspråket
+      langVoiceCard = isLanguageDeck() && (wrong.isNull() || wrong.size() == 0) && qBack.length() > 0;
+      answerLang = "";
+      if (langVoiceCard) {
+        if (looksSwedish(qBack) && !looksSwedish(qFront)) std::swap(qFront, qBack);   // nu: framsida svenska
+        const char* lang = deckLang();
+        if (*lang && (esp_random() & 1)) answerLang = lang;   // visa svenska, svara på målspråket
+        else std::swap(qFront, qBack);                         // visa målspråket, svara på svenska
+      }
       if (!wrong.isNull() && wrong.size() > 0) {
         options.push_back(qBack);
         for (JsonVariant w : wrong) {
@@ -987,7 +995,7 @@ static void nextCard() {
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
       // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
-      if (!cardFlipped && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
+      if (!langVoiceCard && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
         std::vector<String> pool;
         for (auto& b : deckBacks)
           if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
@@ -1235,13 +1243,14 @@ static void drawOva() {
     }
     if (chosen >= 0) drawWrapped("Tryck för nästa", 48, qBottom - 44, W - 96, 40, MUTED, F_SMALL, true);
   } else if (!revealed) {
-    if (isLanguageDeck() && !cardFlipped) {
+    if (isLanguageDeck() && !langVoiceCard) {
       Button full = {btnReveal.x, btnReveal.y, btnSay.x + btnSay.w - btnReveal.x, btnReveal.h, "Visa svar", ACCENT};
       drawTextButton(full, ACCENT, "Visa svar");
     } else {
       drawTextButton(btnReveal, PANEL, "Visa svar");
       drawTextButton(btnSay, recording ? WARN : ACCENT, recording ? "Släpp när du är klar"
-                                                       : cardFlipped ? "Håll in, svara på svenska" : "Håll in och svara");
+                                                       : langVoiceCard ? "Håll in, svara på " + String(langName(answerLang))
+                                                                       : "Håll in och svara");
     }
   } else {
     if (spokenAnswer.length()) {
@@ -1316,11 +1325,34 @@ static void sayCardSide(const String& text) {
   sayAloud(text, looksSwedish(text) ? "" : guessLang(text));
 }
 
+static const char* langName(const char* l) {
+  if (!strcmp(l, "es")) return "spanska";
+  if (!strcmp(l, "de")) return "tyska";
+  if (!strcmp(l, "fr")) return "franska";
+  if (!strcmp(l, "en")) return "engelska";
+  return "svenska";
+}
+
+static String urlEncode(const String& in) {
+  String out;
+  const char* hex = "0123456789ABCDEF";
+  for (size_t i = 0; i < in.length(); i++) {
+    uint8_t c = in[i];
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') out += (char)c;
+    else { out += '%'; out += hex[c >> 4]; out += hex[c & 15]; }
+  }
+  return out;
+}
+
 /** Gör om till små bokstäver utan skiljetecken, för att jämföra ett talat svar med kortets. */
 static String normalize(const String& in) {
   String s = in;
   s.toLowerCase();
   s.replace("Å", "å"); s.replace("Ä", "ä"); s.replace("Ö", "ö");
+  // Accenter i spanska/franska/tyska spelar ingen roll när vi jämför (Whisper skriver dem inte alltid)
+  const char* from[] = {"á", "à", "â", "é", "è", "ê", "ë", "í", "î", "ï", "ó", "ô", "ú", "ù", "û", "ü", "ñ", "ç", "ß", "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü", "¿", "¡"};
+  const char* to[] = {"a", "a", "a", "e", "e", "e", "e", "i", "i", "i", "o", "o", "u", "u", "u", "u", "n", "c", "ss", "a", "e", "i", "o", "u", "n", "u", " ", " "};
+  for (size_t i = 0; i < sizeof(from) / sizeof(from[0]); i++) s.replace(from[i], to[i]);
   String out;
   for (size_t i = 0; i < s.length(); i++) {
     char c = s[i];
@@ -1353,14 +1385,15 @@ static void gameVoice(const String& said);
 static void gameBusy(const String& what);
 
 /** Skickar inspelningen till servern (lokal KB-Whisper) och ger tillbaka texten. */
-static String transcribeRecording() {
+static String transcribeRecording(const char* lang = "", const String& hint = "") {
   uint32_t bytes = recSamples * 2;
   writeWavHeader((uint8_t*)recBuf, bytes);
   String said;
   if (WiFi.status() == WL_CONNECTED) {
     WiFiClient client;
     HTTPClient http;
-    String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID;
+    String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID +
+                 (*lang ? String("&lang=") + lang : String()) + (hint.length() ? "&hint=" + urlEncode(hint) : String());
     if (http.begin(client, url)) {
       http.setTimeout(20000);
       http.addHeader("X-Pluggis-Token", PLUGGIS_TOKEN);
@@ -1389,12 +1422,13 @@ static void answerByVoice(bool send) {
   spokenAnswer = "...";
   dirtyOva = true;
   redraw();
-  String said = transcribeRecording();
+  String said = langVoiceCard ? transcribeRecording(answerLang, qBack) : transcribeRecording();
   spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
   voiceVerdict = said.length() ? judge(said, qBack) : -1;
   revealed = true;
   if (voiceVerdict == 1) SFX_OK();
   dirtyOva = true;
+  if (*answerLang) { redraw(); delay(300); sayCardSide(qBack); }   // hör hur ordet uttalas
 }
 
 
@@ -1917,8 +1951,8 @@ static void ovaTouch(int x, int y) {
       }
     }
   } else if (!revealed) {
-    if (isLanguageDeck() && !cardFlipped) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
-    else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; }
+    if (isLanguageDeck() && !langVoiceCard) { if (y >= btnReveal.y) { revealed = true; dirtyOva = true; sayCardSide(looksSwedish(qFront) ? qBack : qFront); } }
+    else if (inside(btnReveal, x, y)) { revealed = true; dirtyOva = true; if (*answerLang) sayCardSide(qBack); }
     else if (inside(btnSay, x, y)) startRecording();
   } else {
     bool knew = inside(btnKnew, x, y), didnt = inside(btnDidnt, x, y);

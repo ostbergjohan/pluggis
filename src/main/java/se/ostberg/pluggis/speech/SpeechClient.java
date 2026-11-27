@@ -65,6 +65,14 @@ public class SpeechClient {
 
     /** Ljud (wav, webm/opus, ogg …) → text. */
     public String transcribe(byte[] audio, String filename) {
+        return transcribe(audio, filename, null, null);
+    }
+
+    /**
+     * Ljud → text på ett visst språk ("es", "de", "fr", "en" ger flerspråkig Whisper, annars svenska KB-Whisper).
+     * {@code hint} är det väntade svaret, som hjälper Whisper med korta ord.
+     */
+    public String transcribe(byte[] audio, String filename, String language, String hint) {
         requireEnabled();
         LinkedMultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
         form.add("audio", new ByteArrayResource(audio) {
@@ -73,6 +81,12 @@ public class SpeechClient {
                 return filename == null ? "audio.wav" : filename;
             }
         });
+        if (language != null && !language.isBlank()) {
+            form.add("language", language);
+        }
+        if (hint != null && !hint.isBlank()) {
+            form.add("hint", hint.length() > 200 ? hint.substring(0, 200) : hint);
+        }
         Timer.Sample sample = Timer.start(meters);
         try {
             JsonNode res = rest.post().uri("/stt")
