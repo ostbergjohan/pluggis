@@ -33,6 +33,25 @@ public final class SubjectIcon {
         ICONS.put("bild", "🎨");
         ICONS.put("slöjd", "🧵");
         ICONS.put("hemkunskap", "🍳");
+        // English names (students using Pluggis in English)
+        ICONS.put("math", "➗");
+        ICONS.put("english", "🇬🇧");
+        ICONS.put("swedish", "📖");
+        ICONS.put("spanish", "🗣️");
+        ICONS.put("german", "🗣️");
+        ICONS.put("french", "🗣️");
+        ICONS.put("languages", "🗣️");
+        ICONS.put("science", "🧪");
+        ICONS.put("chemi", "🧪");
+        ICONS.put("physic", "🧪");
+        ICONS.put("social studies", "🌍");
+        ICONS.put("technolog", "⚙️");
+        ICONS.put("physical education", "⚽");
+        ICONS.put("pe", "⚽");
+        ICONS.put("music", "🎵");
+        ICONS.put("art", "🎨");
+        ICONS.put("craft", "🧵");
+        ICONS.put("home economics", "🍳");
     }
 
     private SubjectIcon() {
@@ -43,7 +62,7 @@ public final class SubjectIcon {
         for (var e : ICONS.entrySet()) {
             String k = e.getKey();
             // Korta nycklar (no, so) bara som hela ord, annars "kort" i "nobel" osv.
-            boolean hit = k.length() <= 2 ? s.matches("(?s).*(^|[^\\p{L}])" + k + "([^\\p{L}]|$).*") : s.contains(k);
+            boolean hit = k.length() <= 3 ? s.matches("(?s).*(^|[^\\p{L}])" + k + "([^\\p{L}]|$).*") : s.contains(k);
             if (hit) {
                 return e.getValue();
             }

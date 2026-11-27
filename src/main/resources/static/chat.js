@@ -651,7 +651,8 @@ WIDE.addEventListener && WIDE.addEventListener('change', () => { if (S.tab === '
 // ---- Från planen: läsmoment läses upp, övningar startas ----
 /** Sidorna i ett läsmoment: "Läs s. 40–45", "sidan 12", "Läs 182–187" → {from, to} (samma regler som servern). */
 function pagesIn(task) {
-  const m = /(?:\bs\.|\bsid\.?|\bsidan|\bsidorna|\bläs)\s*(\d+)(?:\s*(?:[-–]|till|och)\s*(\d+))?/i.exec(task || '');
+  // Svenska ("Läs s. 40–45") och engelska ("Read p. 40–45", "pages 12 to 14")
+  const m = /(?:\bs\.|\bsid\.?|\bsidan|\bsidorna|\bläs|\bpp?\.|\bpages?|\bread)\s*(\d+)(?:\s*(?:[-–]|till|och|to|and)\s*(\d+))?/i.exec(task || '');
   if (!m) return null;
   const from = Number(m[1]), to = m[2] ? Number(m[2]) : from;
   return { from, to: Math.max(from, to) };
@@ -660,14 +661,16 @@ function pagesIn(task) {
 /** Övningen ett moment gäller ("Gör ett snabbquiz" → quiz), samma namn som open_practice. */
 function exerciseFor(task) {
   const t = (task || '').toLowerCase();
-  if (t.includes('testprov')) return 'exam';
-  if (t.includes('öva i pluggis') || t.includes('blandade övningar') || t.includes('övningspass')) return 'mix';
-  if (t.includes('glosförhör') || t.includes('förhör glosorna')) return 'vocab';
+  // Svenska och engelska (elever som använder Pluggis på engelska)
+  if (t.includes('testprov') || t.includes('mock test')) return 'exam';
+  if (t.includes('öva i pluggis') || t.includes('blandade övningar') || t.includes('övningspass')
+    || t.includes('practice session') || t.includes('practise in pluggis') || t.includes('practice in pluggis')) return 'mix';
+  if (t.includes('glosförhör') || t.includes('förhör glosorna') || t.includes('vocabulary quiz')) return 'vocab';
   if (t.includes('quiz')) return 'quiz';
-  if (t.includes('lucktext')) return 'cloze';
-  if (t.includes('förklara för pluggis') || t.includes('förklara i pluggis')) return 'explain';
-  if (t.includes('matcha')) return 'match';
-  if (t.includes('rätt ordning')) return 'order';
+  if (t.includes('lucktext') || t.includes('fill in the gap')) return 'cloze';
+  if (t.includes('förklara för pluggis') || t.includes('förklara i pluggis') || t.includes('explain to pluggis')) return 'explain';
+  if (t.includes('matcha') || t.includes('match pairs')) return 'match';
+  if (t.includes('rätt ordning') || t.includes('right order')) return 'order';
   return null;
 }
 
@@ -1004,7 +1007,7 @@ async function openPractice(kind, homeworkId) {
   start();
 }
 
-const LANG_HW = /spansk|engelsk|fransk|tysk|italiensk|språk|glos|english|español|espanol|deutsch|français|vocab/i;
+const LANG_HW = /spansk|engelsk|fransk|tysk|italiensk|språk|glos|english|español|espanol|deutsch|français|vocab|spanish|french|german|italian|language/i;
 
 async function makeQuiz(homeworkId, mode, btn) {
   const label = btn ? btn.closest('button').innerHTML : '';
@@ -1349,7 +1352,7 @@ async function startExam(homeworkId, btn) {
     $('#view').replaceChildren(h('div', { class: 'page' },
       h('div', { class: 'box exam-score' },
         h('div', { class: 'exam-big' }, `${r.points} / ${r.maxPoints}`),
-        h('div', {}, `${r.percent} % · ${mood}`),
+        h('div', {}, `${r.percent} % · `, h('span', {}, mood)),
         S.points !== false ? h('div', { class: 'meta' }, '+10 poäng för att du gjorde provet') : null),
       r.review.length ? h('div', { class: 'box exam-review' },
         h('div', { class: 'quiz-title' }, 'Det här ska du kolla igen'),
@@ -1362,7 +1365,7 @@ async function startExam(homeworkId, btn) {
         h('div', { class: 'grow' },
           h('div', { class: 'task' }, `${it.n}. ${it.question}`),
           h('div', { class: 'meta' }, 'Ditt svar: ', (it.yourAnswer || '').trim() || '–'),
-          it.points < it.max ? h('div', { class: 'meta exam-answer' }, (it.type === 'open' ? 'Ett bra svar: ' : 'Rätt svar: ') + it.answer) : null,
+          it.points < it.max ? h('div', { class: 'meta exam-answer' }, h('span', {}, it.type === 'open' ? 'Ett bra svar:' : 'Rätt svar:'), ' ' + it.answer) : null,
           it.feedback ? h('div', { class: 'meta' }, it.feedback) : null),
         h('div', { class: 'meta' }, `${it.points}/${it.max}`)))),
       h('button', { class: 'big', style: 'margin-top:14px', onclick: () => show('kort') }, 'Tillbaka till Öva')));
@@ -1686,7 +1689,7 @@ async function homeworkDetail(id) {
       const text = h('div', { class: 'mat-text', hidden: true }, m.text || '');
       return h('div', { class: 'mat' }, img,
         h('div', { class: 'mat-body' },
-          h('div', { class: 'mat-title' }, m.page ? `Sida ${m.page}` : (m.filename || 'Fil')),
+          h('div', { class: 'mat-title' }, m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo && m.bookPageTo !== m.bookPage ? '–' + m.bookPageTo : ''}` : m.page ? `Del ${m.page}` : (m.filename || 'Fil')),
           m.summary ? h('div', { class: 'meta' }, m.summary) : null,
           listen && listen.has(m.id) ? h('div', { class: 'meta listen-mark', 'data-mat': m.id }, listen.mark(m.id)) : null,
           m.text ? h('div', { class: 'mat-actions' },

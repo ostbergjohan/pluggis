@@ -1,15 +1,19 @@
 const { chromium } = require('playwright');
 const path = require('path'), fs = require('fs');
-const STATIC = process.argv[2], OUT = process.argv[3];
+// node admin-mode.js <static> <out.png> [en] – the Claude panel under Cost (API key, hybrid or subscription, and the limits)
+const STATIC = process.argv[2], OUT = process.argv[3], EN = process.argv[4] === 'en';
 (async () => {
   const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: 'sv-SE' });
-  await ctx.addInitScript(() => { localStorage.setItem('lc.token', 't'); });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, locale: EN ? 'en-GB' : 'sv-SE', colorScheme: 'dark' });
+  await ctx.addInitScript((en) => { localStorage.setItem('pluggis.admin.lang', en ? 'en' : 'sv'); }, EN);
+  const at = (h) => new Date(Date.now() + h * 3600e3).toISOString();
   const json = (r, b) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
   await ctx.route('**/*', (route) => {
     const u = new URL(route.request().url());
     if (u.pathname === '/api/claude') return json(route, { mode: 'hybrid', configuredMode: 'hybrid', apiKey: true, token: true, cliVersion: '2.1.4 (Claude Code)',
-      apiPurposes: ['coach'], claudeCode: { ok: 42, failed: 1, lastOk: new Date().toISOString(), lastError: null }, fallbacks: 1, problems: [] });
+      apiPurposes: ['coach'], claudeCode: { ok: 42, failed: 1, lastOk: new Date().toISOString(), lastError: null }, fallbacks: 1, problems: [],
+      subscription: { status: 'allowed', type: 'five_hour', utilization: 0.42, resetsAt: at(3), updatedAt: at(-0.2), near: false, reached: false,
+        usage: { fiveHour: { percent: 42, resetsAt: at(3) }, sevenDay: { percent: 63, resetsAt: at(60) } } } });
     if (u.pathname === '/api/costs') return json(route, { usdSek: 10, backend: 'hybrid', monthName: 'november', today: { sek: 0.42, calls: 12, subscriptionSek: 1.1 },
       month: { sek: 6.3, calls: 380, subscriptionSek: 24.5 }, azure: { characters: 41000, free: 500000 },
       days: Array.from({ length: 30 }, (_, i) => ({ day: '2026-11-' + String(i + 1).padStart(2, '0'), sek: Math.random() * 0.6, subscriptionSek: Math.random() * 1.5 })),
@@ -24,6 +28,6 @@ const STATIC = process.argv[2], OUT = process.argv[3];
   });
   const page = await ctx.newPage();
   await page.goto('http://pluggis.local:8080/admin#kostnad'); await page.waitForTimeout(800);
-  await page.locator('.mode-list').screenshot({ path: OUT });
+  await page.locator('section.panel', { has: page.locator('.mode-list') }).screenshot({ path: OUT });
   await browser.close();
 })();

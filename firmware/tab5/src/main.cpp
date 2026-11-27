@@ -766,7 +766,8 @@ static void showScreen(Screen s, bool force) {
 /** Språk (glosor): rösten (svensk KB-Whisper) hör inte spanska ord bra – där trycker man i stället. */
 static bool isLanguageText(String t) {
   t.toLowerCase();
-  const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol"};
+  const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol",
+                         "spanish", "french", "german", "italian", "chinese", "vocabulary", "language"};
   for (auto w : words) if (t.indexOf(w) >= 0) return true;
   return false;
 }
@@ -1240,14 +1241,17 @@ static long readingPlanItem = 0;       // planens moment som läses upp just nu 
 static String exerciseFor(const String& task) {
   String t = task;
   t.toLowerCase();
-  if (t.indexOf("testprov") >= 0) return "exam";
-  if (t.indexOf("öva i pluggis") >= 0 || t.indexOf("blandade övningar") >= 0 || t.indexOf("övningspass") >= 0) return "mix";
-  if (t.indexOf("glosförhör") >= 0 || t.indexOf("förhör glosorna") >= 0 || t.indexOf("muntligt förhör") >= 0) return "vocab";
+  // Svenska och engelska (elever som använder Pluggis på engelska)
+  if (t.indexOf("testprov") >= 0 || t.indexOf("mock test") >= 0) return "exam";
+  if (t.indexOf("öva i pluggis") >= 0 || t.indexOf("blandade övningar") >= 0 || t.indexOf("övningspass") >= 0
+      || t.indexOf("practice session") >= 0 || t.indexOf("practise in pluggis") >= 0 || t.indexOf("practice in pluggis") >= 0) return "mix";
+  if (t.indexOf("glosförhör") >= 0 || t.indexOf("förhör glosorna") >= 0 || t.indexOf("muntligt förhör") >= 0
+      || t.indexOf("vocabulary quiz") >= 0) return "vocab";
   if (t.indexOf("snabbquiz") >= 0 || t.indexOf("quiz") >= 0) return "quiz";
-  if (t.indexOf("lucktext") >= 0) return "cloze";
-  if (t.indexOf("förklara för pluggis") >= 0 || t.indexOf("förklara i pluggis") >= 0) return "explain";
-  if (t.indexOf("matcha par") >= 0 || t.indexOf("matcha") >= 0) return "match";
-  if (t.indexOf("rätt ordning") >= 0) return "order";
+  if (t.indexOf("lucktext") >= 0 || t.indexOf("fill in the gap") >= 0) return "cloze";
+  if (t.indexOf("förklara för pluggis") >= 0 || t.indexOf("förklara i pluggis") >= 0 || t.indexOf("explain to pluggis") >= 0) return "explain";
+  if (t.indexOf("matcha par") >= 0 || t.indexOf("matcha") >= 0 || t.indexOf("match pairs") >= 0) return "match";
+  if (t.indexOf("rätt ordning") >= 0 || t.indexOf("right order") >= 0) return "order";
   return "";
 }
 static int listenPos = 0, fetchPos = 0, nowPlaying = -1, sinceSave = 0;
@@ -1277,9 +1281,15 @@ static void parsePages(const String& task, int& from, int& to) {
   String t = task;
   t.toLowerCase();
   int at = -1;
-  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s.", "läs "}) {   // "Läs 182–187" utan "s."
-    at = t.indexOf(key);
-    if (at >= 0) { at += strlen(key); break; }
+  // "Läs 182–187" utan "s.", och engelska: "Read p. 40–45", "pages 12 to 14"
+  for (const char* key : {"sidorna", "sidan", "sid.", "sid ", "s. ", "s.", "läs ", "pages ", "page ", "pp. ", "p. ", "p.", "read "}) {
+    int k = t.indexOf(key);
+    // bara om en siffra följer (annars "concepts." osv.)
+    if (k >= 0) {
+      int d = k + strlen(key);
+      while (d < (int)t.length() && t[d] == ' ') d++;
+      if (d < (int)t.length() && t[d] >= '0' && t[d] <= '9') { at = k + strlen(key); break; }
+    }
   }
   if (at < 0) return;
   auto num = [&](int& i) {
@@ -1295,7 +1305,8 @@ static void parsePages(const String& task, int& from, int& to) {
   // "–" (en dash, 3 byte i UTF-8), "-", "till" eller "och" före sista sidan
   String rest = t.substring(i, i + 8);
   int skip = rest.startsWith("-") ? 1 : rest.startsWith("\xE2\x80\x93") ? 3 : rest.startsWith(" - ") ? 3
-           : rest.startsWith(" till ") ? 6 : rest.startsWith(" och ") ? 5 : 0;
+           : rest.startsWith(" till ") ? 6 : rest.startsWith(" och ") ? 5
+           : rest.startsWith(" to ") ? 4 : rest.startsWith(" and ") ? 5 : 0;
   if (skip) {
     int j = i + skip;
     int v = num(j);

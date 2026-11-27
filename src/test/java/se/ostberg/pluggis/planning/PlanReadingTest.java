@@ -20,6 +20,11 @@ class PlanReadingTest {
         assertThat(PlanningService.pagesIn("Läs 182-187")).containsExactly(182, 187);
         assertThat(PlanningService.pagesIn("Läs s. 182–187 i Utkik")).containsExactly(182, 187);
         assertThat(PlanningService.pagesIn("Gör ett snabbquiz")).isNull();
+        // engelska elever
+        assertThat(PlanningService.pagesIn("Read p. 40–45 about photosynthesis")).containsExactly(40, 45);
+        assertThat(PlanningService.pagesIn("Read pages 12 to 14")).containsExactly(12, 14);
+        assertThat(PlanningService.pagesIn("Read pp. 3-4")).containsExactly(3, 4);
+        assertThat(PlanningService.pagesIn("Practice session: photosynthesis concepts")).isNull();
     }
 
     @Test

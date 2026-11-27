@@ -663,7 +663,8 @@ public class PlanningService {
     }
 
     private static final java.util.regex.Pattern PAGES = java.util.regex.Pattern.compile(
-            "(?i)(?:\\bs\\.|\\bsid\\.?|\\bsidan|\\bsidorna|\\bläs)\\s*(\\d+)(?:\\s*(?:[-–]|till|och)\\s*(\\d+))?");
+            "(?i)(?:\\bs\\.|\\bsid\\.?|\\bsidan|\\bsidorna|\\bläs|\\bpp?\\.|\\bpages?|\\bread)\\s*(\\d+)"
+                    + "(?:\\s*(?:[-–]|till|och|to|and)\\s*(\\d+))?");
 
     /** Sidorna i ett läsmoment ("Läs s. 40–45" → 40, 45). Null om texten inte nämner sidor. */
     static int[] pagesIn(String task) {
@@ -752,7 +753,8 @@ public class PlanningService {
     /** Kortaste moment i en plan – kortare pass blir för små för att komma någonstans. */
     public static final int MIN_ITEM_MINUTES = 15;
     private static final java.util.regex.Pattern SKIM_ONLY = java.util.regex.Pattern.compile(
-            "(?i)(bara|endast|skumma)\\s+(igenom\\s+)?(rubrik|bild|sidorna)|läs\\s+(bara\\s+)?rubrikerna");
+            "(?i)(bara|endast|skumma)\\s+(igenom\\s+)?(rubrik|bild|sidorna)|läs\\s+(bara\\s+)?rubrikerna"
+                    + "|(only|just|skim)\\s+(through\\s+)?(the\\s+)?(headings|pictures)|read\\s+(only\\s+)?the\\s+headings");
 
     private static PlanItem.Type type(String raw) {
         if (raw == null) {

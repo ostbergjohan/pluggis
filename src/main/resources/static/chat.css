@@ -256,7 +256,7 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 .quiz-btn small { font-size: 12px; color: var(--muted); }
 .quiz-btn:disabled { opacity: .7; }
 .quiz-progress { height: 6px; border-radius: 3px; background: rgba(0,0,0,.08); margin-top: 10px; overflow: hidden; }
-.quiz-progress[hidden] { display: none; }
+.quiz-progress[hidden], .quiz-btn[hidden] { display: none; }
 .quiz-progress div { height: 100%; width: 0; background: var(--yellow); transition: width .3s; }
 .choices { display: grid; gap: 10px; width: 100%; }
 .choice { display: flex; align-items: center; gap: 12px; text-align: left; padding: 14px; border-radius: 14px; border: 2px solid var(--line);
@@ -390,3 +390,6 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: fl
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 .theme-btn { min-width: 36px; }
+
+/* Övningspassets gula rad: knapparna läsbara i både ljust och mörkt läge */
+#runBar .small-btn { background: #022153; color: #fff; border-color: #022153; }

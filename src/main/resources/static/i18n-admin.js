@@ -128,7 +128,7 @@ I18N.add({
   'Bara API-nyckel': 'API key only', 'Hybrid': 'Hybrid', 'Bara abonnemanget': 'Subscription only',
   'Claude: API eller abonnemang': 'Claude: API or subscription', 'Claude körs nu: {0}': 'Claude runs now: {0}',
   '(som i .env)': '(as in .env)', '❌ hittas inte': '❌ not found', '✅ finns': '✅ found', 'Senaste fel': 'Latest error',
-  'Föll tillbaka till API-nyckeln': 'Fell back to the API key', '{0} gånger sedan start': '{0} times since start',
+  'Föll tillbaka till API-nyckeln': 'Fell back to the API key', '{0} gånger sedan start': '{0} times since start', '{0} lyckade, {1} misslyckade': '{0} succeeded, {1} failed',
   'Valet sparas och gäller direkt, även efter omstart. Hur mycket av Pro-abonnemangets gräns som gått åt syns inte här – det ser du i Claude-appen under Inställningar → Användning.':
     "The choice is saved and applies immediately, also after a restart. How much of the Pro subscription's limit has been used isn't shown here – you see that in the Claude app under Settings → Usage.",
 

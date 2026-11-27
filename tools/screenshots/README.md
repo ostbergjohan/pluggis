@@ -7,7 +7,9 @@ Takes iPhone-sized screenshots (390×844, Retina) of the real chat code with mad
 cd tools/screenshots
 npm install playwright          # once
 npx playwright install chromium # if you don't have Chrome
-node shots.js ../../src/main/resources/static /tmp/screenshots          # iPhone
+node shots.js ../../src/main/resources/static /tmp/screenshots en       # iPhone, English student, dark mode (the README images)
+node shots.js ../../src/main/resources/static /tmp/screenshots          # the same in Swedish
+node admin-mode.js ../../src/main/resources/static /tmp/admin-claude.png en   # the parent view's Claude panel
 node shots-desktop.js ../../src/main/resources/static /tmp/screenshots  # computer
 ```
 

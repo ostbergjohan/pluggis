@@ -76,7 +76,10 @@ public class ClaudeClient {
             plans, task and deck names, summaries and every text value in JSON. Keep JSON keys and fixed codes \
             (types, enums) exactly as specified. The student goes to a Swedish school, so material may be in \
             Swedish – explain it in English and keep Swedish names and terms when that helps. For language \
-            homework, words in the language being learned stay in that language; translations go into English.""";
+            homework, words in the language being learned stay in that language; translations go into English. \
+            In study plans, use these English names so the app can show its buttons: reading tasks "Read p. 40–45 …", \
+            practice tasks "Practice session: <what>" (never a single exercise), "Mock test in Pluggis" and \
+            "Vocabulary quiz: <words>".""";
 
     public ObjectNode newRequest(PluggisProperties.ModelProfile profile, String system) {
         return newRequest(profile, system, null);

@@ -102,7 +102,7 @@ I18N.add({
   'Material ({0})': 'Material ({0})',
   'Inget material än. Fota sidorna i boken så vet Pluggis vad som ingår.':
     "No material yet. Take photos of the pages in the book so that Pluggis knows what's included.",
-  'Sida {0}': 'Page {0}', 'Sida {0}{1}': 'Page {0}{1}',
+  'Sida {0}': 'Page {0}', 'Sida {0}{1}': 'Page {0}{1}', 'Del {0}': 'Part {0}',
   '🎧 Lyssna härifrån': '🎧 Listen from here',
   'Visa text': 'Show text', 'Dölj text': 'Hide text',
   '📷 Lägg till sidor eller filer': '📷 Add pages or files',
@@ -137,7 +137,7 @@ I18N.add({
   'Hittade inga läxor': "Didn't find any homework",
   'Fota en sida i taget och tryck ➕ för nästa – eller välj flera i Bilder på en gång. Alla sidor läses tillsammans.':
     'Take a photo of one page at a time and tap ➕ for the next – or choose several in Photos at once. All pages are read together.',
-  'Skicka': 'Send', 'Avbryt': 'Cancel', 'Spara': 'Save', 'Stäng': 'Close', 'Klar': 'Done', 'Tillbaka': 'Back',
+  'Skicka': 'Send', 'Avbryt': 'Cancel', 'Spara': 'Save', 'Stäng': 'Close', 'Klar': 'Done', 'Tillbaka': 'Back', '‹ Tillbaka': '‹ Back',
   'Välj fil': 'Choose file', 'Ladda upp': 'Upload', 'Fota': 'Take photo',
 
   // Öva

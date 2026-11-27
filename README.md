@@ -16,9 +16,10 @@ rewritten for a Swedish voice coach (see [Thanks](#thanks)).
 1. **Homework and tests come in** from the school's calendar – InfoMentor or any other service that offers a
    calendar subscription (iCal/webcal link or an .ics file: Google Classroom, Microsoft Teams/Outlook, Schoolsoft,
    Unikum, Vklass …) – or from a screenshot of the weekly plan, a file or pasted text.
-2. **Photograph the pages from the book** (or upload Word, PDF or a screenshot) on the homework or test. Claude reads
-   them – text, book page numbers, sections and concepts – and they become the **material**: what's included, what
-   gets read aloud, and what every exercise is made from.
+2. **Just photograph the book pages with your phone** – open the homework or test in the app, tap *📷 Lägg till sidor eller filer* (add pages or files),
+   take one photo per page (no scanner, no typing). Word, PDF and screenshots work too. Claude reads the photos –
+   text, book page numbers, sections and concepts – and they become the **material**: what's included, what gets
+   read aloud, and what every exercise is made from.
 3. **Pluggis makes the plan – when and what to study.** From the material and the date, Claude spreads the work over
    the student's study days, within the daily max: which pages to read which day ("Läs s. 40–45"), practice sessions
    in between, repetition and a mock test before the test, with everything new done 1–2 days before. One block per
@@ -62,42 +63,30 @@ A student can be switched to **English** (see [Language](#language)).
 | English per student: the coach, plans, exercises, voice, speech recognition, the student app and the Tab5 in English; the parent view in Swedish or English | ✅ |
 | Desk screen M5Stack Tab5: practise, chat, homework, plan, focus timer, clock on the charger, WiFi and settings on screen ([firmware/tab5](firmware/tab5)) | ✅ |
 
-## What the student chat looks like
+## What it looks like
 
-The student chat on an iPhone (test data).
+The student app on an iPhone, here for a student using English, in dark mode (test data). Swedish is the default.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/chatt.png" width="220" alt="Chat with the coach"><br><sub>Chat with the coach</sub></td>
-    <td align="center"><img src="docs/screenshots/plan.png" width="220" alt="Plan – one block per subject"><br><sub>Plan – one block per subject</sub></td>
-    <td align="center"><img src="docs/screenshots/laxor.png" width="220" alt="Homework and tests"><br><sub>Homework and tests</sub></td>
+    <td align="center"><img src="docs/screenshots/plan.png" width="220" alt="The plan: what to study today"><br><sub>The plan: what to study today</sub></td>
+    <td align="center"><img src="docs/screenshots/photo-pages.png" width="220" alt="Photograph the book pages with the phone"><br><sub>Photograph the book pages with the phone</sub></td>
+    <td align="center"><img src="docs/screenshots/test-material.png" width="220" alt="The test with its material, read aloud"><br><sub>The test with its material, read aloud</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/prov.png" width="220" alt="A test's page with material"><br><sub>A test's page with material</sub></td>
-    <td align="center"><img src="docs/screenshots/ova.png" width="220" alt="Practise – cards, quiz, Explain and mock test"><br><sub>Practise – six ways to study</sub></td>
-    <td align="center"><img src="docs/screenshots/snabbquiz-ratt.png" width="220" alt="Quick quiz"><br><sub>Quick quiz</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/lucktext.png" width="220" alt="Fill in the gap"><br><sub>Fill in the gap</sub></td>
-    <td align="center"><img src="docs/screenshots/forklara-klart.png" width="220" alt="Explain to Pluggis"><br><sub>Explain to Pluggis</sub></td>
-    <td align="center"><img src="docs/screenshots/poang.png" width="220" alt="Points and pocket money"><br><sub>Points and pocket money</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/testprov-start.png" width="220" alt="Mock test"><br><sub>Mock test</sub></td>
-    <td align="center"><img src="docs/screenshots/testprov-fraga.png" width="220" alt="A question in the mock test"><br><sub>One question at a time</sub></td>
-    <td align="center"><img src="docs/screenshots/testprov-resultat.png" width="220" alt="Mock test result"><br><sub>Result and what to check again</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/matcha.png" width="220" alt="Match pairs"><br><sub>Match pairs</sub></td>
-    <td align="center"><img src="docs/screenshots/ordning.png" width="220" alt="Right order"><br><sub>Right order</sub></td>
-    <td></td>
+    <td align="center"><img src="docs/screenshots/practice-session.png" width="220" alt="▶ Start: a practice session with a timer"><br><sub>▶ Start: a practice session with a timer</sub></td>
+    <td align="center"><img src="docs/screenshots/mock-test-result.png" width="220" alt="Mock test: result and what to check again"><br><sub>Mock test: result and what to check again</sub></td>
+    <td align="center"><img src="docs/screenshots/chat.png" width="220" alt="Chat with the coach"><br><sub>Chat with the coach</sub></td>
   </tr>
 </table>
 
 **On a computer** (or an iPad in landscape) the space is used better: the tabs become a side menu, the content is
 centred and today's plan and "on the way to" are shown next to the chat.
 
-<img src="docs/screenshots/dator-chatt.png" width="720" alt="The student chat on a computer with today's plan beside it">
+**The parent view** – here the choice of how Claude is run (API key, hybrid or your subscription) and how much of
+the subscription's limits has been used:
+
+<img src="docs/screenshots/admin-claude.png" width="720" alt="The parent view: Claude via API key, hybrid or subscription, with the limits">
 
 ## Addresses and home screen apps
 
