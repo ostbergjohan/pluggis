@@ -16,6 +16,10 @@ med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med 
   *börja nu* för det som ligger längre fram men har moment i planen). Till höger: vald läxa, *Öva på:* delområden och
   de sex övningarna – Snabbquiz, Lucktext, Förklara, Testprov, Matcha par, Rätt ordning. Längst ner *Senast* med
   *Kör igen*. Allt görs nytt varje gång (inga sparade kortlekar). Förklara och skrivfrågor besvaras med rösten.
+  På en språkläxa (spanska, engelska, glosor …) blir Förklara **Glosförhör**: Pluggis plockar ut glosorna ur
+  materialet, Tab5 säger ordet på språket och eleven svarar högt på svenska (*Håll in och säg det på svenska*).
+  Svaret bedöms direkt – något av svaren räcker ("hunden / en hund"), med eller utan en/ett/att. Kunde/Kunde inte
+  som vanligt. Svar på svenska eftersom rösttjänsten (KB-Whisper) är svensk.
 - **Chat** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
 - **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
 - **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av, läsa upp sidorna eller starta övningen.

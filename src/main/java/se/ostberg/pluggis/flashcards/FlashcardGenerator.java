@@ -137,6 +137,9 @@ public class FlashcardGenerator {
         boolean focused = focus != null && !focus.isBlank();
         String varietyKey = focused ? "quiz|" + focus.trim() : "quiz";
         String m = mode == null ? "mix" : mode.trim().toLowerCase(java.util.Locale.ROOT);
+        if ("vocab".equals(m)) {
+            return vocab(topic, sourceText, subject, count, homeworkId, focus);
+        }
         String kinds = switch (m) {
             case "cloze" -> "Bara lucktext (\"cloze\").";
             case "quiz", "choice" -> "Bara flerval (\"choice\").";
@@ -185,6 +188,74 @@ public class FlashcardGenerator {
             variety.remember(varietyKey, homeworkId, made.stream().map(Card::getFront).limit(12).toList());
         }
         return new Result(deck, made.size(), generated.note());
+    }
+
+    /**
+     * Muntligt glosförhör: korten har ordet på målspråket fram och den svenska betydelsen bak (flera svar
+     * skilda med " / "). Tab5 säger ordet och eleven svarar på svenska, som rösttjänsten förstår.
+     */
+    Result vocab(String topic, String sourceText, String subject, int count, Long homeworkId, String focus) {
+        StringBuilder ask = new StringBuilder("Gör ").append(clamp(count)).append(" glosor.");
+        if (subject != null && !subject.isBlank()) {
+            ask.append(" Ämne: ").append(subject).append('.');
+        }
+        if (topic != null && !topic.isBlank()) {
+            ask.append(" Område: ").append(topic).append('.');
+        }
+        if (focus != null && !focus.isBlank()) {
+            ask.append("\n\nFOKUS: bara glosor om \"").append(focus.trim()).append("\".");
+        }
+        String varietyKey = "vocab" + (focus == null || focus.isBlank() ? "" : "|" + focus.trim());
+        if (variety != null) {
+            java.util.List<String> avoid = variety.recent(varietyKey, homeworkId);
+            if (!avoid.isEmpty()) {
+                ask.append("\nDe här fick eleven nyss – ta andra om det finns fler:\n- ").append(String.join("\n- ", avoid));
+            }
+        }
+        if (sourceText != null && !sourceText.isBlank()) {
+            ask.append("\n\nGlosorna finns i detta material:\n").append(sourceText);
+        } else {
+            throw new IllegalArgumentException("Läxan har inga glosor än – lägg till material (foto på glosorna) först");
+        }
+        ObjectNode req = claude.newRequest(props.anthropic().flashcards(), prompts.vocab());
+        ObjectNode msg = req.putArray("messages").addObject();
+        msg.put("role", "user");
+        msg.put("content", ask.toString());
+        GeneratedDeck generated = JsonExtract.parse(claude.create(req, "vocab").text(), mapper, GeneratedDeck.class);
+        java.util.List<FlashcardService.NewCard> cards = vocabCards(generated);
+        if (cards.isEmpty()) {
+            throw new IllegalArgumentException(generated.note() == null ? "Hittade inga glosor" : generated.note());
+        }
+        String base = generated.deckName() == null || generated.deckName().isBlank()
+                ? (topic == null || topic.isBlank() ? "Glosor" : topic) : generated.deckName();
+        String subj = generated.subject() == null ? subject : generated.subject();
+        Deck deck = flashcards.createDeck("🗣️ Glosförhör: " + base, subj, homeworkId, Deck.Source.GENERATED, cards);
+        java.util.List<Card> made = flashcards.cards(deck.getId());
+        if (variety != null) {
+            variety.remember(varietyKey, homeworkId, made.stream().map(Card::getFront).limit(12).toList());
+        }
+        return new Result(deck, made.size(), generated.note());
+    }
+
+    /** Glosor: ord fram, kort svensk betydelse bak (högst 60 tecken), inga dubbletter. */
+    static java.util.List<FlashcardService.NewCard> vocabCards(GeneratedDeck g) {
+        java.util.List<FlashcardService.NewCard> out = new java.util.ArrayList<>();
+        if (g == null || g.cards() == null) {
+            return out;
+        }
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (GeneratedDeck.GeneratedCard c : g.cards()) {
+            if (c == null || c.front() == null || c.back() == null) {
+                continue;
+            }
+            String front = c.front().trim(), back = c.back().trim();
+            if (front.isEmpty() || back.isEmpty() || back.length() > 60 || front.equalsIgnoreCase(back)
+                    || !seen.add(front.toLowerCase(java.util.Locale.ROOT))) {
+                continue;
+            }
+            out.add(new FlashcardService.NewCard(front, back, null));
+        }
+        return out;
     }
 
     /** Släpp bara igenom frågor som går att spela: minst två felaktiga alternativ, inget avslöjat svar, lucka i lucktext. */

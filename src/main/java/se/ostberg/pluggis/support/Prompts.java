@@ -19,6 +19,7 @@ public class Prompts {
     private final String material;
     private final String pageNumbers;
     private final String quiz;
+    private final String vocab;
     private final String explain;
     private final String exam;
     private final String order;
@@ -33,6 +34,7 @@ public class Prompts {
         this.material = load("prompts/material.md");
         this.pageNumbers = load("prompts/page-numbers.md");
         this.quiz = load("prompts/quiz.md");
+        this.vocab = load("prompts/vocab.md");
         this.explain = load("prompts/explain.md");
         this.exam = load("prompts/exam.md");
         this.order = load("prompts/order.md");
@@ -57,6 +59,12 @@ public class Prompts {
 
     public String quiz() {
         return quiz;
+    }
+
+
+    /** Muntligt glosförhör: målspråk → svenska. */
+    public String vocab() {
+        return vocab;
     }
 
     public String material() {

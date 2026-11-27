@@ -123,6 +123,31 @@ int main() {
   ui::buildCard(g);
   save("05-kort-svar");
 
+  // Glosförhör (språkläxa): rutan och ett kort
+  o.selected = 4;
+  o.title = "Läxa: Spanska: veckodagar och tid";
+  o.meta = "Spanska  ·  Torsdag 11/12";
+  o.color = 0x7a4fb5;
+  o.topics.clear();
+  o.language = true;
+  ui::buildOva(o);
+  save("01b-ova-spraklaxa");
+  o.language = false;
+  ui::Card v;
+  v.deck = "Glosförhör: Veckodagar";
+  v.answered = 2;
+  v.right = 2;
+  v.question = "el miércoles";
+  v.answer = "onsdag / på onsdag";
+  v.talk = "Håll in och säg det på svenska";
+  ui::buildCard(v);
+  save("05b-glosforhor");
+  v.revealed = true;
+  v.spoken = "onsdag";
+  v.verdict = 1;
+  ui::buildCard(v);
+  save("05c-glosforhor-svar");
+
   ui::Card done;
   done.deck = "Snabbquiz: Fotosyntesen";
   done.done = true;

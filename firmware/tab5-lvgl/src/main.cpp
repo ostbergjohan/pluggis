@@ -483,6 +483,7 @@ struct MakeHw {
   String label;      // "Prov: Glosförhör kap 3" (för titlar i övningarna)
   String title, subject, due;
   bool test = false, startNow = false;
+  bool language = false;   // språk/glosor: Glosförhör i Öva
 };
 // Senast: det som gjordes sist, för "Kör igen"
 static String lastText, lastFocus;
@@ -515,6 +516,8 @@ static int answered = 0, rightCount = 0;
 static std::vector<String> deckBacks;   // svaren på lekens kort – blir felaktiga alternativ
 static String spokenAnswer;
 static bool isLanguageDeck();
+static bool isLanguageText(String t);
+static bool oralDeck = false, oralNext = false;   // muntligt glosförhör: ordet sägs, eleven svarar på svenska
 static String jsonEscape(const String& t);
 static int voiceVerdict = -1;           // 1 låter rätt, 0 låter fel
 static constexpr int ROUND = 10;
@@ -565,6 +568,7 @@ static void loadDecks() {
       m.due = x["dueDate"] | "";
       m.test = kind == "TEST";
       m.label = String(m.test ? "Prov: " : "Läxa: ") + m.title;
+      m.language = isLanguageText(m.subject + " " + m.title);
       makeList.push_back(m);
     }
   }
@@ -629,7 +633,7 @@ static void nextCard() {
   if (answered >= ROUND) {
     noMoreCards = true;
     SFX_DONE();
-    setLast(cur.name.startsWith("Lucktext") || cur.name.indexOf("Lucktext") >= 0 ? 1 : 0, String(rightCount) + " av " + String(answered) + " rätt");
+    setLast(oralDeck ? 2 : cur.name.startsWith("Lucktext") || cur.name.indexOf("Lucktext") >= 0 ? 1 : 0, String(rightCount) + " av " + String(answered) + " rätt");
     return;
   }
   for (int attempt = 0; attempt < 2; attempt++) {
@@ -652,7 +656,7 @@ static void nextCard() {
         for (int i = 0; i < (int)options.size(); i++) if (options[i] == qBack) correctIdx = i;
       }
       // Inga egna felaktiga svar: ta tre svar från andra kort i leken (om svaren är korta)
-      if (options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
+      if (!oralDeck && options.empty() && qBack.length() && qBack.length() <= (isLanguageDeck() ? 120 : 70)) {
         std::vector<String> pool;
         for (auto& b : deckBacks)
           if (b != qBack && b.length() <= 90 && std::find(pool.begin(), pool.end(), b) == pool.end()) pool.push_back(b);
@@ -683,6 +687,8 @@ static void grade(bool correct) {
 
 static void openDeck(const DeckInfo& d) {
   cur = d;
+  oralDeck = oralNext;
+  oralNext = false;
   answered = rightCount = 0;
   practiceAnyway = d.due == 0;
   screen = Screen::OvaCard;
@@ -736,13 +742,13 @@ static void showScreen(Screen s, bool force) {
 
 
 /** Språk (glosor): rösten (svensk KB-Whisper) hör inte spanska ord bra – där trycker man i stället. */
-static bool isLanguageDeck() {
-  String t = cur.subject + " " + cur.name;
+static bool isLanguageText(String t) {
   t.toLowerCase();
   const char* words[] = {"spansk", "engelsk", "fransk", "tysk", "språk", "sprak", "glos", "italiensk", "kinesisk", "english", "español", "espanol"};
   for (auto w : words) if (t.indexOf(w) >= 0) return true;
   return false;
 }
+static bool isLanguageDeck() { return isLanguageText(cur.subject + " " + cur.name); }
 
 /** Språket i en språk-kortlek: "es", "de", "fr", "en" – annars "". */
 static const char* langFrom(String t) {
@@ -829,6 +835,36 @@ static int judge(const String& said, const String& answer) {
   return words && hits * 10 >= words * 6 ? 1 : 0;
 }
 
+/** Glosförhöret: "hunden / en hund" – något av svaren räcker, med eller utan en/ett/att framför. */
+static String withoutArticle(const String& in) {
+  String t = normalize(in);
+  for (const char* a : {"en ", "ett ", "att ", "den ", "det ", "de "})
+    if (t.startsWith(a)) { t = t.substring(strlen(a)); break; }
+  return t;
+}
+static int judgeVocab(const String& said, const String& back) {
+  String b = back;
+  b.replace(" eller ", "/");
+  b.replace(",", "/");
+  b.replace(";", "/");
+  String s = withoutArticle(said);
+  bool any = false;
+  int start = 0;
+  while (true) {
+    int sl = b.indexOf('/', start);
+    String alt = b.substring(start, sl < 0 ? b.length() : sl);
+    alt.trim();
+    if (alt.length()) {
+      any = true;
+      String a = withoutArticle(alt);
+      if (a.length() && (s == a || judge(s, a) == 1 || judge(said, alt) == 1)) return 1;
+    }
+    if (sl < 0) break;
+    start = sl + 1;
+  }
+  return any ? 0 : -1;
+}
+
 /** Inspelningen på ett kort: skicka till servern (KB-Whisper), visa vad som hördes och rätt svar. */
 static void gameVoice(const String& said);
 static void gameBusy(const String& what);
@@ -872,7 +908,7 @@ static void answerByVoice(bool send) {
   redraw();
   String said = transcribeRecording();
   spokenAnswer = said.length() ? said : "(hörde inget – visa svaret och bedöm själv)";
-  voiceVerdict = said.length() ? judge(said, qBack) : -1;
+  voiceVerdict = !said.length() ? -1 : oralDeck ? judgeVocab(said, qBack) : judge(said, qBack);
   revealed = true;
   if (voiceVerdict == 1) SFX_OK();
   dirtyOva = true;
@@ -881,8 +917,10 @@ static void answerByVoice(bool send) {
 
 /** Pluggis (Claude) gör frågorna av läxans material – tar en stund – och övningen startar direkt. */
 static void makeQuiz(long homeworkId, const char* mode) {
-  makeBusy = strcmp(mode, "cloze") == 0 ? "Pluggis gör en lucktext av materialet ...\n\nDet kan ta en halv minut."
-                                       : "Pluggis gör ett snabbquiz av materialet ...\n\nDet kan ta en halv minut.";
+  bool vocab = strcmp(mode, "vocab") == 0;
+  makeBusy = vocab ? "Pluggis plockar ut glosorna ...\n\nDet kan ta en halv minut."
+           : strcmp(mode, "cloze") == 0 ? "Pluggis gör en lucktext av materialet ...\n\nDet kan ta en halv minut."
+                                        : "Pluggis gör ett snabbquiz av materialet ...\n\nDet kan ta en halv minut.";
   dirtyOva = true;
   redraw();
   JsonDocument doc;
@@ -890,6 +928,11 @@ static void makeQuiz(long homeworkId, const char* mode) {
   int code = api("POST", "/api/flashcards/quiz", "{\"homeworkId\":" + String(homeworkId) + ",\"mode\":\"" + mode +
                  "\",\"count\":10" + (focus.length() ? ",\"focus\":\"" + jsonEscape(focus) + "\"" : String()) + "}", &doc, 120000);
   makeBusy = "";
+  if (code == 422 && vocab) {
+    ovaMessage = clean(doc["error"] | "Hittade inga glosor i läxan.") + "\n\nLägg till ett foto på glosorna i Pluggis-appen.";
+    dirtyOva = true;
+    return;
+  }
   if (code != 200) {
     ovaMessage = String("Det gick inte att göra frågor just nu (") + code + "). Tryck för att försöka igen.";
     dirtyOva = true;
@@ -903,7 +946,8 @@ static void makeQuiz(long homeworkId, const char* mode) {
   d.cards = 10;
   d.due = 10;
   d.homeworkId = homeworkId;
-  d.name = String(strcmp(mode, "cloze") == 0 ? "Lucktext: " : "Snabbquiz: ") + d.name;
+  d.name = String(vocab ? "Glosförhör: " : strcmp(mode, "cloze") == 0 ? "Lucktext: " : "Snabbquiz: ") + d.name;
+  oralNext = vocab;
   lastHw = homeworkId;
   lastFocus = focus;
   if (!d.id) { loadDecks(); dirtyOva = true; return; }
@@ -1175,6 +1219,7 @@ static String exerciseFor(const String& task) {
   String t = task;
   t.toLowerCase();
   if (t.indexOf("testprov") >= 0) return "exam";
+  if (t.indexOf("glosförhör") >= 0 || t.indexOf("förhör glosorna") >= 0 || t.indexOf("muntligt förhör") >= 0) return "vocab";
   if (t.indexOf("snabbquiz") >= 0 || t.indexOf("quiz") >= 0) return "quiz";
   if (t.indexOf("lucktext") >= 0) return "cloze";
   if (t.indexOf("förklara för pluggis") >= 0 || t.indexOf("förklara i pluggis") >= 0) return "explain";
@@ -1667,7 +1712,7 @@ static void setLast(int kind, const String& result) {
   lastKind = kind;
   String name;
   for (auto& m : makeList) if (m.id == lastHw) name = m.title;
-  lastText = String(MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
+  lastText = String(kind == 2 && oralDeck ? "Glosförhör" : MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
              (name.length() ? " · " + name : String()) + (result.length() ? " · " + result : String());
 }
 
@@ -2088,6 +2133,7 @@ static void drawOvaList() {
   m.focus = mkFocus;
   m.last = S(lastText);
   m.canAgain = lastKind >= 0;
+  m.language = sel.language;
   ui::buildOva(m);
 }
 
@@ -2106,7 +2152,8 @@ static void drawCard() {
   m.chosen = chosen;
   m.correct = correctIdx;
   m.revealed = revealed;
-  m.languageDeck = isLanguageDeck();
+  m.languageDeck = isLanguageDeck() && !oralDeck;
+  if (oralDeck) m.talk = "Håll in och säg det på svenska";
   m.spoken = S(spokenAnswer);
   m.verdict = voiceVerdict;
   m.recording = recording;
@@ -2534,6 +2581,7 @@ static void setVolume(int v) {
 static void startExercise(int i, long hw) {
   if (i == 0) makeQuiz(hw, "quiz");
   else if (i == 1) makeQuiz(hw, "cloze");
+  else if (i == 2 && makeIdx < (int)makeList.size() && makeList[makeIdx].language) makeQuiz(hw, "vocab");
   else startGame(i, hw, makeList[makeIdx].label);
 }
 
@@ -3138,7 +3186,7 @@ void loop() {
     for (size_t i = 0; i < makeList.size(); i++) if (makeList[i].id == pendingHw) idx = i;
     if (idx >= 0) {
       makeIdx = idx;
-      if (pendingKind == "quiz" || pendingKind == "cloze") makeQuiz(pendingHw, pendingKind.c_str());
+      if (pendingKind == "quiz" || pendingKind == "cloze" || pendingKind == "vocab") makeQuiz(pendingHw, pendingKind.c_str());
       else startGame(pendingKind == "explain" ? 2 : pendingKind == "exam" ? 3 : pendingKind == "match" ? 4 : 5, pendingHw, makeList[idx].label);
     }
     dirtyAll = true;

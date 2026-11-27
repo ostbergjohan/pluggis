@@ -1120,24 +1120,26 @@ void buildOva(const Ova& m) {
     lv_obj_set_style_bg_grad_color(b, C(0x0F2F68), 0);
     lv_obj_set_style_bg_grad_dir(b, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_border_width(b, 2, 0);
-    lv_obj_set_style_border_color(b, C(EX_TINT[i]), 0);
+    bool vocab = m.language && i == 2;   // språkläxa: Glosförhör i stället för Förklara
+    uint32_t tint = vocab ? 0xF0A93A : EX_TINT[i];
+    lv_obj_set_style_border_color(b, C(tint), 0);
     lv_obj_set_style_border_opa(b, LV_OPA_40, 0);
-    lv_obj_set_style_bg_color(b, lv_color_mix(C(EX_TINT[i]), C(SURFACE2), 90), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(b, lv_color_mix(C(tint), C(SURFACE2), 90), LV_STATE_PRESSED);
     lv_obj_set_style_transform_width(b, -5, LV_STATE_PRESSED);
     lv_obj_set_style_transform_height(b, -5, LV_STATE_PRESSED);
     lv_obj_add_style(b, &stTrans, 0);
     shadow(b, 18, 5);
     lv_obj_add_event_cb(b, onClick, LV_EVENT_CLICKED, pack(Act::OvaExercise, i));
-    lv_obj_t* ic = panel(b, EX_TINT[i], 999);
+    lv_obj_t* ic = panel(b, tint, 999);
     lv_obj_set_size(ic, 56, 56);
     lv_obj_set_pos(ic, 18, 16);
-    lv_obj_t* il = icon(ic, EX_SYMS[i], INK);
+    lv_obj_t* il = icon(ic, vocab ? SYM_MIC : EX_SYMS[i], INK);
     lv_obj_center(il);
-    lv_obj_t* go = icon(b, LV_SYMBOL_RIGHT, EX_TINT[i], F_S);
+    lv_obj_t* go = icon(b, LV_SYMBOL_RIGHT, tint, F_S);
     lv_obj_align(go, LV_ALIGN_TOP_RIGHT, -20, 30);
-    lv_obj_t* n = oneLine(b, EX_NAMES[i], F_MB, INK, TW - 36);
+    lv_obj_t* n = oneLine(b, vocab ? "Glosförhör" : EX_NAMES[i], F_MB, INK, TW - 36);
     lv_obj_set_pos(n, 20, TH - 76);
-    lv_obj_t* s = oneLine(b, EX_SUBS[i], F_S, 0xB4C3D6, TW - 36);
+    lv_obj_t* s = oneLine(b, vocab ? "svara högt på svenska" : EX_SUBS[i], F_S, 0xB4C3D6, TW - 36);
     lv_obj_set_pos(s, 20, TH - 40);
   }
 
@@ -1250,7 +1252,7 @@ void buildCard(const Card& m) {
       button(c, PAD, by, W - 2 * PAD, BH, "Visa svar", Kind::Primary, Act::CardReveal, 0, LV_SYMBOL_EYE_OPEN);
     } else {
       button(c, PAD, by, bw, BH, "Visa svar", Kind::Secondary, Act::CardReveal, 0, LV_SYMBOL_EYE_OPEN);
-      talkButton(c, PAD + bw + GAP, by, bw, BH, "Håll in och svara", m.recording);
+      talkButton(c, PAD + bw + GAP, by, bw, BH, m.talk.empty() ? std::string("Håll in och svara") : m.talk, m.recording);
     }
     return;
   }

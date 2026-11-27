@@ -189,6 +189,7 @@ struct Ova {
   bool topicsLoading = false;
   std::vector<std::string> topics;   // utan "Allt"
   int focus = 0;                     // 0 = Allt
+  bool language = false;             // språkläxa: Glosförhör i stället för Förklara
   std::string last;                  // "Snabbquiz · Fotosyntesen · 8 av 10 rätt"
   bool canAgain = false;
 };
@@ -208,6 +209,7 @@ struct Card {
   std::string spoken;        // vad eleven sa
   int verdict = -1;          // 1 låter rätt, 0 jämför själv
   bool recording = false;
+  std::string talk;          // texten på håll-in-knappen ("" = "Håll in och svara")
 };
 void buildCard(const Card& m);
 
