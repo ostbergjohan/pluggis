@@ -44,6 +44,7 @@ struct Cfg {
   bool code = false;  // auth är en elevkod
   int idleMin = 5;    // stäng av efter (0 = aldrig)
   int bright = 200;   // ljusstyrka 30–255
+  int clockMode = 1;  // klocka på laddaren när ingen rör den: 0 av, 1 kl 15–21, 2 kl 7–22
 };
 static Cfg cfg;
 
@@ -75,9 +76,10 @@ static lv_display_t* lvDisp = nullptr;
 static bool touchDown = false, swallowTouch = false;
 static int touchX = 0, touchY = 0;
 static void redraw();
+static void goToSleep();
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
-enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi, Settings, Entry };
+enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi, Settings, Entry, Focus };
 static Screen screen = Screen::OvaList;   // Tab5 startar på Öva
 enum class Game { None, Explain, Exam, Match, Order };
 static Game game = Game::None;
@@ -1740,15 +1742,291 @@ static void drawBoot() {
   ui::showBoot(S(line), S(warn), !wifi && millis() - bootStart > 15000);
 }
 
+// ---------------------------------------------------------------- fokustimern
+// Ett pass med nedräkning. Räknas som övningstid (poäng som vanligt) och bockar av planens moment när det är klart.
+// Medan timern går stängs Tab5 inte av; utan tryck dämpas skärmen efter en minut.
+struct FocusState {
+  bool on = false, paused = false, done = false, onBreak = false, choose = false, warned = false;
+  int total = 0;                 // sekunder
+  uint32_t startedAt = 0, pausedAt = 0, pausedMs = 0;
+  long planItem = 0, hwId = 0;
+  String title, subject, reward, practice;
+  uint32_t color = ui::ACCENT;
+  int minutes = 0;
+};
+static FocusState fz;
+static Screen focusReturn = Screen::Plan;
+static bool focusDim = false;
+
+static int focusLeft() {
+  if (!fz.on) return 0;
+  uint32_t now = fz.paused ? fz.pausedAt : millis();
+  int gone = (int)((now - fz.startedAt - fz.pausedMs) / 1000);
+  return std::max(0, fz.total - gone);
+}
+/** Det som visas i toppraden: -1 när ingen timer går. */
+static int focusShownLeft() { return fz.on && !fz.done ? focusLeft() : -1; }
+static int focusedSeconds() { return fz.onBreak ? 0 : std::max(0, fz.total - focusLeft()); }
+
+static void focusPracticeEnd() {
+  if (!fz.practice.length()) return;
+  String id = fz.practice;
+  fz.practice = "";
+  JsonDocument r;
+  api("POST", "/api/practice/" + id + "/end", "{\"activeSeconds\":" + String(focusedSeconds()) + "}", &r);
+}
+
+static void focusBegin(int minutes, bool onBreak) {
+  fz.on = true;
+  fz.paused = fz.done = fz.warned = false;
+  fz.onBreak = onBreak;
+  fz.choose = false;
+  fz.total = minutes * 60;
+  fz.startedAt = millis();
+  fz.pausedMs = 0;
+  if (!onBreak) {
+    fz.minutes = minutes;
+    String what = "Fokus: " + (fz.title.length() ? fz.title : String("fritt pass"));
+    what.replace("\"", "'");
+    what.replace("\\", "/");
+    JsonDocument doc;
+    String body = "{\"what\":\"" + what + "\"" + (fz.hwId ? ",\"homeworkId\":" + String(fz.hwId) : "") + "}";
+    fz.practice = api("POST", "/api/practice/start", body, &doc) == 200 ? String((const char*)(doc["id"] | "")) : "";
+  }
+  Serial.printf("[pluggis] fokus: %s %d min\n", onBreak ? "paus" : "pass", minutes);
+  if (screen != Screen::Focus) showScreen(Screen::Focus);
+  dirtyAll = true;
+}
+
+static void focusStartFor(const String& title, const String& subject, uint32_t color, int minutes, long planItem, long hwId) {
+  if (fz.on && !fz.done) focusPracticeEnd();
+  if (screen != Screen::Focus) focusReturn = screen;
+  fz = FocusState();
+  fz.title = title;
+  fz.subject = subject;
+  fz.color = color;
+  fz.planItem = planItem;
+  fz.hwId = hwId;
+  focusBegin(std::max(5, std::min(60, minutes)), false);
+}
+
+/** Passet är slut: belöning, övningstid och bocken i planen. */
+static void focusFinished() {
+  if (fz.onBreak) {
+    fz.done = true;
+    SFX_OK();
+    dirtyAll = true;
+    return;
+  }
+  focusPracticeEnd();
+  fz.done = true;
+  String reward = String(fz.minutes) + " min plugg";
+  if (fz.planItem && api("POST", "/api/plan/items/" + String(fz.planItem) + "/done", "", nullptr) == 200) {
+    reward += " · bockad i planen";
+    for (auto& r : planRows) if (r.id == fz.planItem) r.done = true;
+  }
+  fz.reward = reward;
+  SFX_DONE();
+  M5.Display.setBrightness(cfg.bright);
+  focusDim = false;
+  if (screen != Screen::Focus) showScreen(Screen::Focus);
+  dirtyAll = true;
+}
+
+static void focusStop() {
+  if (!fz.done) focusPracticeEnd();
+  int min = focusedSeconds() / 60;
+  bool early = fz.on && !fz.done && !fz.onBreak;
+  fz = FocusState();
+  if (focusDim) { focusDim = false; M5.Display.setBrightness(cfg.bright); }
+  Screen back = focusReturn == Screen::Focus ? Screen::Plan : focusReturn;
+  showScreen(back, back == Screen::Plan || back == Screen::OvaList || back == Screen::HwList);
+  if (early && min > 0) ui::toast(std::to_string(min) + " min fokus");
+}
+
+/** Varje varv i loop(): sekunder, 5 minuter kvar, slut och dämpning. */
+static void focusLoop() {
+  if (!fz.on || fz.done) return;
+  static int lastLeft = -1;
+  int left = focusLeft();
+  if (left != lastLeft) {
+    lastLeft = left;
+    ui::topTimer(left, fz.paused);
+    if (screen == Screen::Focus) ui::focusTick(left, fz.total, fz.paused, fz.onBreak);
+  }
+  if (!fz.paused && !fz.onBreak && !fz.warned && fz.total > 10 * 60 && left <= 5 * 60) {
+    fz.warned = true;
+    playMelody(MEL_TICK, 1);
+    ui::toast("5 minuter kvar");
+  }
+  if (left <= 0 && !fz.paused) { focusFinished(); return; }
+  bool running = !fz.paused;
+  if (running && !focusDim && millis() - lastTouchAt > 60000) {
+    focusDim = true;
+    M5.Display.setBrightness(std::max(20, cfg.bright / 4));
+  }
+}
+
+static void drawFocus() {
+  ui::Focus m;
+  m.choose = fz.choose || !fz.on;
+  m.subject = S(fz.subject);
+  m.title = S(fz.title);
+  m.color = fz.color;
+  m.total = fz.total;
+  m.left = focusLeft();
+  m.paused = fz.paused;
+  m.done = fz.done;
+  m.onBreak = fz.onBreak;
+  m.reward = S(fz.reward);
+  ui::buildFocus(m);
+}
+
+// ---------------------------------------------------------------- klockläget
+// På laddaren, under pluggtid och när ingen rör Tab5: klockan, nästa prov och vad som är kvar idag, med låg ljusstyrka.
+// På batteri gäller avstängningen som vanligt.
+static bool clockOn = false;
+static uint32_t clockFetchedAt = 0;
+static ui::Clock clockData;
+static constexpr int CLOCK_BRIGHT = 25;
+
+static bool onUsb() {
+  if (M5.Power.isCharging() == m5::Power_Class::is_charging) return true;
+  int v = M5.Power.getVBUSVoltage();
+  return v > 4300;
+}
+/** Är det tid för klockan (enligt inställningen)? */
+static bool clockHours() {
+  if (cfg.clockMode <= 0) return false;
+  struct tm now;
+  if (!getLocalTime(&now, 0)) return false;
+  int from = cfg.clockMode == 2 ? 7 : 15, to = cfg.clockMode == 2 ? 22 : 21;
+  return now.tm_hour >= from && now.tm_hour < to;
+}
+
+static const char* MONTHS[] = {"januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september",
+                               "oktober", "november", "december"};
+
+static void clockFetch() {
+  clockFetchedAt = millis();
+  clockData.next = clockData.nextWhen = "";
+  clockData.nextSoon = false;
+  clockData.items.clear();
+  JsonDocument hw;
+  if (api("GET", "/api/homework", "", &hw) == 200) {
+    int best = 9999;
+    for (JsonObject x : hw.as<JsonArray>()) {
+      if (String(x["kind"] | "") != "TEST") continue;
+      String due = x["dueDate"] | "";
+      if (!due.length()) continue;
+      int d = daysUntil(due);
+      if (d < 0 || d >= best) continue;
+      best = d;
+      String subj = clean(x["subject"] | ""), title = clean(x["title"] | "");
+      clockData.next = S(subj.length() && title.indexOf(subj) < 0 ? subj + ": " + title : title);
+      clockData.nextWhen = d == 0 ? "idag" : d == 1 ? "imorgon" : "om " + std::to_string(d) + " dagar";
+      clockData.nextSoon = d <= 1;
+    }
+  }
+  JsonDocument plan;
+  int total = 0, left = 0, count = 0, open = 0;
+  if (api("GET", "/api/plan/upcoming?days=1", "", &plan) == 200) {
+    for (JsonObject x : plan.as<JsonArray>()) {
+      if (daysUntil(x["planDate"] | "") != 0) continue;
+      int min = x["minutes"] | 0;
+      bool done = !x["doneAt"].isNull();
+      count++;
+      total += min;
+      if (!done) {
+        open++;
+        left += min;
+        if (clockData.items.size() < 3) clockData.items.push_back(S(clean(x["task"] | "")));
+      }
+    }
+  }
+  clockData.today = !count ? std::string("Inget inplanerat idag")
+                  : !open ? std::string("Allt klart idag!")
+                          : std::to_string(open) + " av " + std::to_string(count) + " kvar · " + std::to_string(left) + " min";
+}
+
+static void clockDraw() {
+  struct tm now;
+  if (getLocalTime(&now, 0)) {
+    char t[8];
+    snprintf(t, sizeof(t), "%02d:%02d", now.tm_hour, now.tm_min);
+    clockData.time = t;
+    clockData.date = std::string(WEEKDAYS[now.tm_wday]) + " " + std::to_string(now.tm_mday) + " " + MONTHS[now.tm_mon];
+  } else {
+    clockData.time = "--:--";
+    clockData.date = "";
+  }
+  ui::clockShow(&clockData);
+  lv_refr_now(lvDisp);
+}
+
+static void clockEnter() {
+  if (clockOn) return;
+  Serial.println("[pluggis] klockläge (laddaren)");
+  if (screen == Screen::HwDetail) listenStop(true);
+  if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
+  stopPlayback();
+  sayStop();
+  clockOn = true;
+  asleep = false;
+  idleWarned = false;
+  ui::idleWarning(false);
+  M5.Display.setBrightness(CLOCK_BRIGHT);
+  clockFetch();
+  clockDraw();
+}
+
+static void clockLeave() {
+  if (!clockOn) return;
+  clockOn = false;
+  ui::clockShow(nullptr);
+  M5.Display.setBrightness(cfg.bright);
+  lastActivity = millis();
+  dirtyAll = true;
+}
+
+/** I klockläget: ny minut, ny data var 15:e minut, och släck när pluggtiden är slut eller laddaren dras ur. */
+static void clockLoop() {
+  if (!clockOn) {
+    // Släckt på laddaren (avstängningen gick inte): visa klockan när pluggtiden börjar
+    static uint32_t lastCheck = 0;
+    if (asleep && millis() - lastCheck > 30000) {
+      lastCheck = millis();
+      if (clockHours() && onUsb()) clockEnter();
+    }
+    return;
+  }
+  static int lastMin = -1;
+  struct tm now;
+  if (getLocalTime(&now, 0) && now.tm_min != lastMin) {
+    lastMin = now.tm_min;
+    if (millis() - clockFetchedAt > 15UL * 60000) clockFetch();
+    int v = M5.Power.getVBUSVoltage();
+    if (!clockHours() || (v > 0 && v < 4000)) {
+      clockOn = false;
+      ui::clockShow(nullptr);
+      goToSleep();
+      return;
+    }
+    clockDraw();
+  }
+}
+
 static void drawTop() {
   ui::Top t;
-  t.tab = (screen == Screen::Wifi || screen == Screen::Settings || screen == Screen::Entry) ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
+  t.tab = (screen == Screen::Wifi || screen == Screen::Settings || screen == Screen::Entry || screen == Screen::Focus) ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
         : screen == Screen::Plan ? 3 : 0;
   t.status = WiFi.status() != WL_CONNECTED ? "Inget WiFi" : !wsUp ? "Ansluter" : "";
   t.volume = volume;
   t.battery = batteryLevel;
   t.charging = batteryCharging;
   t.points = weekPoints >= 0 && pointsOn ? weekPoints : -1;
+  t.focusLeft = focusShownLeft();
+  t.focusPaused = fz.paused;
   ui::setTop(t);
 }
 
@@ -2079,6 +2357,7 @@ static void drawSettings() {
   m.student = S(studentName);
   m.idleMin = cfg.idleMin;
   m.brightness = cfg.bright;
+  m.clockMode = cfg.clockMode;
   m.version = "Pluggis Tab5 · " __DATE__;
   ui::buildSettings(m);
 }
@@ -2187,6 +2466,7 @@ static void drawScreen() {
     case Screen::Wifi: drawWifi(); break;
     case Screen::Settings: drawSettings(); break;
     case Screen::Entry: drawEntry(); break;
+    case Screen::Focus: drawFocus(); break;
   }
 }
 
@@ -2231,6 +2511,7 @@ static void loadCfg() {
   }
   cfg.idleMin = prefs.getInt("idleMin", PLUGGIS_IDLE_MINUTES);
   cfg.bright = prefs.getInt("bright", 200);
+  cfg.clockMode = prefs.getInt("clockMode", 1);
 }
 
 /** (Om)startar WebSocket mot servern med nuvarande adress och kod. */
@@ -2314,6 +2595,45 @@ static void onAction(const ui::Action& a) {
     case ui::Act::SetCode: entryField = EntryField::Code; showScreen(Screen::Entry); break;
     case ui::Act::EntryOk: entryOk(); break;
     case ui::Act::EntryBack: showScreen(Screen::Settings); break;
+    case ui::Act::SetClock:
+      cfg.clockMode = std::max(0, std::min(2, a.a));
+      prefs.putInt("clockMode", cfg.clockMode);
+      dirtyOva = true;
+      break;
+    case ui::Act::FocusTop:
+      if (fz.on) { if (screen != Screen::Focus) showScreen(Screen::Focus); }
+      else {
+        if (screen != Screen::Focus) focusReturn = screen;
+        fz = FocusState();
+        fz.choose = true;
+        showScreen(Screen::Focus, true);
+      }
+      break;
+    case ui::Act::FocusStart: focusStartFor("", "", ui::ACCENT, a.a, 0, 0); break;
+    case ui::Act::FocusPause:
+      if (!fz.on || fz.done) break;
+      if (fz.paused) { fz.pausedMs += millis() - fz.pausedAt; fz.paused = false; }
+      else { fz.pausedAt = millis(); fz.paused = true; }
+      dirtyAll = true;
+      break;
+    case ui::Act::FocusEnd: focusStop(); break;
+    case ui::Act::FocusBreak: focusBegin(5, true); break;
+    case ui::Act::FocusAgain: {
+      // ett pass till med samma sak (planens moment är redan bockat)
+      FocusState keep = fz;
+      fz = FocusState();
+      fz.title = keep.title; fz.subject = keep.subject; fz.color = keep.color; fz.hwId = keep.hwId;
+      focusBegin(keep.minutes > 0 ? keep.minutes : 25, false);
+      break;
+    }
+    case ui::Act::FocusDone: focusStop(); break;
+    case ui::Act::PlanTimer: {
+      if (a.a >= (int)planShown.size()) break;
+      auto& r = planRows[planShown[a.a]];
+      if (r.done) break;
+      focusStartFor(r.task, r.subject, subjectColor(r.subject, r.task), r.minutes > 0 ? r.minutes : 25, r.id, r.hwId);
+      break;
+    }
     case ui::Act::SetIdle:
       cfg.idleMin = a.a;
       prefs.putInt("idleMin", cfg.idleMin);
@@ -2372,6 +2692,7 @@ static void onAction(const ui::Action& a) {
       t += "\nLedigt minne: " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB internt, " +
            String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024)) + " kB PSRAM";
       Serial.printf("[pluggis] status:\n%s\n", t.c_str());
+      t += "\nVersion: " __DATE__ " " __TIME__;
       ui::info("Anslutning", S(t), "Byt WiFi", ui::Act::WifiOpen);
       break;
     }
@@ -2676,12 +2997,16 @@ static void goToSleep() {
   if (screen == Screen::OvaCard || screen == Screen::Game) practiceEnd();
   stopPlayback();
   sayStop();
+  if (fz.on) { focusPracticeEnd(); fz = FocusState(); }
+  // På laddaren under pluggtid: klockan i stället
+  if (clockHours() && onUsb()) { clockEnter(); return; }
   Serial.println("[pluggis] inaktiv – stänger av");
   M5.Display.setBrightness(0);
   delay(200);
   M5.Power.powerOff();
-  // Går det inte att stänga av (t.ex. på USB-ström): släck skärmen och vakna vid tryck
+  // Går det inte att stänga av så sitter den på USB-ström: klockan under pluggtid, annars släckt tills man trycker
   delay(1500);
+  if (clockHours()) { clockEnter(); return; }
   asleep = true;
   idleWarned = false;
   ui::idleWarning(false);
@@ -2693,7 +3018,8 @@ static void checkIdle(bool touched) {
     if (touched) { asleep = false; M5.Display.setBrightness(cfg.bright); markActive(); dirtyAll = true; }
     return;
   }
-  bool busy = sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
+  if (clockOn) return;
+  bool busy = (fz.on && !fz.paused && !fz.done) || sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
               makeBusy.length() || (gameMsg.length() && gameMsg.endsWith("..."));
   if (touched || busy) { markActive(); return; }
   uint32_t idle = millis() - lastActivity, limit = (uint32_t)cfg.idleMin * 60000;
@@ -2757,12 +3083,26 @@ void loop() {
     }
   }
 
+  if (t.wasPressed() && clockOn) {
+    swallowTouch = true;   // trycket väcker bara, gör inget annat
+    clockLeave();
+    ui::clearQueue();
+    return;
+  }
   if (t.wasPressed() && (asleep || idleWarned)) {
     swallowTouch = true;   // trycket väcker bara, gör inget annat
     checkIdle(true);
     ui::clearQueue();
     return;
   }
+  if (t.wasPressed() && focusDim) {
+    focusDim = false;
+    M5.Display.setBrightness(cfg.bright);
+    lastTouchAt = millis();
+  }
+  clockLoop();
+  if (clockOn) { lv_timer_handler(); delay(20); return; }
+  focusLoop();
   checkIdle(t.wasPressed() || t.isPressed());
 
   lv_timer_handler();

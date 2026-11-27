@@ -291,6 +291,81 @@ int main() {
   ui::setTop(top);
   ui::buildSettings(st);
   save("23-installningar");
+  // Fokustimern
+  ui::Focus fo;
+  fo.choose = true;
+  ui::buildFocus(fo);
+  save("30-fokus-valj");
+  fo = ui::Focus();
+  fo.subject = "NO";
+  fo.color = 0x2f6f5e;
+  fo.title = "Läs s. 46–52 om cellandning";
+  fo.total = 20 * 60;
+  fo.left = 13 * 60 + 27;
+  top.tab = -1;
+  top.focusLeft = fo.left;
+  ui::setTop(top);
+  ui::buildFocus(fo);
+  save("31-fokus");
+  fo.paused = true;
+  top.focusPaused = true;
+  ui::setTop(top);
+  ui::buildFocus(fo);
+  save("32-fokus-pausad");
+  fo.paused = false;
+  fo.done = true;
+  fo.reward = "20 min plugg · bockad i planen";
+  top.focusLeft = -1;
+  top.focusPaused = false;
+  ui::setTop(top);
+  ui::buildFocus(fo);
+  save("33-fokus-klar");
+  fo.done = false;
+  fo.onBreak = true;
+  fo.total = 5 * 60;
+  fo.left = 3 * 60 + 12;
+  ui::buildFocus(fo);
+  save("34-fokus-paus");
+  top.focusLeft = 13 * 60 + 27;
+  top.tab = 3;
+  ui::setTop(top);
+  {
+    ui::Plan p2;
+    p2.day = "Idag";
+    p2.summary = "25 min kvar av 60";
+    p2.doneMinutes = 35;
+    p2.totalMinutes = 60;
+    p2.items = {{"NO", "Läs s. 46–52 om cellandning", 0x2f6f5e, 20, false, 1},
+                {"NO", "Snabbquiz: Fotosyntesen", 0x2f6f5e, 15, true},
+                {"Spanska", "Öva glosorna kap 3 – Matcha par", 0xc8453b, 15, false, 2},
+                {"Matte", "Bråk: uppgift 12–18", 0x2c63c9, 10, false}};
+    ui::buildPlan(p2);
+    save("35-plan-med-timer");
+  }
+  top.focusLeft = -1;
+  ui::setTop(top);
+  // Klockläget
+  ui::Clock ck;
+  ck.time = "16:42";
+  ck.date = "Fredag 27 november";
+  ck.next = "NO: Fotosyntesen och cellandning";
+  ck.nextWhen = "om 3 dagar";
+  ck.today = "2 av 4 kvar · 35 min";
+  ck.items = {"Läs s. 46–52 om cellandning", "Öva glosorna kap 3 – Matcha par"};
+  ui::clockShow(&ck);
+  save("36-klocka");
+  ck.next = "Engelska: glosor kap 4";
+  ck.nextWhen = "imorgon";
+  ck.nextSoon = true;
+  ck.today = "Allt klart idag!";
+  ck.items.clear();
+  ui::clockShow(&ck);
+  save("37-klocka-klart");
+  ui::clockShow(nullptr);
+  top.tab = -1;
+  ui::setTop(top);
+  ui::buildSettings(st);
+  save("23-installningar");
   ui::Entry en;
   en.title = "Elevens kod";
   en.code = true;

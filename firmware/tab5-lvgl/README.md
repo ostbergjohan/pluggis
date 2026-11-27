@@ -18,8 +18,17 @@ med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med 
   *Kör igen*. Allt görs nytt varje gång (inga sparade kortlekar). Förklara och skrivfrågor besvaras med rösten.
 - **Chat** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
 - **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
-- **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av.
+- **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av, läsa upp sidorna eller starta övningen.
+  ⏱ på raden startar fokustimern för momentet.
+- ⏱ **Fokustimer** uppe till höger (fritt pass: 15, 25 eller 45 min) – stor nedräkning, *Paus/Fortsätt*, *Avsluta*,
+  påminnelse när 5 minuter är kvar och en belöning när passet är klart (övningstid och poäng som vanligt; startat från
+  planen bockas momentet av). Sedan *Paus 5 min*, *Ett pass till* eller *Klar*. Timern syns i toppraden på alla
+  flikar. Medan den går stängs Tab5 inte av; utan tryck dämpas skärmen efter en minut.
 - Volym − / + (sparas) och batterinivå uppe till höger.
+
+**Klockläget:** sitter Tab5 i laddaren när avstängningstiden gått visas en klocka med nästa prov och det som är
+kvar idag, med låg ljusstyrka, i stället för en svart skärm – under pluggtid (15–21, eller 7–22 med *Hela dagen*).
+Ett tryck väcker. På batteri stängs den av som vanligt. Ställs in under ⚙ → *Klocka på laddaren*.
 
 Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hello). Inte än: kameran (fota med telefonen) och Dual Button.
 
@@ -27,7 +36,7 @@ Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hell
 
 Tryck på ⚙ uppe till höger. Där finns **WiFi** (byt nätverk), **Server** (IP-adress, provas innan den sparas),
 **Elev** (elevens kod, provas mot servern – koden bestämmer vilken elev skärmen visar), **Stäng av efter**
-(Av, 2, 5, 10, 15 eller 30 minuter), **Ljusstyrka**, **Detaljer** (WiFi, server, chatten, senaste fel, minne) och
+(Av, 2, 5, 10, 15 eller 30 minuter), **Ljusstyrka**, **Klocka på laddaren** (Av, 15–21, Hela dagen), **Detaljer** (WiFi, server, chatten, senaste fel, minne) och
 **Starta om**. Allt sparas i Tab5 och går före `config.h`, så `config.h` behövs bara första gången.
 
 ## Byta WiFi på skärmen

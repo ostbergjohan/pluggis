@@ -11,6 +11,8 @@ LV_FONT_DECLARE(font_reg_30);
 LV_FONT_DECLARE(font_bold_30);
 LV_FONT_DECLARE(font_bold_38);
 LV_FONT_DECLARE(font_bold_60);
+LV_FONT_DECLARE(font_clock_120);   // bara siffror och kolon: fokustimern
+LV_FONT_DECLARE(font_clock_200);   // bara siffror och kolon: klockläget
 
 // Egna ikoner (FontAwesome 5, inbakade i typsnitten)
 #define SYM_MIC "\xEF\x84\xB0"
@@ -340,6 +342,7 @@ static lv_obj_t* chip(lv_obj_t* p, const std::string& t, uint32_t bg, uint32_t i
 static int32_t ovaScroll = 0;   // hur långt läxlistan på Öva är rullad (behålls när skärmen byggs om)
 static lv_obj_t* ovaList = nullptr;
 static lv_obj_t *timerBox = nullptr, *timerBar = nullptr, *timerLbl = nullptr;
+static lv_obj_t *focusArc = nullptr, *focusTime = nullptr, *focusState = nullptr;
 static lv_obj_t *wifiPass = nullptr, *wifiSsid = nullptr, *wifiStatusLbl = nullptr, *wifiSpin = nullptr;
 static std::string wifiTyped;   // behålls om skärmen byggs om medan man skriver
 
@@ -348,6 +351,7 @@ static lv_obj_t* fresh(Act background = Act::None) {
   if (ovaList) ovaScroll = lv_obj_get_scroll_y(ovaList);
   ovaList = nullptr;
   timerBox = timerBar = timerLbl = nullptr;
+  focusArc = focusTime = focusState = nullptr;
   talkBtn = talkLbl = nullptr;
   wifiPass = wifiSsid = wifiStatusLbl = wifiSpin = nullptr;
   lv_obj_clean(content);
@@ -363,8 +367,10 @@ static lv_obj_t* fresh(Act background = Act::None) {
 
 // ---------------------------------------------------------------- toppraden
 static lv_obj_t* tabBtn[4];
+static lv_obj_t *focusChip, *focusLbl;
 static lv_obj_t *statusLbl, *volBars[5], *volIcon, *batBox, *batFill, *batLbl, *batBolt, *pointsChip, *pointsLbl;
 
+static constexpr int TABW = 140;   // en flik i toppraden
 static void buildTop() {
   top = panel(root, BG, 0);
   lv_obj_set_size(top, W, TOP_H);
@@ -376,14 +382,14 @@ static void buildTop() {
   // flikarna i en "segmenterad" ruta
   lv_obj_t* seg = panel(top, SURFACE, 999);
   lv_obj_set_pos(seg, 16, 14);
-  lv_obj_set_size(seg, 4 * 150 + 12, 68);
+  lv_obj_set_size(seg, 4 * TABW + 12, 68);
   static const char* names[4] = {"Öva", "Chat", "Läxor", "Plan"};
   static const char* syms[4] = {LV_SYMBOL_EDIT, SYM_CHAT, SYM_BOOK, SYM_CALENDAR};
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = box(seg);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_pos(b, 6 + i * 150, 6);
-    lv_obj_set_size(b, 150, 56);
+    lv_obj_set_pos(b, 6 + i * TABW, 6);
+    lv_obj_set_size(b, TABW, 56);
     lv_obj_set_style_radius(b, 999, 0);
     lv_obj_set_style_bg_color(b, C(ACCENT), 0);
     lv_obj_set_style_bg_opa(b, LV_OPA_TRANSP, 0);
@@ -397,11 +403,20 @@ static void buildTop() {
 
   // höger: status · volym · batteri · poäng (från höger till vänster)
   lv_obj_t* right = box(top);
-  lv_obj_set_size(right, W - 16 - (16 + 4 * 150 + 12) - 16, TOP_H);
+  lv_obj_set_size(right, W - 16 - (16 + 4 * TABW + 12) - 12, TOP_H);
   lv_obj_align(right, LV_ALIGN_RIGHT_MID, -16, 0);
   lv_obj_set_flex_flow(right, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  lv_obj_set_style_pad_column(right, 14, 0);
+  lv_obj_set_style_pad_column(right, 10, 0);
+
+  focusChip = panel(right, SURFACE, 999);
+  lv_obj_set_size(focusChip, LV_SIZE_CONTENT, 60);
+  lv_obj_set_style_pad_hor(focusChip, 18, 0);
+  lv_obj_add_flag(focusChip, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(focusChip, 10);
+  lv_obj_add_event_cb(focusChip, onClick, LV_EVENT_CLICKED, pack(Act::FocusTop, 0));
+  focusLbl = label(focusChip, SYM_CLOCK, F_MB, MUTED);
+  lv_obj_center(focusLbl);
 
   statusLbl = label(right, "", F_S, WARN);
   lv_obj_add_flag(statusLbl, LV_OBJ_FLAG_CLICKABLE);
@@ -447,7 +462,23 @@ static void buildTop() {
   lv_obj_center(pointsLbl);
 }
 
+void topTimer(int left, bool paused) {
+  if (!focusChip) return;
+  if (left < 0) {
+    lv_obj_set_style_bg_color(focusChip, C(SURFACE), 0);
+    lv_label_set_text(focusLbl, SYM_CLOCK);
+    lv_obj_set_style_text_color(focusLbl, C(MUTED), 0);
+    return;
+  }
+  char t[32];
+  snprintf(t, sizeof(t), "%s %d:%02d", paused ? LV_SYMBOL_PAUSE : SYM_CLOCK, left / 60, left % 60);
+  lv_obj_set_style_bg_color(focusChip, C(paused ? WARN : YELLOW), 0);
+  lv_label_set_text(focusLbl, t);
+  lv_obj_set_style_text_color(focusLbl, C(BG), 0);
+}
+
 void setTop(const Top& t) {
+  topTimer(t.focusLeft, t.focusPaused);
   for (int i = 0; i < 4; i++) {
     bool on = i == t.tab;
     lv_obj_set_style_bg_opa(tabBtn[i], on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
@@ -473,6 +504,9 @@ void setTop(const Top& t) {
     char s[16];
     snprintf(s, sizeof(s), "%d%%", lvl);
     lv_label_set_text(batLbl, s);
+    if (t.focusLeft >= 0) lv_obj_add_flag(batLbl, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(batLbl, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_width(bat, t.focusLeft >= 0 ? 60 : 112);
     if (t.charging) lv_obj_remove_flag(batBolt, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(batBolt, LV_OBJ_FLAG_HIDDEN);
   }
@@ -851,10 +885,9 @@ void buildSettings(const Settings& m) {
   button(c, PAD, 14, 200, 72, "Tillbaka", Kind::Ghost, Act::SetBack, 0, LV_SYMBOL_LEFT);
   lv_obj_t* t = label(c, "Inställningar", F_L, INK);
   lv_obj_set_pos(t, PAD + 230, 26);
-  if (!m.version.empty()) {
-    lv_obj_t* v = label(c, m.version, F_S, MUTED);
-    lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -PAD, 36);
-  }
+  button(c, W - PAD - 250, 14, 250, 72, "Starta om", Kind::Ghost, Act::SetRestart, 0, LV_SYMBOL_REFRESH, 20);
+  button(c, W - PAD - 250 - GAP - 250, 14, 250, 72, "Detaljer", Kind::Ghost, Act::SetDetails, 0, LV_SYMBOL_LIST, 20);
+
   const int y0 = 104, CW = (W - 2 * PAD - GAP) / 2, CHH = 128;
   // vänster: anslutning och elev
   std::string sig = m.rssi >= -55 ? "stark signal" : m.rssi >= -67 ? "bra signal" : m.rssi >= -78 ? "svag signal" : "mycket svag signal";
@@ -903,10 +936,18 @@ void buildSettings(const Settings& m) {
   lv_obj_add_event_cb(sl, onBright, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_event_cb(sl, onBright, LV_EVENT_RELEASED, nullptr);
 
-  int by = y0 + 2 * (CHH + GAP);
-  int hw = (CW - GAP) / 2;
-  button(c, rx, by, hw, CHH, "Detaljer", Kind::Secondary, Act::SetDetails, 0, LV_SYMBOL_LIST);
-  button(c, rx + hw + GAP, by, hw, CHH, "Starta om", Kind::Secondary, Act::SetRestart, 0, LV_SYMBOL_REFRESH);
+  lv_obj_t* clk = panel(c, SURFACE, 26);
+  lv_obj_set_pos(clk, rx, y0 + 2 * (CHH + GAP));
+  lv_obj_set_size(clk, CW, CHH);
+  lv_obj_t* ct = label(clk, std::string(SYM_CLOCK) + "  Klocka på laddaren när ingen rör den", F_S, MUTED);
+  lv_obj_set_pos(ct, 24, 16);
+  static const char* modes[3] = {"Av", "15–21", "Hela dagen"};
+  int cw = (CW - 48 - 2 * 10) / 3;
+  for (int i = 0; i < 3; i++) {
+    bool on = m.clockMode == i;
+    lv_obj_t* b = button(clk, 24 + i * (cw + 10), 52, cw, 60, modes[i], on ? Kind::Primary : Kind::Secondary, Act::SetClock, i, nullptr, 18);
+    if (on) { lv_obj_set_style_border_width(b, 3, 0); lv_obj_set_style_border_color(b, C(YELLOW), 0); }
+  }
 }
 
 void buildEntry(const Entry& m) {
@@ -1512,10 +1553,11 @@ void buildPlan(const Plan& m) {
   lv_obj_set_style_pad_row(list, 10, 0);
   lv_obj_set_style_pad_bottom(list, GAP, 0);
   // Varje moment: bock till vänster, ämne och minuter på första raden, uppgiften (högst två rader) under
-  const int RW = W - 2 * PAD, TX = 92, TW = RW - TX - 28;
+  const int RW = W - 2 * PAD, TX = 92, TW0 = RW - TX - 28, TB = 76;   // TB: timerknappen till höger
   const int lh = lv_font_get_line_height(F_M) + 6;
   for (size_t k = 0; k < m.items.size(); k++) {
     auto& r = m.items[k];
+    const int TW = r.done ? TW0 : TW0 - TB - 16;
     lv_point_t sz;
     lv_text_get_size(&sz, r.task.c_str(), F_M, 0, 6, TW, LV_TEXT_FLAG_NONE);
     int taskH = std::min<int>(sz.y, 2 * lh);
@@ -1548,12 +1590,16 @@ void buildPlan(const Plan& m) {
     char mn[16];
     snprintf(mn, sizeof(mn), "%d min", r.minutes);
     lv_obj_t* ml = label(b, mn, F_S, MUTED);
-    lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, -24, 18);
+    lv_obj_align(ml, LV_ALIGN_TOP_RIGHT, r.done ? -24 : -24 - TB - 16, 18);
+    if (!r.done) {
+      lv_obj_t* tb = button(b, RW - 20 - TB, (rowH - TB) / 2, TB, TB, SYM_CLOCK, Kind::Secondary, Act::PlanTimer, k, nullptr, 999);
+      lv_obj_set_ext_click_area(tb, 8);
+    }
     if (r.action && !r.done) {
       lv_obj_t* lc = chip(b, r.action == 1 ? std::string(LV_SYMBOL_VOLUME_MAX) + "  Lyssna" : std::string(LV_SYMBOL_PLAY) + "  Starta",
                           r.action == 1 ? ACCENT : 0x2FB58C, INK);
       lv_obj_update_layout(ml);
-      lv_obj_align(lc, LV_ALIGN_TOP_RIGHT, -24 - lv_obj_get_width(ml) - 16, 10);
+      lv_obj_align(lc, LV_ALIGN_TOP_RIGHT, -24 - TB - 16 - lv_obj_get_width(ml) - 16, 10);
     }
     if (!r.subject.empty()) {
       lv_obj_t* sl = oneLine(b, r.subject, F_S, lv_color_to_u32(lv_color_lighten(C(r.color), 110)) & 0xFFFFFF, TW - (r.action && !r.done ? 320 : 140));
@@ -1565,6 +1611,177 @@ void buildPlan(const Plan& m) {
     lv_obj_set_pos(tl, TX, 18 + 30 + 6);
     if (r.done) lv_obj_set_style_text_decor(tl, LV_TEXT_DECOR_STRIKETHROUGH, 0);
   }
+}
+
+// ---------------------------------------------------------------- Fokustimern
+static uint32_t focusColor(bool paused, bool onBreak) { return onBreak ? GOOD : paused ? WARN : YELLOW; }
+
+void focusTick(int left, int total, bool paused, bool onBreak) {
+  if (!focusArc) return;
+  left = std::max(0, left);
+  lv_arc_set_range(focusArc, 0, std::max(1, total));
+  lv_arc_set_value(focusArc, std::min(left, std::max(1, total)));
+  lv_obj_set_style_arc_color(focusArc, C(focusColor(paused, onBreak)), LV_PART_INDICATOR);
+  char t[16];
+  snprintf(t, sizeof(t), "%d:%02d", left / 60, left % 60);
+  lv_label_set_text(focusTime, t);
+  lv_label_set_text(focusState, onBreak ? "paus" : paused ? "pausad" : "kvar");
+  lv_obj_set_style_text_color(focusState, C(paused ? WARN : MUTED), 0);
+}
+
+void buildFocus(const Focus& m) {
+  lv_obj_t* c = fresh();
+  if (m.choose) {
+    lv_obj_t* t = label(c, "Fokuspass", F_L, INK);
+    lv_obj_set_pos(t, PAD + 8, 24);
+    lv_obj_t* s = label(c, "Välj hur länge. Tab5 stängs inte av medan timern går.", F_S, MUTED);
+    lv_obj_set_pos(s, PAD + 8, 80);
+    static const int mins[3] = {15, 25, 45};
+    static const char* subs[3] = {"kort pass", "ett vanligt pass", "långt pass"};
+    int bw = (W - 2 * PAD - 2 * GAP) / 3, bh = 300;
+    for (int i = 0; i < 3; i++) {
+      lv_obj_t* b = button(c, PAD + i * (bw + GAP), 150, bw, bh, "", i == 1 ? Kind::Primary : Kind::Secondary, Act::FocusStart, mins[i], nullptr, 30);
+      lv_obj_delete(lv_obj_get_child(b, 0));
+      lv_obj_t* n = label(b, std::to_string(mins[i]), &font_clock_120, i == 1 ? INK : YELLOW);
+      lv_obj_align(n, LV_ALIGN_CENTER, 0, -40);
+      lv_obj_t* u = label(b, std::string("minuter · ") + subs[i], F_M, i == 1 ? INK : MUTED);
+      lv_obj_align(u, LV_ALIGN_CENTER, 0, 70);
+    }
+    button(c, PAD, CH - 20 - 80, 240, 80, "Tillbaka", Kind::Ghost, Act::FocusDone, 0, LV_SYMBOL_LEFT);
+    return;
+  }
+
+  // vänster: ringen med nedräkningen (eller pokalen när passet är klart)
+  const int RS = 500, RX0 = 70, RY0 = (CH - RS) / 2;
+  bool reward = m.done && !m.onBreak;
+  if (reward) {
+    lv_obj_t* g = panel(c, SURFACE, 999);
+    lv_obj_set_size(g, RS, RS);
+    lv_obj_set_pos(g, RX0, RY0);
+    lv_obj_t* cup = panel(g, YELLOW, 999);
+    lv_obj_set_size(cup, 300, 300);
+    lv_obj_center(cup);
+    shadow(cup, 50, 0);
+    lv_obj_set_style_shadow_color(cup, C(YELLOW), 0);
+    lv_obj_set_style_shadow_opa(cup, LV_OPA_50, 0);
+    lv_obj_t* ic = label(cup, SYM_TROPHY, F_XL, BG);
+    lv_obj_set_style_transform_scale(ic, 512, 0);
+    lv_obj_center(ic);
+  } else {
+    focusArc = lv_arc_create(c);
+    lv_obj_set_pos(focusArc, RX0, RY0);
+    lv_obj_set_size(focusArc, RS, RS);
+    lv_arc_set_rotation(focusArc, 270);
+    lv_arc_set_bg_angles(focusArc, 0, 360);
+    lv_arc_set_mode(focusArc, LV_ARC_MODE_NORMAL);
+    lv_obj_remove_flag(focusArc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(focusArc, 30, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(focusArc, C(SURFACE2), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(focusArc, 30, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(focusArc, true, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(focusArc, LV_OPA_TRANSP, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(focusArc, 0, LV_PART_KNOB);
+    focusTime = label(focusArc, "", &font_clock_120, INK);
+    lv_obj_align(focusTime, LV_ALIGN_CENTER, 0, -14);
+    focusState = label(focusArc, "", F_M, MUTED);
+    lv_obj_align(focusState, LV_ALIGN_CENTER, 0, 86);
+    focusTick(m.left, m.total, m.paused, m.onBreak);
+  }
+
+  // höger: vad passet gäller och knapparna
+  const int X = RX0 + RS + 70, RW = W - X - PAD;
+  int y = RY0 + 10;
+  if (reward) {
+    lv_obj_t* h = label(c, "Bra jobbat!", F_XL, YELLOW);
+    lv_obj_set_pos(h, X, y);
+    textIn(c, m.reward, X, y + 96, RW, 120, INK, {F_L, F_MB, F_M});
+    textIn(c, m.title, X, y + 230, RW, 90, MUTED, {F_M, F_S});
+  } else if (m.onBreak && m.done) {
+    lv_obj_t* h = label(c, "Pausen är slut", F_XL, GOOD);
+    lv_obj_set_pos(h, X, y);
+    textIn(c, "Redo för ett pass till?", X, y + 96, RW, 80, INK, {F_L, F_M});
+  } else if (m.onBreak) {
+    lv_obj_t* h = label(c, "Paus", F_XL, GOOD);
+    lv_obj_set_pos(h, X, y);
+    textIn(c, "Res dig, sträck på dig och drick lite vatten.", X, y + 96, RW, 120, INK, {F_L, F_M});
+  } else {
+    lv_obj_t* sc = chip(c, m.subject.empty() ? std::string("Fokuspass") : m.subject, m.color, INK);
+    lv_obj_set_pos(sc, X, y);
+    textIn(c, m.title.empty() ? std::string("Plugga utan att bli störd") : m.title, X, y + 64, RW, 170, INK, {F_L, F_MB, F_M}, LV_TEXT_ALIGN_LEFT, true);
+    textIn(c, m.paused ? std::string("Pausad. Tryck Fortsätt när du är tillbaka.") : std::string("Tab5 stängs inte av medan timern går."),
+           X, y + 250, RW, 70, m.paused ? WARN : MUTED, {F_M, F_S});
+  }
+
+  const int BY = RY0 + RS - 110, BH = 110;
+  if (reward) {
+    int bw = (RW - 2 * GAP) / 3;
+    button(c, X, BY, bw, BH, "Paus 5 min", Kind::Primary, Act::FocusBreak, 0);
+    button(c, X + bw + GAP, BY, bw, BH, "Ett pass till", Kind::Secondary, Act::FocusAgain, 0);
+    button(c, X + 2 * (bw + GAP), BY, bw, BH, "Klar", Kind::Good, Act::FocusDone, 0, LV_SYMBOL_OK);
+  } else if (m.onBreak) {
+    int bw = (RW - GAP) / 2;
+    button(c, X, BY, bw, BH, "Ett pass till", m.done ? Kind::Primary : Kind::Secondary, Act::FocusAgain, 0, LV_SYMBOL_PLAY);
+    button(c, X + bw + GAP, BY, bw, BH, "Klar", Kind::Ghost, Act::FocusDone, 0, LV_SYMBOL_OK);
+  } else {
+    int bw = (RW - GAP) / 2;
+    button(c, X, BY, bw, BH, m.paused ? "Fortsätt" : "Paus", m.paused ? Kind::Primary : Kind::Secondary, Act::FocusPause, 0,
+           m.paused ? LV_SYMBOL_PLAY : LV_SYMBOL_PAUSE);
+    button(c, X + bw + GAP, BY, bw, BH, "Avsluta", Kind::Ghost, Act::FocusEnd, 0, LV_SYMBOL_STOP);
+  }
+}
+
+// ---------------------------------------------------------------- Klockläget
+static lv_obj_t* clockBox = nullptr;
+void clockShow(const Clock* m) {
+  if (clockBox) lv_obj_delete(clockBox);
+  clockBox = nullptr;
+  if (!m) return;
+  clockBox = panel(lv_layer_top(), BG, 0);
+  lv_obj_set_size(clockBox, W, H);
+  lv_obj_add_flag(clockBox, LV_OBJ_FLAG_CLICKABLE);   // trycket väcker (main.cpp), inget under nås
+
+  // vänster: klockan och datumet
+  const int LW = 700;
+  lv_obj_t* t = label(clockBox, m->time, &font_clock_200, INK);
+  lv_obj_align(t, LV_ALIGN_TOP_MID, -W / 2 + LW / 2 + 30, 150);
+  lv_obj_t* d = label(clockBox, m->date, F_L, MUTED);
+  lv_obj_align_to(d, t, LV_ALIGN_OUT_BOTTOM_MID, 0, 6);
+
+  // höger: nästa prov och dagens plan
+  const int X = LW + 20, RW = W - X - 50;
+  int y = 110;
+  if (!m->next.empty()) {
+    lv_obj_t* p = panel(clockBox, SURFACE, 26);
+    lv_obj_set_pos(p, X, y);
+    lv_obj_set_size(p, RW, 170);
+    lv_obj_t* h = label(p, "NÄSTA PROV", F_S, MUTED);
+    lv_obj_set_style_text_letter_space(h, 2, 0);
+    lv_obj_set_pos(h, 24, 16);
+    lv_obj_t* n = oneLine(p, m->next, F_MB, INK, RW - 48);
+    lv_obj_set_pos(n, 24, 54);
+    lv_obj_t* w = label(p, m->nextWhen, F_L, m->nextSoon ? YELLOW : 0xC9D6E8);
+    lv_obj_set_pos(w, 24, 100);
+    y += 170 + GAP;
+  }
+  lv_obj_t* p = panel(clockBox, SURFACE, 26);
+  lv_obj_set_pos(p, X, y);
+  lv_obj_set_size(p, RW, H - 90 - y);
+  lv_obj_t* h = label(p, "IDAG", F_S, MUTED);
+  lv_obj_set_style_text_letter_space(h, 2, 0);
+  lv_obj_set_pos(h, 24, 16);
+  lv_obj_t* s = oneLine(p, m->today, F_MB, m->items.empty() ? GOOD : INK, RW - 48);
+  lv_obj_set_pos(s, 24, 54);
+  int iy = 102;
+  for (size_t i = 0; i < m->items.size() && i < 3 && iy + 36 < H - 90 - y; i++, iy += 42) {
+    lv_obj_t* dot = panel(p, YELLOW, 999);
+    lv_obj_set_size(dot, 10, 10);
+    lv_obj_set_pos(dot, 28, iy + 13);
+    lv_obj_t* l = oneLine(p, m->items[i], F_S, 0xC9D6E8, RW - 80);
+    lv_obj_set_pos(l, 50, iy);
+  }
+
+  lv_obj_t* hint = label(clockBox, "Tryck för att börja plugga", F_S, MUTED);
+  lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -32);
 }
 
 // ---------------------------------------------------------------- Chat (coachen)

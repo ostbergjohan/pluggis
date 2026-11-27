@@ -45,6 +45,7 @@ enum class Act : uint16_t {
   SetOpen,        // öppna inställningarna (ikonen uppe till höger)
   SetWifi, SetServer, SetCode,
   SetIdle,        // a = minuter (0 = aldrig)
+  SetClock,       // klockläget på laddaren: a = 0 av, 1 pluggtid (15–21), 2 hela dagen (7–22)
   SetBright,      // a = ljusstyrka 30–255 medan reglaget dras
   SetBrightDone,  // a = ljusstyrka när reglaget släpps (sparas)
   SetDetails,     // visa anslutningsdetaljer
@@ -64,6 +65,15 @@ enum class Act : uint16_t {
   // Läxor och plan
   HwOpen, HwBack, HwPrev, HwPlay, HwNext,
   PlanPrev, PlanNext, PlanRow, PlanCheck,
+  PlanTimer,      // a = rad: starta fokustimern för momentet
+  // Fokustimern
+  FocusTop,       // timern i toppraden: visa den som går, annars välj längd
+  FocusStart,     // a = minuter (fritt pass)
+  FocusPause,     // paus / fortsätt
+  FocusEnd,       // avsluta passet i förtid
+  FocusBreak,     // 5 minuters paus efter passet
+  FocusAgain,     // ett pass till (samma sak)
+  FocusDone,      // klar: tillbaka
   // Chat
   CoachStart, CoachEnd,
 };
@@ -90,8 +100,12 @@ struct Top {
   int battery = -1;          // -1 = okänt
   bool charging = false;
   int points = -1;           // -1 = visa inte
+  int focusLeft = -1;        // fokustimern: sekunder kvar (-1 = ingen timer igång)
+  bool focusPaused = false;
 };
 void setTop(const Top& t);
+/** Bara timern i toppraden (varje sekund, utan att resten ritas om). */
+void topTimer(int left, bool paused);
 
 // ---------------------------------------------------------------- startskärm
 void showBoot(const std::string& line, const std::string& warn, bool wifiButton = false);
@@ -143,6 +157,7 @@ struct Settings {
   std::string code, student; // "YQE89", "Fred"
   int idleMin = 5;           // 0 = aldrig
   int brightness = 200;      // 30–255
+  int clockMode = 1;         // 0 av, 1 pluggtid, 2 hela dagen
   std::string version;
 };
 void buildSettings(const Settings& m);
@@ -262,6 +277,32 @@ struct Plan {
   std::vector<PlanItem> items;
 };
 void buildPlan(const Plan& m);
+
+// ---------------------------------------------------------------- Fokustimern
+struct Focus {
+  bool choose = false;       // välj längd (fritt pass)
+  std::string subject, title;
+  uint32_t color = ACCENT;
+  int total = 0, left = 0;   // sekunder
+  bool paused = false;
+  bool done = false;         // passet är slut: belöning
+  bool onBreak = false;      // 5 minuters paus pågår (eller är slut)
+  std::string reward;        // "25 min plugg · bockad i planen"
+};
+void buildFocus(const Focus& m);
+/** Nedräkningen uppdateras på plats (varje sekund). */
+void focusTick(int left, int total, bool paused, bool onBreak);
+
+// ---------------------------------------------------------------- Klockläget (på laddaren, när ingen rör den)
+struct Clock {
+  std::string time, date;    // "16:42", "Fredag 27 november"
+  std::string next, nextWhen;// "NO: Fotosyntesen", "om 3 dagar"
+  bool nextSoon = false;     // idag eller imorgon (gul)
+  std::string today;         // "2 av 4 kvar · 25 min" eller "Allt klart idag!"
+  std::vector<std::string> items;   // det som är kvar idag (högst 3)
+};
+/** Visar klockan över allt annat (nullptr = stäng). Kan anropas varje minut. */
+void clockShow(const Clock* m);
 
 // ---------------------------------------------------------------- Chat (coachen)
 struct Coach {
