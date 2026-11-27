@@ -2013,6 +2013,10 @@ function showLogin(st) {
   const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma lösenord igen' });
   const tok = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN', autocomplete: 'off' });
   const done = () => { overlay.remove(); loginShown = false; startAdmin(); };
+  const later = st.loggedIn ? h('button', { type: 'button', class: 'ghost small', onclick: () => {
+    sessionStorage.setItem('pluggis.later', '1');
+    overlay.remove(); loginShown = false;
+  } }, 'Inte nu') : null;
   const post = async (path, body) => {
     const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
@@ -2046,28 +2050,33 @@ function showLogin(st) {
     h('h1', {}, st.passwordSet ? 'Logga in' : 'Välj lösenord'),
     h('p', { class: 'item-meta' }, st.passwordSet ? 'Föräldravyn i Pluggis.'
       : 'Första gången: välj ett lösenord för föräldravyn (minst 8 tecken). Token från .env behövs bara nu, så att ingen annan på nätet hinner före.'),
-    !st.passwordSet && st.tokenRequired ? h('label', {}, 'Token (PLUGGIS_DEVICE_TOKEN i .env)') : null,
-    !st.passwordSet && st.tokenRequired ? tok : null,
+    !st.passwordSet && st.tokenRequired && !st.loggedIn ? h('label', {}, 'Token (PLUGGIS_DEVICE_TOKEN i .env)') : null,
+    !st.passwordSet && st.tokenRequired && !st.loggedIn ? tok : null,
     h('label', {}, st.passwordSet ? 'Lösenord' : 'Nytt lösenord'), pw,
     st.passwordSet ? null : pw2,
     msg,
     h('button', { class: 'primary', type: 'submit' }, st.passwordSet ? 'Logga in' : 'Spara och logga in'),
-    st.passwordSet ? useToken : null);
+    st.passwordSet ? useToken : later);
   const overlay = h('div', { class: 'login' }, form);
   document.body.append(overlay);
-  setTimeout(() => (st.passwordSet || !st.tokenRequired ? pw : tok).focus(), 50);
+  setTimeout(() => (st.passwordSet || !st.tokenRequired || st.loggedIn ? pw : tok).focus(), 50);
 }
 
 let started = false;
 function startAdmin() {
-  if (started) { loadStudents().then(() => { route(); pollDevice(); }); return; }
+  if (started) return;
   started = true;
   applyTab5();
   loadStudents().then(() => { route(); pollDevice(); });
   setInterval(pollDevice, 30000);
 }
 
-authStatus().then(st => (st.loggedIn ? startAdmin() : showLogin(st)));
+authStatus().then(st => {
+  if (!st.loggedIn) return showLogin(st);
+  startAdmin();
+  // Inne med token men inget lösenord valt än: föreslå att välja ett (kan skjutas upp)
+  if (!st.passwordSet && !sessionStorage.getItem('pluggis.later')) showLogin(st);
+});
 
 // ---- Ljust/mörkt: ◐ följer telefonen/datorn, ☀ ljust, ☾ mörkt. Sparas i webbläsaren (samma för appen och admin). ----
 (function themeToggle() {

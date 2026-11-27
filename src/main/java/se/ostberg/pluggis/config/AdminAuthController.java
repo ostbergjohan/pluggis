@@ -51,7 +51,8 @@ public class AdminAuthController {
     /** Välj lösenord första gången (med token), eller byt lösenord när man är inloggad. */
     @PostMapping("/password")
     public ResponseEntity<?> setPassword(@RequestBody SetupRequest body, HttpServletRequest req, HttpServletResponse res) {
-        boolean allowed = auth.passwordSet() ? loggedIn(req) : props.tokenMatches(body.token());
+        // Byta lösenord: inloggad. Välja första gången: token i rutan, eller redan inne med token (header).
+        boolean allowed = loggedIn(req) || (!auth.passwordSet() && props.tokenMatches(body.token()));
         if (!allowed) {
             log.warn("Lösenord för föräldravyn nekat från {}: {}", req.getRemoteAddr(),
                     auth.passwordSet() ? "inte inloggad" : "fel token");
