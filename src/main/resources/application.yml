@@ -27,6 +27,10 @@ spring:
 pluggis:
   # Tab5-firmware över WiFi: CI lägger firmware.bin i GitHub-releasen "tab5"; servern hämtar den när man letar
   # efter en uppdatering och sparar den här. Privat repo: PLUGGIS_GITHUB_TOKEN (läsrättighet till repot räcker).
+  # Säkerhetskopior av databasen (H2) under data/backups: varje natt kl 03:15 och från föräldravyn
+  backup:
+    dir: ${PLUGGIS_BACKUP_DIR:./data/backups}
+    keep: ${PLUGGIS_BACKUP_KEEP:14}
   firmware:
     dir: ${PLUGGIS_FIRMWARE_DIR:./data/firmware}
     repo: ${PLUGGIS_FIRMWARE_REPO:ostbergjohan/pluggis}

@@ -1371,7 +1371,7 @@ views.elev = async (main) => {
 // ----- System: sådant som gäller hela Pluggis -----
 
 views.system = async (main) => {
-  const items = [['elever', 'Elever och koder'], ['kostnad', 'Claude och kostnad'], ['logg', 'Logg'], ['anslutning', 'Anslutning'], ['tab5', 'Tab5']];
+  const items = [['elever', 'Elever och koder'], ['kostnad', 'Claude och kostnad'], ['logg', 'Logg'], ['anslutning', 'Anslutning'], ['backup', 'Säkerhetskopior'], ['tab5', 'Tab5']];
   const sub = items.some(([id]) => id === state.sub) ? state.sub : 'elever';
   main.append(h('h1', {}, 'System'), subnav('system', items, sub));
   const box = h('div');
@@ -1380,9 +1380,54 @@ views.system = async (main) => {
   else if (sub === 'logg') await views.logg(box);
   else if (sub === 'anslutning') box.append(connectionPanel());
   else if (sub === 'tab5') box.append(tab5Panel());
+  else if (sub === 'backup') box.append(backupPanel());
   box.querySelector('h1')?.remove();
   main.append(box);
 };
+
+/** Säkerhetskopior av databasen: varje natt och med knappen, de senaste sparas på servern. */
+function backupPanel() {
+  const panel = h('section', { class: 'panel' }, h('h2', {}, 'Säkerhetskopior'), h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  const fmt = (iso) => new Date(iso).toLocaleString(I18N.locale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  function paint(st) {
+    if (!st.supported) {
+      panel.replaceChildren(h('h2', {}, 'Säkerhetskopior'),
+        h('p', { class: 'item-meta' }, 'Pluggis kör med Postgres – ta kopior med pg_dump i stället.'));
+      return;
+    }
+    const nightly = h('input', { type: 'checkbox', checked: st.nightly });
+    nightly.addEventListener('change', async () => {
+      const r = await run(() => api('/api/backups', { method: 'PUT', body: { nightly: nightly.checked } }), null, 'Sparat');
+      if (r) paint(r);
+    });
+    const rows = st.backups.map(b => h('tr', {},
+      h('td', {}, fmt(b.createdAt)), h('td', {}, `${Math.max(1, Math.round(b.size / 1024))} kB`),
+      h('td', { style: 'text-align:right;white-space:nowrap' },
+        h('a', { class: 'btn small', href: `/api/backups/${encodeURIComponent(b.name)}`, download: b.name }, '⬇ Ladda ner'), ' ',
+        h('button', { class: 'small danger', onclick: async (e) => {
+          if (!confirm(`Ta bort kopian från ${fmt(b.createdAt)}?`)) return;
+          const r = await run(() => api(`/api/backups/${encodeURIComponent(b.name)}`, { method: 'DELETE' }), e.target, 'Borttagen');
+          if (r) paint(r);
+        } }, '✕'))));
+    panel.replaceChildren(h('h2', {}, 'Säkerhetskopior'),
+      h('p', { class: 'item-meta' }, `Hela databasen: läxor, planer, material, poäng, elever och inställningar. De ${st.keep} senaste sparas på servern (${st.dir}, i Docker-volymen). Ladda ner en ibland och spara den någon annanstans.`),
+      h('label', { style: 'display:flex;gap:8px;align-items:center' }, nightly, 'Varje natt kl 03:15'),
+      h('div', { class: 'toolbar', style: 'margin-top:12px' }, h('button', { class: 'primary', onclick: async (e) => {
+        const r = await run(() => api('/api/backups', { method: 'POST' }), e.target, 'Kopia gjord');
+        if (r) paint(r);
+      } }, '💾 Gör en kopia nu')),
+      st.backups.length
+        ? h('table', { class: 'table', style: 'margin-top:12px' }, h('tbody', {}, rows))
+        : h('p', { class: 'item-meta', style: 'margin-top:12px' }, 'Inga kopior än.'),
+      h('details', { style: 'margin-top:14px' }, h('summary', {}, 'Återställa en kopia'),
+        h('p', { class: 'item-meta' }, 'Stoppa Pluggis, packa upp zip-filen i datamappen (den ersätter pluggis.mv.db) och starta igen:'),
+        h('pre', { class: 'login-pre' }, 'docker compose stop pluggis\n' +
+          'docker run --rm -v pluggis_pluggis-data:/data -v "$PWD":/b alpine sh -c "cd /data && unzip -o /b/KOPIA.zip"\n' +
+          'docker compose start pluggis')));
+  }
+  api('/api/backups').then(paint).catch(e => panel.replaceChildren(h('h2', {}, 'Säkerhetskopior'), h('p', { class: 'item-meta' }, e.message)));
+  return panel;
+}
 
 function connectionPanel() {
   const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nytt lösenord (minst 8 tecken)' });

@@ -267,6 +267,13 @@ I18N.add({
   'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
   'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
   'Inställningar': 'Settings',
+  'Säkerhetskopior': 'Backups', 'Pluggis kör med Postgres – ta kopior med pg_dump i stället.': 'Pluggis runs on Postgres – take backups with pg_dump instead.',
+  '⬇ Ladda ner': '⬇ Download', 'Ta bort kopian från {0}?': 'Delete the backup from {0}?',
+  'Hela databasen: läxor, planer, material, poäng, elever och inställningar. De {0} senaste sparas på servern ({1}, i Docker-volymen). Ladda ner en ibland och spara den någon annanstans.':
+    'The whole database: homework, plans, material, points, students and settings. The {0} latest are kept on the server ({1}, in the Docker volume). Download one now and then and keep it somewhere else.',
+  'Varje natt kl 03:15': 'Every night at 03:15', '💾 Gör en kopia nu': '💾 Back up now', 'Kopia gjord': 'Backup made', 'Inga kopior än.': 'No backups yet.',
+  'Återställa en kopia': 'Restoring a backup',
+  'Stoppa Pluggis, packa upp zip-filen i datamappen (den ersätter pluggis.mv.db) och starta igen:': 'Stop Pluggis, unzip the file in the data folder (it replaces pluggis.mv.db) and start again:',
   'Tab5-programvara': 'Tab5 software', 'Version (valfritt)': 'Version (optional)',
   'Tab5 uppdateras över WiFi: Inställningar (⚙) → Leta efter uppdatering → Uppdatera nu.': 'The Tab5 is updated over WiFi: Settings (⚙) → Check for update → Update now.',
   'Servern hämtar den senaste versionen som byggts från main (': 'The server fetches the latest version built from main (',

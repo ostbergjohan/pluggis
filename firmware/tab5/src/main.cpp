@@ -578,6 +578,7 @@ static void loadDecks() {
       m.subject = clean(x["subject"] | "");
       m.due = x["dueDate"] | "";
       m.test = kind == "TEST";
+      if (m.test && m.due.length() && daysUntil(m.due) < 0) continue;   // provet har varit
       m.label = String(m.test ? "Prov: " : "Läxa: ") + m.title;
       m.language = isLanguageText(m.subject + " " + m.title);
       makeList.push_back(m);
@@ -1361,8 +1362,12 @@ static void loadHomework() {
   if (code != 200) { ovaMessage = "Kunde inte hämta läxorna (" + String(code) + ")."; decksLoaded = true; return; }
   for (JsonObject x : doc.as<JsonArray>()) {
     HwInfo h = hwFromJson(x);
-    if (h.id) hws.push_back(h);
+    // passerade (datumet har varit) visas inte – de ligger kvar i appen och föräldravyn
+    if (h.id && !(h.due.length() && daysUntil(h.due) < 0)) hws.push_back(h);
   }
+  std::stable_sort(hws.begin(), hws.end(), [](const HwInfo& a, const HwInfo& b) {
+    return (a.due.length() ? a.due : String("9999")) < (b.due.length() ? b.due : String("9999"));
+  });
   if (hws.empty()) ovaMessage = "Inga läxor eller prov just nu.";
   decksLoaded = true;
 }

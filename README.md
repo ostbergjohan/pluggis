@@ -249,7 +249,7 @@ Served by the same service (`src/main/resources/static`, no dependencies or buil
 | Homework & tests | Add, paste from InfoMentor, upload a file (new homework or material for an existing one), fill in what's included, plan, mark as done, delete |
 | Plan | Three weeks ahead; days without tasks are merged. Drag ⠿ to move tasks between days or reorder (⋯ on phones); minutes against the daily max are shown |
 | *The student's name* | Coach (name, tone, wishes, points on/off) · Planning (max per day, study days, study time) · Voice · Calendar (the school's InfoMentor calendar in, and the plan out to Google) · Points (if on) |
-| System | Students and codes · Claude and cost · Log · Connection (password, log out) · Tab5 (show connection status) |
+| System | Students and codes · Claude and cost · Log · Connection (password, log out) · Backups · Tab5 (connection status, software) |
 
 ### Several students
 
@@ -462,6 +462,15 @@ The basic idea is to **reward effort more than right answers** – it's the habi
 - The rules are in `RewardRules` and are easy to change.
 - Money as a reward can, over time, crowd out the student's own motivation. Consider tapering off the money part once
   the habit is there, and keep the points and streaks.
+
+## Backups
+
+**System → Backups** in the parent view: the whole database (homework, plans, material, points, students, settings)
+is copied every night at 03:15 (can be turned off) and with **Back up now**, while Pluggis is running (H2
+`BACKUP TO`). The 14 latest are kept in `data/backups` in the Docker volume (`PLUGGIS_BACKUP_KEEP` to change) and
+can be downloaded or deleted there. Download one now and then and keep it somewhere else – the volume is on the
+same disk. Restoring: stop Pluggis, unzip the file into the data folder (it replaces `pluggis.mv.db`) and start
+again; the commands are shown in the panel. With Postgres, use `pg_dump` instead.
 
 ## Cost
 
