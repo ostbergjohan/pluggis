@@ -312,6 +312,10 @@ int main() {
   st.idleMin = 5;
   st.brightness = 200;
   st.version = "Pluggis Tab5 · Nov 27 2026";
+  st.fwVersion = "2026.11.27.1430-ab12cd3";
+  st.fwNote = "Ny version finns: 2026.11.28.0912-9f3e1a0 (3120 kB)";
+  st.fwTone = ui::Tone::Warn;
+  st.fwNew = "2026.11.28.0912-9f3e1a0";
   top.tab = -1;
   ui::setTop(top);
   ui::buildSettings(st);

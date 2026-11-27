@@ -91,3 +91,11 @@ clock). The command is at the top of each file.
 5. In admin: System → Tab5 to show the device's connection status.
 
 The first build downloads the ESP32-P4 toolchain and takes a few minutes.
+
+## Updating over WiFi
+
+Once this firmware is on the Tab5 (one USB flash), later versions are installed from **⚙ → Check for update →
+Update now**. CI builds `firmware.bin` on every push to `main` and publishes it in the GitHub Release `tab5`; the
+Pluggis server fetches it and the Tab5 downloads it from the server. See the main README, *Updating the Tab5 over
+WiFi*. The version shown on the screen comes from `PLUGGIS_FW_VERSION` (set by CI); a local build shows "egen" and
+the build date.

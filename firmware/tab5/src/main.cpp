@@ -15,6 +15,8 @@
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <Update.h>
+#include <esp_ota_ops.h>
 #include <Preferences.h>
 #include <deque>
 #include <vector>
@@ -47,6 +49,15 @@ struct Cfg {
   int clockMode = 1;  // klocka på laddaren när ingen rör den: 0 av, 1 kl 15–21, 2 kl 7–22
 };
 static Cfg cfg;
+
+// ---- Firmware-version: sätts av CI (t.ex. 2026.11.27.1430-ab12cd3); byggt lokalt: "egen" + datum
+#ifndef PLUGGIS_FW_VERSION
+#define PLUGGIS_FW_VERSION ""
+#endif
+static String fwVersion() { return strlen(PLUGGIS_FW_VERSION) ? String(PLUGGIS_FW_VERSION) : String("egen ") + __DATE__; }
+static String fwNote, fwNew;              // inställningarna: status och ny version som kan installeras
+static ui::Tone fwTone = ui::Tone::Muted;
+static bool fwBusy = false;
 
 static uint32_t lastActivity = 0;
 static bool pendingPractice = false;   // coachen bad om en övning (startas från loop())
@@ -2410,6 +2421,11 @@ static void drawSettings() {
   m.idleMin = cfg.idleMin;
   m.brightness = cfg.bright;
   m.clockMode = cfg.clockMode;
+  m.fwVersion = S(fwVersion());
+  m.fwNote = S(fwNote.length() ? fwNote : String("Tryck Leta efter uppdatering för att se om det finns en ny version."));
+  m.fwTone = fwTone;
+  m.fwBusy = fwBusy;
+  m.fwNew = S(fwNew);
   m.version = "Pluggis Tab5 · " __DATE__;
   ui::buildSettings(m);
 }
@@ -2543,7 +2559,26 @@ static void redraw() {
 }
 
 /** Läser inställningarna: sparade i Tab5 först, annars config.h. */
+/**
+ * Värden som bara finns i config.h sparas i Tab5 första gången, så att en firmware som byggts utan config.h
+ * (CI, uppdatering över WiFi) har samma WiFi, server och elevkod. Exempelvärdena sparas inte.
+ */
+static void keepConfigH() {
+  if (!prefs.getString("host", "").length() && String(PLUGGIS_HOST) != "192.168.1.20") {
+    prefs.putString("host", PLUGGIS_HOST);
+    prefs.putInt("port", PLUGGIS_PORT);
+  }
+#if defined(PLUGGIS_CODE)
+  if (!prefs.getString("code", "").length() && String(PLUGGIS_CODE) != "ABCDE") prefs.putString("code", PLUGGIS_CODE);
+#endif
+  if (!prefs.getString("wifiSsid", "").length() && String(PLUGGIS_WIFI_SSID) != "ditt-wifi" && strlen(PLUGGIS_WIFI_SSID)) {
+    prefs.putString("wifiSsid", PLUGGIS_WIFI_SSID);
+    prefs.putString("wifiPass", PLUGGIS_WIFI_PASS);
+  }
+}
+
 static void loadCfg() {
+  keepConfigH();
   cfg.host = prefs.getString("host", PLUGGIS_HOST);
   cfg.port = prefs.getInt("port", PLUGGIS_PORT);
   String code = prefs.getString("code", "");
@@ -2630,6 +2665,161 @@ static void onBackground() {
   }
 }
 
+// ---------------------------------------------------------------- uppdatering över WiFi
+// Servern hämtar firmware.bin från GitHub-releasen "tab5" (byggd av CI) när man letar efter en uppdatering.
+// Tab5 laddar ner den från servern till den lediga app-partitionen och startar om. Efter omstarten måste den nya
+// versionen nå servern inom två minuter (med WiFi uppe), annars startar Tab5 om på den gamla.
+
+static void firmwareCheck() {
+  if (fwBusy) return;
+  fwBusy = true;
+  fwNote = "Letar efter uppdatering ...";
+  fwTone = ui::Tone::Muted;
+  dirtyOva = true;
+  redraw();
+  JsonDocument doc;
+  int code = api("POST", "/api/firmware/check", "", &doc, 180000);   // servern kan behöva hämta från GitHub
+  fwBusy = false;
+  fwNew = "";
+  if (code != 200) {
+    fwNote = "Kunde inte fråga servern (" + String(code) + ")";
+    fwTone = ui::Tone::Bad;
+  } else if (!(doc["available"] | false)) {
+    String err = doc["lastError"] | "";
+    fwNote = err.length() ? "Ingen firmware på servern: " + err : String("Ingen firmware på servern än.");
+    fwTone = ui::Tone::Warn;
+  } else {
+    String v = doc["version"] | "";
+    if (v == fwVersion()) {
+      fwNote = "Du har den senaste versionen.";
+      fwTone = ui::Tone::Good;
+    } else {
+      fwNew = v;
+      fwNote = "Ny version finns: " + v + " (" + String((long)(doc["size"] | 0L) / 1024) + " kB)";
+      fwTone = ui::Tone::Warn;
+    }
+  }
+  dirtyOva = true;
+}
+
+static void firmwareUpdate() {
+  if (fwBusy || !fwNew.length()) return;
+  if (fz.on && !fz.done) { fwNote = "Avsluta fokustimern först."; fwTone = ui::Tone::Warn; dirtyOva = true; return; }
+  if (batteryLevel >= 0 && batteryLevel < 30 && !batteryCharging) {
+    fwNote = "För lite batteri – sätt Tab5 i laddaren först.";
+    fwTone = ui::Tone::Warn;
+    dirtyOva = true;
+    return;
+  }
+  fwBusy = true;
+  stopPlayback();
+  sayStop();
+  practiceEnd();
+  dirtyOva = true;
+  redraw();
+  auto fail = [](const String& why) {
+    Serial.printf("[pluggis] uppdatering misslyckades: %s\n", why.c_str());
+    Update.abort();
+    fwBusy = false;
+    fwNote = "Uppdateringen misslyckades: " + why;
+    fwTone = ui::Tone::Bad;
+    dirtyOva = true;
+  };
+  WiFiClient client;
+  HTTPClient http;
+  String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + "/api/firmware/download?deviceId=" + cfg.device.c_str();
+  if (!http.begin(client, url)) { fail("ingen kontakt med servern"); return; }
+  http.setTimeout(30000);
+  http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
+  const char* keep[] = {"X-Firmware-Version", "X-Firmware-MD5"};
+  http.collectHeaders(keep, 2);
+  int code = http.GET();
+  if (code != 200) { http.end(); fail("servern svarade " + String(code)); return; }
+  int size = http.getSize();
+  String version = http.header("X-Firmware-Version"), md5 = http.header("X-Firmware-MD5");
+  if (size <= 0) { http.end(); fail("okänd storlek"); return; }
+  if (!Update.begin(size)) { http.end(); fail(Update.errorString()); return; }
+  if (md5.length() == 32) Update.setMD5(md5.c_str());
+  WiFiClient* in = http.getStreamPtr();
+  static uint8_t buf[4096];
+  int done = 0, shown = -1;
+  uint32_t lastData = millis();
+  ui::firmwareProgress(0, "Laddar ner ... 0 %");
+  lv_refr_now(lvDisp);
+  while (done < size) {
+    size_t n = in->available();
+    if (n) {
+      n = in->readBytes(buf, std::min(n, sizeof(buf)));
+      if (Update.write(buf, n) != n) { http.end(); fail(Update.errorString()); return; }
+      done += n;
+      lastData = millis();
+      int pct = (int)(100LL * done / size);
+      if (pct != shown) {
+        shown = pct;
+        ui::firmwareProgress(pct, "Laddar ner ... " + std::to_string(pct) + " %");
+        lv_refr_now(lvDisp);
+      }
+    } else {
+      if (!in->connected() || millis() - lastData > 20000) { http.end(); fail("nedladdningen avbröts"); return; }
+      delay(2);
+    }
+  }
+  http.end();
+  if (!Update.end(true)) { fail(Update.errorString()); return; }   // kontrollerar MD5 och byter app-partition
+  prefs.putString("fwPending", version.length() ? version : fwNew);
+  prefs.putString("fwPrev", fwVersion());
+  Serial.printf("[pluggis] firmware %s installerad – startar om\n", fwNew.c_str());
+  ui::buildMessage("Uppdaterad till " + std::string(fwNew.c_str()) + ". Startar om ...", true);
+  lv_refr_now(lvDisp);
+  delay(800);
+  ESP.restart();
+}
+
+/**
+ * Efter en uppdatering: när den nya versionen når servern är den godkänd. Har WiFi varit uppe i två minuter utan
+ * att servern svarat startar Tab5 om på den gamla versionen.
+ */
+static void firmwareConfirm() {
+  static bool checked = false;
+  if (checked) return;
+  String pending = prefs.getString("fwPending", "");
+  String rolledBack = prefs.getString("fwRolledBack", "");
+  if (rolledBack.length() && wsUp) {
+    prefs.remove("fwRolledBack");
+    ui::info("Uppdateringen fungerade inte", "Version " + std::string(rolledBack.c_str()) + " kom inte i kontakt med Pluggis, så Tab5 gick tillbaka till " +
+             std::string(fwVersion().c_str()) + ".", "", ui::Act::None);
+  }
+  if (!pending.length() || pending != fwVersion()) {
+    if (pending.length()) prefs.remove("fwPending");
+    if (!rolledBack.length() || wsUp) checked = true;
+    return;
+  }
+  if (wsUp && meLoaded) {
+    esp_ota_mark_app_valid_cancel_rollback();
+    prefs.remove("fwPending");
+    checked = true;
+    ui::toast("Uppdaterad till " + std::string(fwVersion().c_str()));
+    Serial.println("[pluggis] ny firmware godkänd");
+    return;
+  }
+  static uint32_t wifiSince = 0;
+  if (WiFi.status() != WL_CONNECTED) { wifiSince = 0; return; }
+  if (!wifiSince) wifiSince = millis();
+  if (millis() - wifiSince > 120000) {
+    const esp_partition_t* old = esp_ota_get_next_update_partition(nullptr);   // den andra app-partitionen = förra versionen
+    Serial.println("[pluggis] ny firmware når inte servern – tillbaka till förra versionen");
+    prefs.remove("fwPending");
+    prefs.putString("fwRolledBack", fwVersion());
+    if (old && esp_ota_set_boot_partition(old) == 0) {
+      ui::buildMessage("Uppdateringen fungerade inte. Startar om på förra versionen ...", true);
+      lv_refr_now(lvDisp);
+      delay(1500);
+      ESP.restart();
+    }
+    checked = true;
+  }
+}
+
 static void onAction(const ui::Action& a) {
   lastTouchAt = millis();
   switch (a.act) {
@@ -2649,6 +2839,8 @@ static void onAction(const ui::Action& a) {
     case ui::Act::SetCode: entryField = EntryField::Code; showScreen(Screen::Entry); break;
     case ui::Act::EntryOk: entryOk(); break;
     case ui::Act::EntryBack: showScreen(Screen::Settings); break;
+    case ui::Act::SetFwCheck: firmwareCheck(); break;
+    case ui::Act::SetFwUpdate: firmwareUpdate(); break;
     case ui::Act::SetClock:
       cfg.clockMode = std::max(0, std::min(2, a.a));
       prefs.putInt("clockMode", cfg.clockMode);
@@ -3212,6 +3404,7 @@ void loop() {
     dirtyTop = true;
   }
   tickPractice();
+  firmwareConfirm();
 
   static uint32_t lastBattery = 0;
   if (!lastBattery || millis() - lastBattery > 30000) {

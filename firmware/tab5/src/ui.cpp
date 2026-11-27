@@ -441,6 +441,7 @@ static int32_t ovaScroll = 0;   // hur långt läxlistan på Öva är rullad (be
 static lv_obj_t* ovaList = nullptr;
 static lv_obj_t *timerBox = nullptr, *timerBar = nullptr, *timerLbl = nullptr;
 static lv_obj_t *focusArc = nullptr, *focusTime = nullptr, *focusState = nullptr;
+static lv_obj_t *fwNoteLbl = nullptr, *fwBar = nullptr;
 static lv_obj_t *wifiPass = nullptr, *wifiSsid = nullptr, *wifiStatusLbl = nullptr, *wifiSpin = nullptr;
 static std::string wifiTyped;   // behålls om skärmen byggs om medan man skriver
 
@@ -450,6 +451,7 @@ static lv_obj_t* fresh(Act background = Act::None) {
   ovaList = nullptr;
   timerBox = timerBar = timerLbl = nullptr;
   focusArc = focusTime = focusState = nullptr;
+  fwNoteLbl = fwBar = nullptr;
   talkBtn = talkLbl = nullptr;
   wifiPass = wifiSsid = wifiStatusLbl = wifiSpin = nullptr;
   lv_obj_clean(content);
@@ -990,7 +992,7 @@ void buildSettings(const Settings& m) {
   button(c, W - PAD - 250, 14, 250, 72, "Starta om", Kind::Ghost, Act::SetRestart, 0, LV_SYMBOL_REFRESH, 20);
   button(c, W - PAD - 250 - GAP - 250, 14, 250, 72, "Detaljer", Kind::Ghost, Act::SetDetails, 0, LV_SYMBOL_LIST, 20);
 
-  const int y0 = 104, CW = (W - 2 * PAD - GAP) / 2, CHH = 128;
+  const int y0 = 104, CW = (W - 2 * PAD - GAP) / 2, CHH = 120;
   // vänster: anslutning och elev
   std::string sig = m.rssi >= -55 ? "stark signal" : m.rssi >= -67 ? "bra signal" : m.rssi >= -78 ? "svag signal" : "mycket svag signal";
   settingCard(c, PAD, y0, CW, CHH, LV_SYMBOL_WIFI, "WiFi", m.wifi.empty() ? std::string("Inte ansluten") : m.wifi,
@@ -1038,6 +1040,25 @@ void buildSettings(const Settings& m) {
   lv_obj_add_event_cb(sl, onBright, LV_EVENT_VALUE_CHANGED, nullptr);
   lv_obj_add_event_cb(sl, onBright, LV_EVENT_RELEASED, nullptr);
 
+  // längst ner, hela bredden: firmware
+  {
+    const int fy = y0 + 3 * (CHH + GAP), fh = CH - fy - GAP;
+    lv_obj_t* fw = panel(c, SURFACE, 26);
+    lv_obj_set_pos(fw, PAD, fy);
+    lv_obj_set_size(fw, W - 2 * PAD, fh);
+    lv_obj_t* ft = label(fw, std::string(LV_SYMBOL_DOWNLOAD) + "  Programvara " + m.fwVersion, F_S, MUTED);
+    lv_obj_align(ft, LV_ALIGN_LEFT_MID, 24, -16);
+    fwNoteLbl = oneLine(fw, m.fwNote, F_S, toneHex(m.fwTone), W - 2 * PAD - 24 - 720);
+    lv_obj_align(fwNoteLbl, LV_ALIGN_LEFT_MID, 24, 16);
+    fwBar = bar(fw, 24, fh - 14, W - 2 * PAD - 48 - 700, 6, 0, 100, YELLOW);
+    lv_obj_add_flag(fwBar, LV_OBJ_FLAG_HIDDEN);
+    int bw = 330;
+    if (!m.fwNew.empty())
+      button(fw, W - 2 * PAD - 16 - bw, (fh - 64) / 2, bw, 64, "Uppdatera nu", Kind::Primary, Act::SetFwUpdate, 0, LV_SYMBOL_DOWNLOAD, 18);
+    button(fw, W - 2 * PAD - 16 - (m.fwNew.empty() ? bw : 2 * bw + GAP), (fh - 64) / 2, bw, 64, "Leta efter uppdatering",
+           m.fwBusy ? Kind::Dim : Kind::Secondary, m.fwBusy ? Act::None : Act::SetFwCheck, 0, LV_SYMBOL_REFRESH, 18);
+  }
+
   lv_obj_t* clk = panel(c, SURFACE, 26);
   lv_obj_set_pos(clk, rx, y0 + 2 * (CHH + GAP));
   lv_obj_set_size(clk, CW, CHH);
@@ -1049,6 +1070,17 @@ void buildSettings(const Settings& m) {
     bool on = m.clockMode == i;
     lv_obj_t* b = button(clk, 24 + i * (cw + 10), 52, cw, 60, modes[i], on ? Kind::Primary : Kind::Secondary, Act::SetClock, i, nullptr, 18);
     if (on) { lv_obj_set_style_border_width(b, 3, 0); lv_obj_set_style_border_color(b, C(YELLOW), 0); }
+  }
+}
+
+void firmwareProgress(int percent, const std::string& text) {
+  if (fwNoteLbl) {
+    lv_label_set_text(fwNoteLbl, tr(text).c_str());
+    lv_obj_set_style_text_color(fwNoteLbl, C(YELLOW), 0);
+  }
+  if (fwBar) {
+    lv_obj_remove_flag(fwBar, LV_OBJ_FLAG_HIDDEN);
+    lv_bar_set_value(fwBar, std::max(0, std::min(100, percent)), LV_ANIM_OFF);
   }
 }
 

@@ -8,6 +8,10 @@ on:
     paths: ["firmware/**", ".github/workflows/firmware.yml"]
   workflow_dispatch:
 
+# Publicerar firmware.bin i releasen "tab5" (för uppdatering över WiFi)
+permissions:
+  contents: write
+
 jobs:
   tab5:
     runs-on: ubuntu-latest
@@ -30,6 +34,24 @@ jobs:
           key: pio-${{ matrix.dir }}-${{ hashFiles(format('firmware/{0}/platformio.ini', matrix.dir)) }}
       - name: Installera PlatformIO
         run: pip install -U platformio
-      # Kompileringskontroll. Riktig firmware byggs lokalt med din egen include/config.h (WiFi, server, token).
+      # Version: datum och commit, t.ex. 2026.11.27.1430-ab12cd3 (visas på Tab5 och jämförs vid uppdatering)
+      - name: Version
+        run: echo "PLUGGIS_FW_VERSION=$(date -u +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      # Byggs med config.example.h. WiFi, server och elevkod ligger i Tab5:s egna inställningar, så samma fil
+      # fungerar på alla Tab5.
       - name: Bygg (med config.example.h)
         run: pio run
+      # Bara main: lägg firmware.bin och version.txt i releasen "tab5". Pluggis-servern hämtar dem när man
+      # trycker "Leta efter uppdatering" (på Tab5 eller i föräldravyn). version.txt laddas upp sist.
+      - name: Publicera i releasen tab5
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp .pio/build/tab5/firmware.bin firmware.bin
+          echo "$PLUGGIS_FW_VERSION" > version.txt
+          gh release view tab5 >/dev/null 2>&1 || gh release create tab5 --latest=false \
+            --title "Tab5 firmware" --notes "Senaste Tab5-firmware från main. Installeras över WiFi från Pluggis (Inställningar → Leta efter uppdatering)."
+          gh release upload tab5 firmware.bin --clobber
+          gh release upload tab5 version.txt --clobber
+          gh release edit tab5 --title "Tab5 firmware $PLUGGIS_FW_VERSION"

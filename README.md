@@ -552,6 +552,28 @@ Other ESP32 screens (Core2, CoreS3, Cardputer etc.) aren't supported: the interf
 - **Troubleshooting:** tap the WiFi icon or *Ansluter* (connecting) for WiFi, IP, server, the chat, the latest error
   and memory. The server logs refused screens (`docker compose logs pluggis | grep -i enhet`).
 
+### Updating the Tab5 over WiFi
+
+After one USB flash with this firmware, the Tab5 is updated without a cable:
+
+1. Every push to `main` that touches `firmware/` builds `firmware.bin` in GitHub Actions and puts it, with
+   `version.txt`, in the GitHub Release **`tab5`**. The version is the date and commit, e.g. `2026.11.27.1430-ab12cd3`.
+2. On the Tab5: **⚙ → Check for update** (*Leta efter uppdatering*). The Pluggis server fetches the release from
+   GitHub (it's the server that talks to the internet, not the Tab5) and the Tab5 compares the versions.
+3. **Update now** (*Uppdatera nu*): the Tab5 downloads the file from the server, checks the MD5, writes it to the free
+   app partition and restarts. Not while the focus timer runs, and not on battery below 30 %.
+4. After the restart the new version must reach the server within two minutes (with WiFi up). Otherwise the Tab5
+   switches back to the previous version and says so.
+
+- **Your settings are kept:** WiFi, server, student code and the rest are stored in the Tab5 (NVS), which an update
+  doesn't touch. Values that only existed in `config.h` are copied there on the first boot of this firmware, so the
+  CI build (made without `config.h`) uses them too.
+- **Parent view → System → Tab5:** shows the version on the server, *Check for a new version*, and *Upload* for a
+  `firmware.bin` you built yourself.
+- A private repo needs `PLUGGIS_GITHUB_TOKEN` (read access) in `.env`. Other repo: `PLUGGIS_FIRMWARE_REPO`.
+- The automatic switch-back covers a firmware that starts but can't reach the server. A firmware that crashes before
+  it gets that far needs a USB flash.
+
 More in [firmware/tab5/README.md](firmware/tab5/README.md).
 
 ## Security and privacy

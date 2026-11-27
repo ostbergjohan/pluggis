@@ -49,6 +49,10 @@ public class ChatAccess {
             Pattern.compile("POST /api/exam/start"),
             Pattern.compile("POST /api/exam/[0-9a-f-]{36}/submit"),
             Pattern.compile("POST /api/explain/[0-9a-f-]{36}/answer"),
+            // Tab5: leta efter och installera ny firmware (uppladdning bara för föräldern)
+            Pattern.compile("GET /api/firmware"),
+            Pattern.compile("POST /api/firmware/check"),
+            Pattern.compile("GET /api/firmware/download"),
     };
 
     private final SettingsService settings;

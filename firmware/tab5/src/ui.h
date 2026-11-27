@@ -49,6 +49,8 @@ enum class Act : uint16_t {
   SetBright,      // a = ljusstyrka 30–255 medan reglaget dras
   SetBrightDone,  // a = ljusstyrka när reglaget släpps (sparas)
   SetDetails,     // visa anslutningsdetaljer
+  SetFwCheck,     // leta efter ny firmware
+  SetFwUpdate,    // installera den nya firmwaren
   SetRestart,
   SetBack,
   EntryOk, EntryBack,   // textrutan (elevkod, serveradress)
@@ -164,9 +166,17 @@ struct Settings {
   int idleMin = 5;           // 0 = aldrig
   int brightness = 200;      // 30–255
   int clockMode = 1;         // 0 av, 1 pluggtid, 2 hela dagen
+  // firmware (uppdatering över WiFi)
+  std::string fwVersion;     // den som körs, t.ex. "2026.11.27.1430-ab12cd3"
+  std::string fwNote;        // "Du har den senaste", "Ny version: …", fel
+  Tone fwTone = Tone::Muted;
+  bool fwBusy = false;       // letar eller laddar ner
+  std::string fwNew;         // ny version som kan installeras ("" = ingen)
   std::string version;
 };
 void buildSettings(const Settings& m);
+/** Nedladdningen av ny firmware: förloppet på inställningsskärmen (0–100) och en rad text. */
+void firmwareProgress(int percent, const std::string& text);
 
 /** En textruta med tangentbord (elevkod, serveradress). */
 struct Entry {

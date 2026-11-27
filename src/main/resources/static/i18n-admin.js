@@ -267,6 +267,15 @@ I18N.add({
   'på mobilen och skriver in sin kod (eller får länken med koden).': 'on the phone and enters their code (or gets the link with the code).',
   'Lägg till elev': 'Add student', 'Ange ett namn': 'Enter a name', 'Elev tillagd': 'Student added', '+ Lägg till elev': '+ Add student',
   'Inställningar': 'Settings',
+  'Tab5-programvara': 'Tab5 software', 'Version (valfritt)': 'Version (optional)',
+  'Tab5 uppdateras över WiFi: Inställningar (⚙) → Leta efter uppdatering → Uppdatera nu.': 'The Tab5 is updated over WiFi: Settings (⚙) → Check for update → Update now.',
+  'Servern hämtar den senaste versionen som byggts från main (': 'The server fetches the latest version built from main (',
+  ') när någon letar.': ') when someone checks.',
+  'På servern: {0}': 'On the server: {0}', 'från GitHub': 'from GitHub', 'uppladdad': 'uploaded',
+  'Ingen firmware på servern än.': 'No firmware on the server yet.', 'Senaste försöket: {0}': 'Last attempt: {0}',
+  '🔄 Leta efter ny version': '🔄 Check for a new version', 'Klart': 'Done', 'Egen fil': 'Your own file',
+  'Byggt själv? Ladda upp .pio/build/tab5/firmware.bin så installeras den i stället.': 'Built it yourself? Upload .pio/build/tab5/firmware.bin and that is installed instead.',
+  'Välj firmware.bin först': 'Choose firmware.bin first', 'Uppladdad': 'Uploaded', '⬆ Ladda upp': '⬆ Upload',
 
   // fler texter
   'Annat': 'Other', 'Fyll i': 'Fill in', 'Totalt {0}': 'Total {0}', 'Obetalt {0}': 'Unpaid {0}', 'Pass': 'Session',

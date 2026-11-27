@@ -1421,9 +1421,44 @@ function tab5Panel() {
     store.set('lc.showTab5', on.checked ? '1' : '');
     applyTab5(); pollDevice(); route();
   });
-  return h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Tab5 (hårdvara)'),
+  const hw = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Tab5 (hårdvara)'),
     h('label', { style: 'display:flex;gap:8px;align-items:center' }, on, 'Visa Tab5: anslutningsstatus uppe till höger'),
-    h('p', { class: 'item-meta' }, 'Dolt så länge ni bara använder elevchatten i mobilen. Inget slutar fungera – det syns bara inte. Gäller den här webbläsaren.'));
+    h('p', { class: 'item-meta' }, 'Dolt så länge ni bara använder elevchatten i mobilen. Inget slutar fungera – det syns bara inte. Gäller den här webbläsaren.'));;
+  return h('div', {}, hw, firmwarePanel());
+}
+
+/** Tab5-firmware över WiFi: senaste från GitHub-releasen "tab5" (byggd av CI), eller en egen fil. */
+function firmwarePanel() {
+  const panel = h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Tab5-programvara'),
+    h('div', { class: 'empty' }, h('span', { class: 'spinner' })));
+  const fmt = (iso) => iso ? new Date(iso).toLocaleString(I18N.locale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–';
+  function paint(st) {
+    const file = h('input', { type: 'file', accept: '.bin' });
+    const ver = h('input', { placeholder: 'Version (valfritt)', maxlength: '40', style: 'max-width:240px' });
+    panel.replaceChildren(h('h2', {}, 'Tab5-programvara'),
+      h('p', { class: 'item-meta' }, 'Tab5 uppdateras över WiFi: Inställningar (⚙) → Leta efter uppdatering → Uppdatera nu. ',
+        'Servern hämtar den senaste versionen som byggts från main (', st.repo, ') när någon letar.'),
+      st.available
+        ? h('p', {}, h('b', {}, `På servern: ${st.version}`), ` · ${Math.round(st.size / 1024)} kB · ${st.source === 'GitHub' ? 'från GitHub' : 'uppladdad'} ${fmt(st.savedAt)}`)
+        : h('p', { class: 'item-meta' }, 'Ingen firmware på servern än.'),
+      st.lastError ? h('p', { class: 'item-meta', style: 'color:var(--bad)' }, `Senaste försöket: ${st.lastError}`) : null,
+      h('div', { class: 'toolbar' }, h('button', { onclick: async (e) => {
+        const r = await run(() => api('/api/firmware/check', { method: 'POST' }), e.target, 'Klart');
+        if (r) paint(r);
+      } }, '🔄 Leta efter ny version')),
+      h('h3', { style: 'margin-top:14px' }, 'Egen fil'),
+      h('p', { class: 'item-meta' }, 'Byggt själv? Ladda upp .pio/build/tab5/firmware.bin så installeras den i stället.'),
+      h('div', { class: 'toolbar' }, file, ver, h('button', { onclick: async (e) => {
+        if (!file.files.length) return toast('Välj firmware.bin först', true);
+        const fd = new FormData();
+        fd.append('file', file.files[0]);
+        if (ver.value.trim()) fd.append('version', ver.value.trim());
+        const r = await run(() => api('/api/firmware', { method: 'POST', form: fd }), e.target, 'Uppladdad');
+        if (r) paint(r);
+      } }, '⬆ Ladda upp')));
+  }
+  api('/api/firmware').then(paint).catch(e => panel.replaceChildren(h('h2', {}, 'Tab5-programvara'), h('p', { class: 'item-meta' }, e.message)));
+  return panel;
 }
 
 function studentsPanel() {

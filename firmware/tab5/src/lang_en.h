@@ -101,6 +101,12 @@ static const EnText EN_EXACT[] = {
   {"Inte ansluten till Pluggis just nu. Vänta lite och försök igen.", "Not connected to Pluggis right now. Wait a moment and try again."},
   {"Kameran på skärmen kommer snart. Fota med telefonen i Pluggis-appen så länge.", "The camera on the screen is coming soon. Take photos with the phone in the Pluggis app for now."},
   {"Anslutning", "Connection"},
+  // uppdatering över WiFi
+  {"Leta efter uppdatering", "Check for update"}, {"Uppdatera nu", "Update now"}, {"Letar efter uppdatering ...", "Checking for update ..."},
+  {"Tryck Leta efter uppdatering för att se om det finns en ny version.", "Tap Check for update to see if there's a new version."},
+  {"Du har den senaste versionen.", "You have the latest version."}, {"Ingen firmware på servern än.", "No firmware on the server yet."},
+  {"Avsluta fokustimern först.", "Finish the focus timer first."}, {"För lite batteri – sätt Tab5 i laddaren först.", "Battery too low – put the Tab5 on the charger first."},
+  {"Uppdateringen fungerade inte", "The update didn't work"}, {"Uppdateringen fungerade inte. Startar om på förra versionen ...", "The update didn't work. Restarting on the previous version ..."},
 };
 
 static const EnText EN_TEMPLATES[] = {
@@ -111,7 +117,12 @@ static const EnText EN_TEMPLATES[] = {
   {"Prov: {0}", "Test: {0}"}, {"Läxa: {0}", "Homework: {0}"}, {"Kort: {0}", "Cards: {0}"}, {"Glosförhör: {0}", "Vocabulary quiz: {0}"},
   {"Snabbquiz: {0}", "Quick quiz: {0}"}, {"Lucktext: {0}", "Fill in the gap: {0}"}, {"Förklara: {0}", "Explain: {0}"},
   {"Testprov: {0}", "Mock test: {0}"}, {"Matcha par: {0}", "Match pairs: {0}"}, {"Rätt ordning: {0}", "Right order: {0}"},
-  {"Senast: {0}", "Last: {0}"}, {"Lyssnar: {0}", "Listening: {0}"},
+  {"Senast: {0}", "Last: {0}"},
+  {"Programvara {0}", "Software {0}"}, {"Uppdatera till {0}", "Update to {0}"}, {"Ny version finns: {0}", "New version available: {0}"},
+  {"Kunde inte fråga servern ({0})", "Couldn't ask the server ({0})"}, {"Ingen firmware på servern: {0}", "No firmware on the server: {0}"},
+  {"Uppdateringen misslyckades: {0}", "The update failed: {0}"}, {"Laddar ner ... {0}", "Downloading ... {0}"},
+  {"Uppdaterad till {0}. Startar om ...", "Updated to {0}. Restarting ..."}, {"Uppdaterad till {0}", "Updated to {0}"},
+  {"Version {0} kom inte i kontakt med Pluggis, så Tab5 gick tillbaka till {1}.", "Version {0} couldn't reach Pluggis, so the Tab5 went back to {1}."}, {"Lyssnar: {0}", "Listening: {0}"},
   {"Det gick inte att göra frågor just nu ({0}). Tryck för att försöka igen.", "Couldn't make questions right now ({0}). Tap to try again."},
   {"Det gick inte att starta just nu ({0}).", "Couldn't start right now ({0})."},
   {"Det gick inte att göra ett testprov just nu ({0}).", "Couldn't make a mock test right now ({0})."},
@@ -133,4 +144,9 @@ static const EnText EN_TEMPLATES[] = {
   {"stark signal ({0} dBm)", "strong signal ({0} dBm)"}, {"bra signal ({0} dBm)", "good signal ({0} dBm)"},
   {"svag signal ({0} dBm)", "weak signal ({0} dBm)"}, {"mycket svag signal ({0} dBm)", "very weak signal ({0} dBm)"},
   {"Senast: {0}", "Last: {0}"},
+  {"Programvara {0}", "Software {0}"}, {"Uppdatera till {0}", "Update to {0}"}, {"Ny version finns: {0}", "New version available: {0}"},
+  {"Kunde inte fråga servern ({0})", "Couldn't ask the server ({0})"}, {"Ingen firmware på servern: {0}", "No firmware on the server: {0}"},
+  {"Uppdateringen misslyckades: {0}", "The update failed: {0}"}, {"Laddar ner ... {0}", "Downloading ... {0}"},
+  {"Uppdaterad till {0}. Startar om ...", "Updated to {0}. Restarting ..."}, {"Uppdaterad till {0}", "Updated to {0}"},
+  {"Version {0} kom inte i kontakt med Pluggis, så Tab5 gick tillbaka till {1}.", "Version {0} couldn't reach Pluggis, so the Tab5 went back to {1}."},
 };
