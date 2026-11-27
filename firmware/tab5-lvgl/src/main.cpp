@@ -30,20 +30,23 @@
 
 // Inloggning: elevens kod (PLUGGIS_CODE) räcker – servern vet vilken elev den hör till. En äldre config.h med
 // enhets-id och föräldertoken (PLUGGIS_DEVICE_ID + PLUGGIS_TOKEN) fungerar fortfarande.
-#if defined(PLUGGIS_CODE)
-#define PLUGGIS_AUTH PLUGGIS_CODE
-#ifndef PLUGGIS_DEVICE_ID
-#define PLUGGIS_DEVICE_ID "elevkod"   // servern byter till elevens eget enhets-id
-#endif
-#define PLUGGIS_AUTH_NAME "PLUGGIS_CODE"
-#else
-#define PLUGGIS_AUTH PLUGGIS_TOKEN
-#define PLUGGIS_AUTH_NAME "PLUGGIS_TOKEN"
-#endif
+// Allt går också att ändra på skärmen (Inställningar) och sparas då i Tab5 – det går före config.h.
 
 #ifndef PLUGGIS_IDLE_MINUTES
 #define PLUGGIS_IDLE_MINUTES 5   // stäng av efter så många minuter utan aktivitet (0 = aldrig)
 #endif
+
+/** Inställningarna som gäller: sparade i Tab5 (Preferences) eller standard från config.h. */
+struct Cfg {
+  String host;
+  int port = 8080;
+  String auth;        // elevkoden (eller förälderns token i en äldre config.h)
+  String device;      // enhets-id i anropen; med elevkod byter servern till elevens eget
+  bool code = false;  // auth är en elevkod
+  int idleMin = 5;    // stäng av efter (0 = aldrig)
+  int bright = 200;   // ljusstyrka 30–255
+};
+static Cfg cfg;
 
 static uint32_t lastActivity = 0;
 static bool pendingPractice = false;   // coachen bad om en övning (startas från loop())
@@ -75,7 +78,7 @@ static int touchX = 0, touchY = 0;
 static void redraw();
 
 // Skärmar: coachen (chatt med röst) eller Öva (kortlekar på skärmen)
-enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi };
+enum class Screen { Coach, OvaList, OvaCard, HwList, HwDetail, Plan, Game, Wifi, Settings, Entry };
 static Screen screen = Screen::OvaList;   // Tab5 startar på Öva
 enum class Game { None, Explain, Exam, Match, Order };
 static Game game = Game::None;
@@ -324,7 +327,7 @@ static void onText(const char* json, size_t len) {
     heardText = clean(doc["text"] | "");
     dirtyMain = true;
   } else if (type == "say" || type == "reminder") {
-    if (asleep) { asleep = false; M5.Display.setBrightness(200); dirtyAll = true; }
+    if (asleep) { asleep = false; M5.Display.setBrightness(cfg.bright); dirtyAll = true; }
     lastActivity = millis();
     thinking = false;
     sayText = clean(doc["text"] | "");
@@ -422,7 +425,7 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
     case WStype_CONNECTED: {
       wsLast = "ansluten";
       wsLastAt = millis();
-      Serial.printf("[pluggis] ansluten till %s:%d som %s\n", PLUGGIS_HOST, PLUGGIS_PORT, PLUGGIS_DEVICE_ID);
+      Serial.printf("[pluggis] ansluten till %s:%d som %s\n", cfg.host.c_str(), cfg.port, cfg.device.c_str());
       wsUp = true;
       dirtyTop = true;
       JsonDocument doc;
@@ -438,7 +441,7 @@ static void onWs(WStype_t type, uint8_t* payload, size_t length) {
       wsLast = wsUp ? String("tappade kopplingen") : String("kom inte fram") + (length ? String(": ") + String((const char*)payload).substring(0, length) : String());
       wsLastAt = millis();
       if (wsUp) Serial.println("[pluggis] frånkopplad, försöker igen");
-      else Serial.printf("[pluggis] får ingen WebSocket mot %s:%d%s\n", PLUGGIS_HOST, PLUGGIS_PORT,
+      else Serial.printf("[pluggis] får ingen WebSocket mot %s:%d%s\n", cfg.host.c_str(), cfg.port,
                          WiFi.status() == WL_CONNECTED ? "" : " (inget WiFi)");
       wsUp = false;
       thinking = false;
@@ -522,16 +525,16 @@ static int api(const char* method, const String& path, const String& body, JsonD
   if (WiFi.status() != WL_CONNECTED) return -1;
   WiFiClient client;
   HTTPClient http;
-  String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + path +
-               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
+  String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + path +
+               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + cfg.device.c_str();
   if (!http.begin(client, url)) return -1;
   http.setTimeout(timeoutMs);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
+  http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
   http.addHeader("Content-Type", "application/json");
   int code = strcmp(method, "GET") == 0 ? http.GET() : http.sendRequest(method, body);
   if (code <= 0 || code >= 400) {
-    String what = code <= 0 ? String("ingen kontakt med ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + " (" + http.errorToString(code) + ")"
-                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla " PLUGGIS_AUTH_NAME " i config.h"
+    String what = code <= 0 ? String("ingen kontakt med ") + cfg.host.c_str() + ":" + String(cfg.port) + " (" + http.errorToString(code) + ")"
+                : code == 401 || code == 403 ? String("nekad (") + String(code) + ") – kolla elevkoden under Inställningar"
                 : String("svarade ") + String(code);
     Serial.printf("[pluggis] %s %s: %s\n", method, path.c_str(), what.c_str());
     lastError = String(method) + " " + path + ": " + what;
@@ -837,10 +840,10 @@ static String transcribeRecording() {
   if (WiFi.status() == WL_CONNECTED) {
     WiFiClient client;
     HTTPClient http;
-    String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + "/api/speech/transcribe?deviceId=" + PLUGGIS_DEVICE_ID;
+    String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + "/api/speech/transcribe?deviceId=" + cfg.device.c_str();
     if (http.begin(client, url)) {
       http.setTimeout(20000);
-      http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
+      http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
       http.addHeader("Content-Type", "audio/wav");
       int code = http.POST((uint8_t*)recBuf, 44 + bytes);
       if (code == 200) {
@@ -1242,11 +1245,11 @@ static int apiBinary(const String& path, const String& body, uint8_t** out, size
   if (WiFi.status() != WL_CONNECTED) return -1;
   WiFiClient client;
   HTTPClient http;
-  String url = String("http://") + PLUGGIS_HOST + ":" + PLUGGIS_PORT + path +
-               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + PLUGGIS_DEVICE_ID;
+  String url = String("http://") + cfg.host.c_str() + ":" + cfg.port + path +
+               (path.indexOf('?') < 0 ? "?" : "&") + "deviceId=" + cfg.device.c_str();
   if (!http.begin(client, url)) return -1;
   http.setTimeout(15000);
-  http.addHeader("X-Pluggis-Token", PLUGGIS_AUTH);
+  http.addHeader("X-Pluggis-Token", cfg.auth.c_str());
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(body);
   if (code == 200) {
@@ -1732,7 +1735,7 @@ static void drawBoot() {
   if (millis() - bootStart > 30000) {
     warn = !wifi ? String("Hittar inget WiFi. Tryck Välj WiFi och välj nätverk (bara 2,4 GHz). (WiFi-status ") +
                        String((int)WiFi.status()) + ", " + String((unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024)) + " kB ledigt)"
-                 : String("Får inget svar från Pluggis på ") + PLUGGIS_HOST + ":" + String(PLUGGIS_PORT) + ". Är servern igång?" +
+                 : String("Får inget svar från Pluggis på ") + cfg.host.c_str() + ":" + String(cfg.port) + ". Är servern igång?" +
                        (lastError.length() ? "\n" + lastError : String());
   }
   ui::showBoot(S(line), S(warn), !wifi && millis() - bootStart > 15000);
@@ -1740,7 +1743,7 @@ static void drawBoot() {
 
 static void drawTop() {
   ui::Top t;
-  t.tab = screen == Screen::Wifi ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
+  t.tab = (screen == Screen::Wifi || screen == Screen::Settings || screen == Screen::Entry) ? -1 : screen == Screen::Coach ? 1 : (screen == Screen::HwList || screen == Screen::HwDetail) ? 2
         : screen == Screen::Plan ? 3 : 0;
   t.status = WiFi.status() != WL_CONNECTED ? "Inget WiFi" : !wsUp ? "Ansluter" : "";
   t.volume = volume;
@@ -2059,6 +2062,120 @@ static void pumpWifi() {
   }
 }
 
+// ---------------------------------------------------------------- inställningar
+static void connectServer();
+static void markActive();
+enum class EntryField { Code, Server };
+static EntryField entryField = EntryField::Code;
+
+static void drawSettings() {
+  ui::Settings m;
+  bool wifi = WiFi.status() == WL_CONNECTED;
+  m.wifi = wifi ? S(WiFi.SSID()) : "";
+  m.rssi = wifi ? WiFi.RSSI() : -100;
+  m.server = S(cfg.host + ":" + String(cfg.port));
+  m.serverOk = wsUp;
+  m.serverNote = wsUp ? "Ansluten" : S(lastError.length() ? lastError : String("Ansluter ..."));
+  m.code = cfg.code ? S(cfg.auth) : "";
+  m.student = S(studentName);
+  m.idleMin = cfg.idleMin;
+  m.brightness = cfg.bright;
+  m.version = "Pluggis Tab5 · " __DATE__;
+  ui::buildSettings(m);
+}
+
+static void drawEntry() {
+  ui::Entry m;
+  if (entryField == EntryField::Code) {
+    m.title = "Elevens kod";
+    m.code = true;
+    m.value = cfg.code ? S(cfg.auth) : "";
+    m.placeholder = "5 tecken";
+    m.hint = "Samma kod som eleven loggar in med i Pluggis-appen (föräldravyn: Inställningar > Elever). "
+             "Koden bestämmer vilken elev skärmen visar.";
+  } else {
+    m.title = "Serverns adress";
+    m.value = S(cfg.host + (cfg.port != 8080 ? ":" + String(cfg.port) : String()));
+    m.placeholder = "192.168.1.20";
+    m.hint = "IP-adressen till datorn där Pluggis körs (hostname -I på servern), t.ex. 192.168.1.20. "
+             "Annan port än 8080: 192.168.1.20:9090.";
+  }
+  ui::buildEntry(m);
+}
+
+/** Provar en kod eller adress mot servern innan den sparas (GET /api/chat/me). */
+static bool tryServer(const String& host, int port, const String& auth, String& name) {
+  WiFiClient client;
+  HTTPClient http;
+  String url = "http://" + host + ":" + String(port) + "/api/chat/me";
+  if (!http.begin(client, url)) return false;
+  http.setTimeout(6000);
+  http.addHeader("X-Pluggis-Token", auth.c_str());
+  int code = http.GET();
+  if (code == 200) {
+    JsonDocument d;
+    if (!deserializeJson(d, http.getString())) name = d["name"] | "";
+  }
+  http.end();
+  Serial.printf("[pluggis] provar %s med %s: %d\n", url.c_str(), auth.length() == 5 ? "elevkod" : "token", code);
+  lastError = code == 200 ? String() : code <= 0 ? "ingen kontakt med " + host + ":" + String(port) : "servern svarade " + String(code);
+  return code == 200;
+}
+
+/** Ny elev eller server: spara, koppla om och hämta allt på nytt. */
+static void applyServer() {
+  meLoaded = false;
+  studentName = "";
+  connectServer();
+  dirtyTop = true;
+}
+
+static void entryOk() {
+  String v = String(ui::entryText().c_str());
+  v.trim();
+  if (entryField == EntryField::Code) {
+    v.toUpperCase();
+    if (v.length() != 5) { ui::entryStatus("Koden är 5 tecken", ui::Tone::Warn, false); return; }
+    ui::entryStatus("Provar koden ...", ui::Tone::Muted, true);
+    lv_refr_now(lvDisp);
+    String name;
+    if (!tryServer(cfg.host, cfg.port, v, name)) {
+      ui::entryStatus(lastError.startsWith("servern svarade 401") || lastError.startsWith("servern svarade 403")
+                          ? "Koden finns inte – kolla den i föräldravyn" : S("Kunde inte prova koden: " + lastError),
+                      ui::Tone::Bad, false);
+      return;
+    }
+    prefs.putString("code", v);
+    cfg.auth = v;
+    cfg.device = "elevkod";
+    cfg.code = true;
+    applyServer();
+    ui::toast("Nu är det " + std::string(name.length() ? name.c_str() : "eleven") + "s Pluggis");
+  } else {
+    String host = v;
+    int port = 8080;
+    host.replace("http://", "");
+    if (host.endsWith("/")) host = host.substring(0, host.length() - 1);
+    int colon = host.indexOf(':');
+    if (colon > 0) { port = host.substring(colon + 1).toInt(); host = host.substring(0, colon); }
+    if (!host.length() || port <= 0 || port > 65535) { ui::entryStatus("Skriv t.ex. 192.168.1.20", ui::Tone::Warn, false); return; }
+    ui::entryStatus("Provar " + std::string(host.c_str()) + " ...", ui::Tone::Muted, true);
+    lv_refr_now(lvDisp);
+    String name;
+    if (!tryServer(host, port, cfg.auth, name)) {
+      ui::entryStatus(S("Får ingen kontakt: " + lastError), ui::Tone::Bad, false);
+      return;
+    }
+    prefs.putString("host", host);
+    prefs.putInt("port", port);
+    cfg.host = host;
+    cfg.port = port;
+    applyServer();
+    ui::toast("Servern sparad");
+  }
+  showScreen(Screen::OvaList, true);   // hämta läxorna med den nya inställningen
+}
+
 static void drawScreen() {
   switch (screen) {
     case Screen::Coach: drawCoach(); break;
@@ -2069,6 +2186,8 @@ static void drawScreen() {
     case Screen::HwDetail: drawHwDetail(); break;
     case Screen::Plan: drawPlan(); break;
     case Screen::Wifi: drawWifi(); break;
+    case Screen::Settings: drawSettings(); break;
+    case Screen::Entry: drawEntry(); break;
   }
 }
 
@@ -2090,6 +2209,37 @@ static void redraw() {
     if (dirtyOva) { drawScreen(); dirtyOva = false; }
   }
   if (any) lv_refr_now(lvDisp);
+}
+
+/** Läser inställningarna: sparade i Tab5 först, annars config.h. */
+static void loadCfg() {
+  cfg.host = prefs.getString("host", PLUGGIS_HOST);
+  cfg.port = prefs.getInt("port", PLUGGIS_PORT);
+  String code = prefs.getString("code", "");
+#if defined(PLUGGIS_CODE)
+  if (!code.length()) code = PLUGGIS_CODE;
+#endif
+  if (code.length()) {
+    cfg.auth = code;
+    cfg.device = "elevkod";   // servern byter till elevens eget enhets-id
+    cfg.code = true;
+  } else {
+#if defined(PLUGGIS_TOKEN) && defined(PLUGGIS_DEVICE_ID)
+    cfg.auth = PLUGGIS_TOKEN;   // äldre config.h: förälderns token + enhets-id
+    cfg.device = PLUGGIS_DEVICE_ID;
+#endif
+    cfg.code = false;
+  }
+  cfg.idleMin = prefs.getInt("idleMin", PLUGGIS_IDLE_MINUTES);
+  cfg.bright = prefs.getInt("bright", 200);
+}
+
+/** (Om)startar WebSocket mot servern med nuvarande adress och kod. */
+static void connectServer() {
+  ws.disconnect();
+  wsUp = false;
+  String url = String("/ws/device?deviceId=") + cfg.device + "&token=" + cfg.auth;
+  ws.begin(cfg.host.c_str(), cfg.port, url.c_str());
 }
 
 static void setVolume(int v) {
@@ -2158,6 +2308,34 @@ static void onAction(const ui::Action& a) {
     case ui::Act::VolUp: setVolume(volume + 32); break;
     case ui::Act::Background: onBackground(); break;
     case ui::Act::WifiOpen: openWifi(); break;
+    case ui::Act::SetOpen: showScreen(Screen::Settings); break;
+    case ui::Act::SetBack: showScreen(Screen::OvaList); break;
+    case ui::Act::SetWifi: openWifi(); break;
+    case ui::Act::SetServer: entryField = EntryField::Server; showScreen(Screen::Entry); break;
+    case ui::Act::SetCode: entryField = EntryField::Code; showScreen(Screen::Entry); break;
+    case ui::Act::EntryOk: entryOk(); break;
+    case ui::Act::EntryBack: showScreen(Screen::Settings); break;
+    case ui::Act::SetIdle:
+      cfg.idleMin = a.a;
+      prefs.putInt("idleMin", cfg.idleMin);
+      markActive();
+      dirtyOva = true;
+      break;
+    case ui::Act::SetBright:
+      cfg.bright = std::max(30, std::min(255, a.a));
+      M5.Display.setBrightness(cfg.bright);
+      break;
+    case ui::Act::SetBrightDone:
+      cfg.bright = std::max(30, std::min(255, a.a));
+      M5.Display.setBrightness(cfg.bright);
+      prefs.putInt("bright", cfg.bright);
+      break;
+    case ui::Act::SetRestart:
+      ui::buildMessage("Startar om ...", true);
+      lv_refr_now(lvDisp);
+      delay(300);
+      ESP.restart();
+      break;
     case ui::Act::WifiScan: wifiScan(); break;
     case ui::Act::WifiPick:
       if (a.a >= (int)wifiNets.size()) break;
@@ -2179,17 +2357,15 @@ static void onAction(const ui::Action& a) {
       if (wifiPick.length() || wifiManual) { wifiPick = ""; wifiManual = false; wifiMsg = ""; dirtyOva = true; }
       else showScreen(Screen::OvaList, true);
       break;
-    case ui::Act::Status: {
+    case ui::Act::Status:
+    case ui::Act::SetDetails: {   // anslutningsdetaljer (även "Detaljer" i inställningarna)
       bool wifi = WiFi.status() == WL_CONNECTED;
       String t = wifi ? "WiFi: ansluten till \"" + WiFi.SSID() + "\" (" + WiFi.localIP().toString() + ", signal " +
                             String(WiFi.RSSI()) + " dBm)"
                       : "WiFi: inte ansluten (status " + String((int)WiFi.status()) + ") till \"" + wifiSsidSaved() + "\"";
-#if defined(PLUGGIS_CODE)
-      t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " med elevkod " + PLUGGIS_CODE +
+      t += "\nServer: " + cfg.host + ":" + String(cfg.port) +
+           (cfg.code ? " med elevkod " + cfg.auth : " som \"" + cfg.device + "\"") +
            (studentName.length() ? " (" + studentName + ")" : String());
-#else
-      t += "\nServer: " + String(PLUGGIS_HOST) + ":" + String(PLUGGIS_PORT) + " som \"" + PLUGGIS_DEVICE_ID + "\"";
-#endif
       t += "\nChatten (WebSocket): " + String(wsUp ? "uppe" : "nere") + " – " + wsLast +
            (wsLastAt ? " för " + String((millis() - wsLastAt) / 1000) + " s sedan" : String()) + ", " + String(wsTries) + " försök";
       t += "\nLäxor hämtade: " + String(decksLoaded ? "ja" : "nej");
@@ -2454,12 +2630,13 @@ static void connectWifi() {
 }
 
 void setup() {
-  auto cfg = M5.config();
-  cfg.serial_baudrate = 115200;
-  M5.begin(cfg);
+  auto m5cfg = M5.config();
+  m5cfg.serial_baudrate = 115200;
+  M5.begin(m5cfg);
   M5.Display.setRotation(1);   // liggande
-  M5.Display.setBrightness(200);
+  M5.Display.setBrightness(cfg.bright);
   prefs.begin("pluggis", false);
+  loadCfg();
   volume = prefs.getInt("volume", PLUGGIS_VOLUME);
   setupLvgl();
   fetchLock = xSemaphoreCreateMutex();
@@ -2478,12 +2655,11 @@ void setup() {
 
   lastActivity = millis();
   bootStart = millis();
-  Serial.printf("[pluggis] startar: WiFi \"%s\", server %s:%d, enhet %s\n", PLUGGIS_WIFI_SSID, PLUGGIS_HOST, PLUGGIS_PORT,
-                PLUGGIS_DEVICE_ID);
+  Serial.printf("[pluggis] startar: WiFi \"%s\", server %s:%d, %s\n", wifiSsidSaved().c_str(), cfg.host.c_str(), cfg.port,
+                cfg.code ? "med elevkod" : cfg.device.c_str());
   connectWifi();   // sist, som i den gamla firmware: WiFi-chippet (ESP32-C6) behöver hinna starta efter M5.begin()
   configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "pool.ntp.org", "time.google.com");   // för "Idag"/"Imorgon"
-  String url = String("/ws/device?deviceId=") + PLUGGIS_DEVICE_ID + "&token=" + PLUGGIS_AUTH;
-  ws.begin(PLUGGIS_HOST, PLUGGIS_PORT, url.c_str());
+  connectServer();
   ws.onEvent(onWs);
   ws.setReconnectInterval(3000);
   ws.enableHeartbeat(20000, 5000, 2);
@@ -2492,7 +2668,7 @@ void setup() {
 // ---------------------------------------------------------------- stäng av när den inte används
 static void markActive() {
   lastActivity = millis();
-  if (idleWarned) { idleWarned = false; M5.Display.setBrightness(200); ui::idleWarning(false); }
+  if (idleWarned) { idleWarned = false; M5.Display.setBrightness(cfg.bright); ui::idleWarning(false); }
 }
 
 static void goToSleep() {
@@ -2513,15 +2689,15 @@ static void goToSleep() {
 }
 
 static void checkIdle(bool touched) {
-  if (PLUGGIS_IDLE_MINUTES <= 0) return;
+  if (cfg.idleMin <= 0) return;
   if (asleep) {
-    if (touched) { asleep = false; M5.Display.setBrightness(200); markActive(); dirtyAll = true; }
+    if (touched) { asleep = false; M5.Display.setBrightness(cfg.bright); markActive(); dirtyAll = true; }
     return;
   }
   bool busy = sessionActive || recording || thinking || listening || M5.Speaker.isPlaying() || !playQueue.empty() ||
               makeBusy.length() || (gameMsg.length() && gameMsg.endsWith("..."));
   if (touched || busy) { markActive(); return; }
-  uint32_t idle = millis() - lastActivity, limit = (uint32_t)PLUGGIS_IDLE_MINUTES * 60000;
+  uint32_t idle = millis() - lastActivity, limit = (uint32_t)cfg.idleMin * 60000;
   if (!idleWarned && idle > limit - 30000) {
     idleWarned = true;
     M5.Display.setBrightness(60);

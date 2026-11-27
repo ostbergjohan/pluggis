@@ -41,6 +41,16 @@ enum class Act : uint16_t {
   WifiManual,     // dolt nätverk: skriv namnet själv
   WifiConnect,    // anslut med lösenordet i rutan
   WifiBack,       // tillbaka (från lösenordet till listan, från listan till Öva)
+  // Inställningar
+  SetOpen,        // öppna inställningarna (ikonen uppe till höger)
+  SetWifi, SetServer, SetCode,
+  SetIdle,        // a = minuter (0 = aldrig)
+  SetBright,      // a = ljusstyrka 30–255 medan reglaget dras
+  SetBrightDone,  // a = ljusstyrka när reglaget släpps (sparas)
+  SetDetails,     // visa anslutningsdetaljer
+  SetRestart,
+  SetBack,
+  EntryOk, EntryBack,   // textrutan (elevkod, serveradress)
   TalkPress,      // håll in och prata/svara (släppet läses direkt från pekskärmen)
   // Öva
   OvaSelect,      // a = rad i läxlistan
@@ -122,6 +132,30 @@ std::string wifiPassword();
 std::string wifiSsidInput();
 /** Byter statusraden på WiFi-skärmen utan att bygga om (tangentbordet och texten ligger kvar). */
 void wifiStatus(const std::string& text, Tone tone, bool busy);
+
+// ---------------------------------------------------------------- inställningar
+struct Settings {
+  std::string wifi;          // nätverkets namn ("" = inte ansluten)
+  int rssi = -100;
+  std::string server;        // "192.168.1.20:8080"
+  bool serverOk = false;     // chatten (WebSocket) uppe
+  std::string serverNote;    // "Ansluten" eller senaste fel
+  std::string code, student; // "YQE89", "Fred"
+  int idleMin = 5;           // 0 = aldrig
+  int brightness = 200;      // 30–255
+  std::string version;
+};
+void buildSettings(const Settings& m);
+
+/** En textruta med tangentbord (elevkod, serveradress). */
+struct Entry {
+  std::string title, hint, value, placeholder;
+  bool code = false;         // elevkod: 5 tecken, stora bokstäver och siffror
+};
+void buildEntry(const Entry& m);
+std::string entryText();
+/** Statusraden på WiFi- och textskärmen. */
+void entryStatus(const std::string& text, Tone tone, bool busy);
 
 // ---------------------------------------------------------------- Öva
 struct OvaRow {

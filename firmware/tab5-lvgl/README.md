@@ -23,6 +23,13 @@ med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med 
 
 Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hello). Inte än: kameran (fota med telefonen) och Dual Button.
 
+## Inställningar på skärmen
+
+Tryck på ⚙ uppe till höger. Där finns **WiFi** (byt nätverk), **Server** (IP-adress, provas innan den sparas),
+**Elev** (elevens kod, provas mot servern – koden bestämmer vilken elev skärmen visar), **Stäng av efter**
+(Av, 2, 5, 10, 15 eller 30 minuter), **Ljusstyrka**, **Detaljer** (WiFi, server, chatten, senaste fel, minne) och
+**Starta om**. Allt sparas i Tab5 och går före `config.h`, så `config.h` behövs bara första gången.
+
 ## Byta WiFi på skärmen
 
 Tryck på WiFi-ikonen uppe till höger → **Byt WiFi** (eller **Välj WiFi** på startskärmen om den inte kommer upp

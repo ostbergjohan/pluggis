@@ -406,7 +406,7 @@ static void buildTop() {
   statusLbl = label(right, "", F_S, WARN);
   lv_obj_add_flag(statusLbl, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_set_ext_click_area(statusLbl, 24);
-  lv_obj_add_event_cb(statusLbl, onClick, LV_EVENT_CLICKED, pack(Act::Status, 0));
+  lv_obj_add_event_cb(statusLbl, onClick, LV_EVENT_CLICKED, pack(Act::SetOpen, 0));
 
   lv_obj_t* vol = panel(right, SURFACE, 999);
   lv_obj_set_size(vol, 214, 64);
@@ -454,7 +454,8 @@ void setTop(const Top& t) {
     lv_obj_set_style_text_color(lv_obj_get_child(tabBtn[i], 0), C(on ? INK : MUTED), 0);
   }
   // Alltid en WiFi-ikon (tryck för anslutningen och för att byta nätverk); text bara när något är fel
-  lv_label_set_text(statusLbl, t.status.empty() ? LV_SYMBOL_WIFI : (std::string(LV_SYMBOL_WARNING) + " " + t.status).c_str());
+  lv_label_set_text(statusLbl, t.status.empty() ? LV_SYMBOL_WIFI "  " LV_SYMBOL_SETTINGS
+                                                : (std::string(LV_SYMBOL_WARNING) + " " + t.status + "  " + LV_SYMBOL_SETTINGS).c_str());
   lv_obj_set_style_text_color(statusLbl, C(t.status.empty() ? MUTED : WARN), 0);
   int bars = (t.volume + 50) / 51;
   lv_label_set_text(volIcon, t.volume == 0 ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX);
@@ -809,6 +810,152 @@ void buildWifi(const Wifi& m) {
   lv_obj_t* sl = label(c, "Visa", F_S, MUTED);
   lv_obj_set_pos(sl, W - PAD - 300 + 98, y + 24);
   button(c, W - PAD - 130, y, 130, 76, "Anslut", Kind::Primary, Act::WifiConnect, 0, nullptr, 18);
+}
+
+// ---------------------------------------------------------------- inställningar
+void entryStatus(const std::string& text, Tone tone, bool busy) { wifiStatus(text, tone, busy); }
+std::string entryText() { return wifiPassword(); }
+
+static void onBright(lv_event_t* e) {
+  lv_obj_t* s = (lv_obj_t*)lv_event_get_target(e);
+  bool done = lv_event_get_code(e) == LV_EVENT_RELEASED;
+  queue.push_back({done ? Act::SetBrightDone : Act::SetBright, (int)lv_slider_get_value(s)});
+}
+
+/** En ruta i inställningarna: ikon, rubrik, värde, liten text och en knapp till höger. */
+static lv_obj_t* settingCard(lv_obj_t* c, int x, int y, int w, int h, const char* sym, const std::string& title,
+                             const std::string& value, const std::string& note, uint32_t noteColor,
+                             const std::string& btn, Act act) {
+  lv_obj_t* p = panel(c, SURFACE, 26);
+  lv_obj_set_pos(p, x, y);
+  lv_obj_set_size(p, w, h);
+  lv_obj_t* ic = panel(p, SURFACE2, 999);
+  lv_obj_set_size(ic, 60, 60);
+  lv_obj_set_pos(ic, 20, 20);
+  lv_obj_t* il = icon(ic, sym, YELLOW);
+  lv_obj_center(il);
+  lv_obj_t* t = label(p, title, F_S, MUTED);
+  lv_obj_set_pos(t, 98, 16);
+  lv_obj_t* v = oneLine(p, value, F_MB, INK, w - 98 - (btn.empty() ? 24 : 240));
+  lv_obj_set_pos(v, 98, 46);
+  if (!note.empty()) {
+    lv_obj_t* n = oneLine(p, note, F_S, noteColor, w - 98 - (btn.empty() ? 24 : 240));
+    lv_obj_set_pos(n, 98, 86);
+  }
+  if (!btn.empty()) button(p, w - 220, (h - 72) / 2, 200, 72, btn, Kind::Secondary, act, 0, nullptr, 20);
+  return p;
+}
+
+void buildSettings(const Settings& m) {
+  lv_obj_t* c = fresh();
+  button(c, PAD, 14, 200, 72, "Tillbaka", Kind::Ghost, Act::SetBack, 0, LV_SYMBOL_LEFT);
+  lv_obj_t* t = label(c, "Inställningar", F_L, INK);
+  lv_obj_set_pos(t, PAD + 230, 26);
+  if (!m.version.empty()) {
+    lv_obj_t* v = label(c, m.version, F_S, MUTED);
+    lv_obj_align(v, LV_ALIGN_TOP_RIGHT, -PAD, 36);
+  }
+  const int y0 = 104, CW = (W - 2 * PAD - GAP) / 2, CHH = 128;
+  // vänster: anslutning och elev
+  std::string sig = m.rssi >= -55 ? "stark signal" : m.rssi >= -67 ? "bra signal" : m.rssi >= -78 ? "svag signal" : "mycket svag signal";
+  settingCard(c, PAD, y0, CW, CHH, LV_SYMBOL_WIFI, "WiFi", m.wifi.empty() ? std::string("Inte ansluten") : m.wifi,
+              m.wifi.empty() ? std::string("Tryck Byt WiFi") : sig + " (" + std::to_string(m.rssi) + " dBm)",
+              m.wifi.empty() ? WARN : MUTED, "Byt WiFi", Act::SetWifi);
+  settingCard(c, PAD, y0 + CHH + GAP, CW, CHH, LV_SYMBOL_DRIVE, "Server", m.server,
+              (m.serverOk ? std::string(LV_SYMBOL_OK) + " " : std::string(LV_SYMBOL_WARNING) + " ") + m.serverNote,
+              m.serverOk ? GOOD : WARN, "Ändra", Act::SetServer);
+  settingCard(c, PAD, y0 + 2 * (CHH + GAP), CW, CHH, SYM_BOOK, "Elev",
+              m.student.empty() ? (m.code.empty() ? std::string("Ingen elev vald") : "Kod " + m.code) : m.student,
+              m.code.empty() ? std::string("Skriv elevens kod (föräldravyn: Inställningar > Elever)") : "Elevkod " + m.code,
+              m.code.empty() ? WARN : MUTED, "Byt elev", Act::SetCode);
+
+  // höger: avstängning och ljusstyrka
+  int rx = PAD + CW + GAP;
+  lv_obj_t* idleBox = panel(c, SURFACE, 26);
+  lv_obj_set_pos(idleBox, rx, y0);
+  lv_obj_set_size(idleBox, CW, CHH);
+  lv_obj_t* it = label(idleBox, std::string(LV_SYMBOL_POWER) + "  Stäng av efter, minuter (Av = aldrig)", F_S, MUTED);
+  lv_obj_set_pos(it, 24, 16);
+  static const int mins[6] = {0, 2, 5, 10, 15, 30};
+  int bw = (CW - 48 - 5 * 10) / 6;
+  for (int i = 0; i < 6; i++) {
+    bool on = m.idleMin == mins[i];
+    std::string l = mins[i] ? std::to_string(mins[i]) : "Av";
+    lv_obj_t* b = button(idleBox, 24 + i * (bw + 10), 52, bw, 60, l, on ? Kind::Primary : Kind::Secondary, Act::SetIdle, mins[i], nullptr, 18);
+    if (on) { lv_obj_set_style_border_width(b, 3, 0); lv_obj_set_style_border_color(b, C(YELLOW), 0); }
+  }
+  lv_obj_t* bright = panel(c, SURFACE, 26);
+  lv_obj_set_pos(bright, rx, y0 + CHH + GAP);
+  lv_obj_set_size(bright, CW, CHH);
+  lv_obj_t* bt = label(bright, std::string(LV_SYMBOL_IMAGE) + "  Ljusstyrka", F_S, MUTED);
+  lv_obj_set_pos(bt, 24, 16);
+  lv_obj_t* sl = lv_slider_create(bright);
+  lv_obj_set_size(sl, CW - 80, 18);
+  lv_obj_set_pos(sl, 40, 78);
+  lv_slider_set_range(sl, 30, 255);
+  lv_slider_set_value(sl, std::max(30, std::min(255, m.brightness)), LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(sl, C(SURFACE2), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sl, C(YELLOW), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, C(INK), LV_PART_KNOB);
+  lv_obj_set_style_pad_all(sl, 10, LV_PART_KNOB);
+  lv_obj_set_ext_click_area(sl, 30);
+  lv_obj_add_event_cb(sl, onBright, LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_add_event_cb(sl, onBright, LV_EVENT_RELEASED, nullptr);
+
+  int by = y0 + 2 * (CHH + GAP);
+  int hw = (CW - GAP) / 2;
+  button(c, rx, by, hw, CHH, "Detaljer", Kind::Secondary, Act::SetDetails, 0, LV_SYMBOL_LIST);
+  button(c, rx + hw + GAP, by, hw, CHH, "Starta om", Kind::Secondary, Act::SetRestart, 0, LV_SYMBOL_REFRESH);
+}
+
+void buildEntry(const Entry& m) {
+  lv_obj_t* c = fresh();
+  wifiTyped.clear();
+  button(c, PAD, 14, 200, 72, "Tillbaka", Kind::Ghost, Act::EntryBack, 0, LV_SYMBOL_LEFT);
+  lv_obj_t* t = label(c, m.title, F_L, INK);
+  lv_obj_set_pos(t, PAD + 230, 26);
+  wifiSpin = spinner(c, 40);
+  lv_obj_set_pos(wifiSpin, W - PAD - 40, 30);
+  lv_obj_add_flag(wifiSpin, LV_OBJ_FLAG_HIDDEN);
+  wifiStatusLbl = label(c, "", F_S, MUTED, LV_TEXT_ALIGN_RIGHT);
+  lv_label_set_long_mode(wifiStatusLbl, LV_LABEL_LONG_DOT);
+  lv_obj_set_size(wifiStatusLbl, 480, lv_font_get_line_height(F_S));
+  lv_obj_set_pos(wifiStatusLbl, W - PAD - 60 - 480, 36);
+
+  lv_obj_t* kb = lv_keyboard_create(c);
+  lv_obj_set_size(kb, W, 360);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_obj_set_style_bg_color(kb, C(SURFACE), 0);
+  lv_obj_set_style_pad_all(kb, 8, 0);
+  lv_obj_set_style_pad_gap(kb, 8, 0);
+  lv_obj_set_style_text_font(kb, F_MB, LV_PART_ITEMS);
+  lv_obj_set_style_text_color(kb, C(INK), LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(kb, C(SURFACE2), LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(kb, C(LINE), (lv_style_selector_t)LV_PART_ITEMS | LV_STATE_PRESSED);
+  lv_obj_set_style_bg_color(kb, C(ACCENT2), (lv_style_selector_t)LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_radius(kb, 12, LV_PART_ITEMS);
+  lv_obj_set_style_border_width(kb, 0, LV_PART_ITEMS);
+  lv_obj_add_event_cb(kb, onClick, LV_EVENT_READY, pack(Act::EntryOk, 0));
+
+  int fw = W - 2 * PAD - 200 - GAP;
+  wifiPass = textarea(c, PAD, 104, fw, m.placeholder.c_str());
+  lv_textarea_set_text(wifiPass, m.value.c_str());
+  if (m.code) {
+    lv_textarea_set_max_length(wifiPass, 5);
+    lv_textarea_set_accepted_chars(wifiPass, "ABCDEFGHJKLMNPQRSTUVWXYZ23456789abcdefghjklmnpqrstuvwxyz");
+    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_TEXT_UPPER);
+    lv_obj_set_style_text_letter_space(wifiPass, 12, 0);
+  } else {
+    lv_keyboard_set_mode(kb, LV_KEYBOARD_MODE_SPECIAL);   // siffror, punkt och kolon
+  }
+  lv_keyboard_set_textarea(kb, wifiPass);
+  lv_obj_add_state(wifiPass, LV_STATE_FOCUSED);
+  button(c, W - PAD - 200, 104, 200, 76, "Spara", Kind::Primary, Act::EntryOk, 0, LV_SYMBOL_OK, 18);
+  lv_obj_t* h = label(c, m.hint, F_S, MUTED);
+  lv_label_set_long_mode(h, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(h, W - 2 * PAD);
+  lv_obj_set_pos(h, PAD + 4, 194);
 }
 
 // ---------------------------------------------------------------- Öva
