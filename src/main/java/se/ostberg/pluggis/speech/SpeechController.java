@@ -102,7 +102,9 @@ public class SpeechController {
             return ResponseEntity.badRequest().body(java.util.Map.of("error", "för kort inspelning"));
         }
         try {
-            String text = speech.transcribe(audio, "svar.wav", lang, hint);
+            // utan lang: elevens språk (svenska eller engelska)
+            String text = speech.transcribe(audio, "svar.wav",
+                    lang == null || lang.isBlank() ? se.ostberg.pluggis.student.StudentLanguage.current() : lang, hint);
             return ResponseEntity.ok(java.util.Map.of("text", text == null ? "" : text.trim()));
         } catch (RuntimeException e) {
             return ResponseEntity.status(503).body(java.util.Map.of("error", "Ljudtjänsten svarade inte"));

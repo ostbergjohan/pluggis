@@ -63,14 +63,14 @@ public class SpeechClient {
         return azure != null ? AzureTts.PREFIX + AzureTts.VOICES.get(0).id() : null;
     }
 
-    /** Ljud (wav, webm/opus, ogg …) → text. */
+    /** Ljud (wav, webm/opus, ogg …) → text, på elevens språk. */
     public String transcribe(byte[] audio, String filename) {
-        return transcribe(audio, filename, null, null);
+        return transcribe(audio, filename, se.ostberg.pluggis.student.StudentLanguage.current(), null);
     }
 
     /**
      * Ljud → text på ett visst språk ("es", "de", "fr", "en" ger flerspråkig Whisper, annars svenska KB-Whisper).
-     * {@code hint} är det väntade svaret, som hjälper Whisper med korta ord.
+     * {@code hint} är det väntade svaret, som hjälper Whisper med korta ord. Utan språk: elevens språk.
      */
     public String transcribe(byte[] audio, String filename, String language, String hint) {
         requireEnabled();
@@ -124,9 +124,18 @@ public class SpeechClient {
         return azure.synthesize(text, v, 1.0 / (lengthScale <= 0 ? 1.0 : lengthScale));
     }
 
+    /** Engelsk Piper-röst (finns i ljudtjänsten) när Azure inte finns. */
+    static final String PIPER_ENGLISH = "en_GB-alba-medium";
+
     public byte[] synthesize(String text, String voice, double lengthScale) {
         text = SpokenText.forSpeech(text);
         String chosen = voice == null || voice.isBlank() ? defaultVoice() : voice;
+        if (se.ostberg.pluggis.student.StudentLanguage.english() && swedishVoice(chosen)) {
+            // Eleven använder Pluggis på engelska: engelsk röst i stället för den svenska
+            String azureEn = AzureTts.voiceFor("en");
+            chosen = azure != null && azure.available() && azureEn != null ? AzureTts.PREFIX + azureEn : PIPER_ENGLISH;
+            voice = chosen;
+        }
         if (AzureTts.isAzureVoice(chosen) && azure != null) {
             if (azure.available()) {
                 try {
@@ -140,9 +149,9 @@ public class SpeechClient {
             if (!enabled) {
                 throw new IllegalStateException("Azure-rösten är tillfälligt pausad och Piper finns inte");
             }
-            voice = null; // Piper med standardrösten
+            voice = se.ostberg.pluggis.student.StudentLanguage.english() ? PIPER_ENGLISH : null; // Piper
         } else if (AzureTts.isAzureVoice(chosen)) {
-            voice = null; // Azure-röst vald men ingen nyckel längre
+            voice = se.ostberg.pluggis.student.StudentLanguage.english() ? PIPER_ENGLISH : null; // ingen Azure-nyckel längre
         }
         requireEnabled();
         Map<String, Object> body = new HashMap<>();
@@ -161,6 +170,10 @@ public class SpeechClient {
         } finally {
             sample.stop(meters.timer("pluggis.speech.tts"));
         }
+    }
+
+    private static boolean swedishVoice(String v) {
+        return v == null || v.isBlank() || v.startsWith("sv_") || v.contains("sv-SE");
     }
 
     /** Röster som ljudtjänsten har, t.ex. [{"id":"sv_SE-nst-medium","name":"nst",...}]. */

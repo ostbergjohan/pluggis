@@ -137,8 +137,8 @@ public class FlashcardGenerator {
         boolean focused = focus != null && !focus.isBlank();
         String varietyKey = focused ? "quiz|" + focus.trim() : "quiz";
         String m = mode == null ? "mix" : mode.trim().toLowerCase(java.util.Locale.ROOT);
-        if ("vocab".equals(m)) {
-            return vocab(topic, sourceText, subject, count, homeworkId, focus);
+        if ("vocab".equals(m) || "vocab-reverse".equals(m)) {
+            return vocab(topic, sourceText, subject, count, homeworkId, focus, "vocab-reverse".equals(m));
         }
         String kinds = switch (m) {
             case "cloze" -> "Bara lucktext (\"cloze\").";
@@ -194,8 +194,12 @@ public class FlashcardGenerator {
      * Muntligt glosförhör: korten har ordet på målspråket fram och den svenska betydelsen bak (flera svar
      * skilda med " / "). Tab5 säger ordet och eleven svarar på svenska, som rösttjänsten förstår.
      */
-    Result vocab(String topic, String sourceText, String subject, int count, Long homeworkId, String focus) {
+    Result vocab(String topic, String sourceText, String subject, int count, Long homeworkId, String focus, boolean reverse) {
         StringBuilder ask = new StringBuilder("Gör ").append(clamp(count)).append(" glosor.");
+        if (reverse) {
+            ask.append(" VÄND PÅ RIKTNINGEN: \"front\" är ordet på elevens eget språk och \"back\" är ordet på "
+                    + "målspråket (flera rimliga svar skilda med \" / \"). Eleven svarar högt på målspråket.");
+        }
         if (subject != null && !subject.isBlank()) {
             ask.append(" Ämne: ").append(subject).append('.');
         }
@@ -205,7 +209,7 @@ public class FlashcardGenerator {
         if (focus != null && !focus.isBlank()) {
             ask.append("\n\nFOKUS: bara glosor om \"").append(focus.trim()).append("\".");
         }
-        String varietyKey = "vocab" + (focus == null || focus.isBlank() ? "" : "|" + focus.trim());
+        String varietyKey = (reverse ? "vocab-reverse" : "vocab") + (focus == null || focus.isBlank() ? "" : "|" + focus.trim());
         if (variety != null) {
             java.util.List<String> avoid = variety.recent(varietyKey, homeworkId);
             if (!avoid.isEmpty()) {

@@ -69,6 +69,15 @@ public class ClaudeClient {
     }
 
     /** Anrop med ett enda (fast) systemblock. */
+    /** Läggs sist i systemprompten när eleven använder Pluggis på engelska (prompterna är skrivna på svenska). */
+    static final String ENGLISH = """
+            LANGUAGE: This student uses Pluggis in English. The instructions above are written in Swedish, but \
+            everything you write for the student must be in English: replies, questions, answers, hints, feedback, \
+            plans, task and deck names, summaries and every text value in JSON. Keep JSON keys and fixed codes \
+            (types, enums) exactly as specified. The student goes to a Swedish school, so material may be in \
+            Swedish – explain it in English and keep Swedish names and terms when that helps. For language \
+            homework, words in the language being learned stay in that language; translations go into English.""";
+
     public ObjectNode newRequest(PluggisProperties.ModelProfile profile, String system) {
         return newRequest(profile, system, null);
     }
@@ -93,6 +102,9 @@ public class ClaudeClient {
             ObjectNode block = system.addObject();
             block.put("type", "text");
             block.put("text", dynamicSystem);
+        }
+        if (se.ostberg.pluggis.student.StudentLanguage.english()) {
+            system.addObject().put("type", "text").put("text", ENGLISH);
         }
         if (system.isEmpty()) {
             req.remove("system");

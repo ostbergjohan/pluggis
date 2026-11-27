@@ -53,6 +53,7 @@ public class StudentService {
             first = all.get(0);
         }
         StudentContext.setDefault(first.getId());
+        repo.findAllByOrderByIdAsc().forEach(StudentLanguage::remember);
         return first;
     }
 
@@ -138,7 +139,9 @@ public class StudentService {
 
     @Transactional
     public Student save(Student s) {
-        return repo.save(s);
+        Student saved = repo.save(s);
+        StudentLanguage.remember(saved);
+        return saved;
     }
 
     String newCode() {

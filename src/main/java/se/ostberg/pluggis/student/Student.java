@@ -53,6 +53,10 @@ public class Student {
     /** Poäng påslaget för eleven (null = ja). Av: poängen räknas fortfarande men visas inte och nämns inte. */
     private Boolean pointsEnabled;
 
+    /** "sv" (standard) eller "en": coachen, appen och Tab5 på engelska. */
+    @Column(length = 5)
+    private String language;
+
     /** Google Kalender att lägga planen i (kalender-id), eller null. */
     @Column(length = 200)
     private String googleCalendarId;
@@ -106,6 +110,8 @@ public class Student {
     public String getStudyCue() { return studyCue == null ? "" : studyCue; }
     public void setStudyCue(String c) { this.studyCue = c; }
     public boolean isPointsEnabled() { return !Boolean.FALSE.equals(pointsEnabled); }
+    public String getLanguage() { return StudentLanguage.normalize(language); }
+    public void setLanguage(String lang) { this.language = StudentLanguage.normalize(lang); }
     public void setPointsEnabled(boolean on) { this.pointsEnabled = on; }
     public String getGoogleCalendarId() { return googleCalendarId; }
     public void setGoogleCalendarId(String id) { this.googleCalendarId = id; }

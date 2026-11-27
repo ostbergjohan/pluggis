@@ -55,7 +55,8 @@ public class ChatController {
     public Map<String, Object> me() {
         var me = students.current();
         return Map.of("deviceId", me.getDeviceId(), "name", me.getName(), "studentId", me.getId(),
-                "serverVoice", speech.ttsEnabled(), "pointsEnabled", me.isPointsEnabled(), "version", UI_VERSION);
+                "serverVoice", speech.ttsEnabled(), "pointsEnabled", me.isPointsEnabled(), "version", UI_VERSION,
+                "language", me.getLanguage());
     }
 
     @GetMapping("/link")

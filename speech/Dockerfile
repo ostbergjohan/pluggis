@@ -19,6 +19,9 @@ RUN mkdir -p /voices && for v in $PIPER_VOICES; do \
         else rm -f "/voices/$f" "/voices/$f.json"; fi; \
       done; \
     done && ls -la /voices && test -n "$(ls /voices/*.onnx)"
+# Engelsk röst för elever som använder Pluggis på engelska
+ARG PIPER_EN=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alba/medium/en_GB-alba-medium.onnx
+RUN curl -fsSL -o /voices/en_GB-alba-medium.onnx "$PIPER_EN" && curl -fsSL -o /voices/en_GB-alba-medium.onnx.json "$PIPER_EN.json"
 ENV DEFAULT_VOICE=sv_SE-nst-medium
 
 # Ladda ner KB-Whisper i förväg så att första anropet inte tar en evighet
