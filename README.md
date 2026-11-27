@@ -12,8 +12,9 @@ reminders, points and read-aloud.
 Pluggis was built for a Swedish school, so the app, the Tab5 screen and the prompts are in Swedish by default.
 A student can be switched to **English** (see [Language](#language)).
 
-> The user interface is in Swedish. UI labels are quoted in Swedish in this document, with the English meaning
-> where it isn't obvious (e.g. *Öva* = Practise, *Läxor* = Homework, *Plan* = Plan).
+> The interface is in Swedish by default and in English for students switched to English. UI labels are quoted in
+> Swedish in this document (the default), with the English meaning where it isn't obvious (e.g. *Öva* = Practise,
+> *Läxor* = Homework, *Plan* = Plan).
 
 ## What's included
 

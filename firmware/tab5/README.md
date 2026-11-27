@@ -12,7 +12,8 @@ animations) in the logo's colours (dark blue and yellow), with the logo on the s
 (`src/fonts/`). `src/main.cpp` handles WiFi, audio and the server and fills in what should be shown; `ui.cpp` knows
 nothing about the hardware.
 
-The on-screen texts are in Swedish (UI labels below are quoted in Swedish with the English meaning).
+The on-screen texts are in Swedish by default and in English when the student is switched to English
+(`src/lang_en.h`). UI labels below are quoted in Swedish, with the English meaning.
 
 **Tabs at the top (the Tab5 starts on Öva):**
 - **Öva** (Practise) – homework and tests on the left (passed ones are hidden; by date, *Snart* / *Längre fram* = soon / later, scrolled with a
