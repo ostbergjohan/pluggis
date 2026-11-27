@@ -83,6 +83,12 @@ struct Action {
   int a = 0;
 };
 
+/** Engelska: texterna översätts när de ritas (elevens språk från servern). Svenska är standard. */
+void setEnglish(bool on);
+bool isEnglish();
+/** Svenska → engelska om engelska är på, annars samma text. */
+std::string tr(const std::string& s);
+
 /** Sätter upp tema, typsnitt och den fasta toppraden. Anropas en gång efter lv_init() och skärmen. */
 void init();
 /** Loggan (startskärmen) och figuren (chatten) som PNG i minnet, från include/brand.h. */

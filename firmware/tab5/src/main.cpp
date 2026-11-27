@@ -1679,7 +1679,9 @@ static void loadPlan() {
   decksLoaded = true;
 }
 
-static const char* WEEKDAYS[] = {"Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"};
+static const char* WEEKDAYS_SV[] = {"Söndag", "Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag"};
+static const char* WEEKDAYS_EN[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+#define WEEKDAYS (ui::isEnglish() ? WEEKDAYS_EN : WEEKDAYS_SV)
 
 static String dateLabel(const String& iso) {
   if (iso.length() < 10) return iso;
@@ -1693,9 +1695,9 @@ static String dateLabel(const String& iso) {
   if (getLocalTime(&now, 0)) {
     now.tm_hour = 12; now.tm_min = 0; now.tm_sec = 0;
     long days = lround(difftime(when, mktime(&now)) / 86400.0);
-    if (days == 0) return "Idag";
-    if (days == 1) return "Imorgon";
-    if (days == -1) return "Igår";
+    if (days == 0) return ui::tr("Idag").c_str();
+    if (days == 1) return ui::tr("Imorgon").c_str();
+    if (days == -1) return ui::tr("Igår").c_str();
   }
   struct tm* lt = localtime(&when);
   return String(WEEKDAYS[lt->tm_wday]) + " " + String(t.tm_mday) + "/" + String(t.tm_mon + 1);
@@ -1712,8 +1714,8 @@ static void setLast(int kind, const String& result) {
   lastKind = kind;
   String name;
   for (auto& m : makeList) if (m.id == lastHw) name = m.title;
-  lastText = String(kind == 2 && oralDeck ? "Glosförhör" : MK_LABELS[kind]) + (lastFocus.length() ? " · " + lastFocus : String()) +
-             (name.length() ? " · " + name : String()) + (result.length() ? " · " + result : String());
+  lastText = String(ui::tr(kind == 2 && oralDeck ? "Glosförhör" : MK_LABELS[kind]).c_str()) + (lastFocus.length() ? " · " + lastFocus : String()) +
+             (name.length() ? " · " + name : String()) + (result.length() ? " · " + String(ui::tr(result.c_str()).c_str()) : String());
 }
 
 /** Dagar från idag till ett datum (YYYY-MM-DD); 0 = idag, negativt = passerat. Utan klocka: 999. */
@@ -1949,8 +1951,11 @@ static bool clockHours() {
   return now.tm_hour >= from && now.tm_hour < to;
 }
 
-static const char* MONTHS[] = {"januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september",
-                               "oktober", "november", "december"};
+static const char* MONTHS_SV[] = {"januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september",
+                                  "oktober", "november", "december"};
+static const char* MONTHS_EN[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September",
+                                  "October", "November", "December"};
+#define MONTHS (ui::isEnglish() ? MONTHS_EN : MONTHS_SV)
 
 static void clockFetch() {
   clockFetchedAt = millis();
@@ -2559,6 +2564,7 @@ static void loadCfg() {
   cfg.idleMin = prefs.getInt("idleMin", PLUGGIS_IDLE_MINUTES);
   cfg.bright = prefs.getInt("bright", 200);
   cfg.clockMode = prefs.getInt("clockMode", 1);
+  ui::setEnglish(prefs.getString("lang", "sv") == "en");
 }
 
 /** (Om)startar WebSocket mot servern med nuvarande adress och kod. */
@@ -3197,6 +3203,9 @@ void loop() {
     JsonDocument me;
     if (api("GET", "/api/chat/me", "", &me) == 200) {
       pointsOn = me["pointsEnabled"] | false;
+      // elevens språk (föräldravyn → Eleven → Coachen): sparas så att startskärmen också blir rätt
+      bool en = String((const char*)(me["language"] | "sv")) == "en";
+      if (en != ui::isEnglish()) { ui::setEnglish(en); prefs.putString("lang", en ? "en" : "sv"); dirtyAll = true; }
       studentName = me["name"] | "";
       Serial.printf("[pluggis] inloggad som %s (%s)\n", studentName.c_str(), (const char*)(me["deviceId"] | ""));
     }

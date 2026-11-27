@@ -1,5 +1,6 @@
 // Pluggis på Tab5 – gränssnittet (LVGL 9). Se ui.h.
 #include "ui.h"
+#include <cctype>
 
 #include <deque>
 #include <cstring>
@@ -115,8 +116,104 @@ static void shadow(lv_obj_t* o, int w = 22, int y = 6) {
   lv_obj_set_style_shadow_opa(o, LV_OPA_40, 0);
 }
 
-static lv_obj_t* label(lv_obj_t* p, const std::string& t, const lv_font_t* f, uint32_t color,
+// ---------------------------------------------------------------- engelska (elevens språk)
+// Texterna är skrivna på svenska. På engelska byts de ut när de ritas: exakta texter och mallar med {0} …
+// (se lang_en.h). Ikoner och mellanslag före och efter texten behålls.
+static bool english = false;
+void setEnglish(bool on) { english = on; }
+bool isEnglish() { return english; }
+
+#include "lang_en.h"
+
+/** Var texten börjar och slutar: ikoner (UTF-8 som börjar på 0xEF), mellanslag och tecken som "+" står utanför. */
+
+static bool matchTemplate(const std::string& t, const std::string& tpl, std::vector<std::string>& vals) {
+  // mallen delas i bokstavliga delar runt {n}; varje {n} tar så lite som möjligt
+  vals.assign(10, std::string());
+  size_t ti = 0, pi = 0;
+  std::vector<std::pair<int, std::string>> parts;   // (n eller -1, text)
+  while (pi < tpl.size()) {
+    size_t b = tpl.find('{', pi);
+    if (b != std::string::npos && b + 2 < tpl.size() && std::isdigit((unsigned char)tpl[b + 1]) && tpl[b + 2] == '}') {
+      if (b > pi) parts.push_back({-1, tpl.substr(pi, b - pi)});
+      parts.push_back({tpl[b + 1] - '0', ""});
+      pi = b + 3;
+    } else {
+      parts.push_back({-1, tpl.substr(pi)});
+      break;
+    }
+  }
+  size_t literal = 0;
+  for (auto& pp : parts) if (pp.first < 0) literal += pp.second.size();
+  for (size_t k = 0; k < parts.size(); k++) {
+    if (parts[k].first < 0) {
+      if (t.compare(ti, parts[k].second.size(), parts[k].second) != 0) return false;
+      ti += parts[k].second.size();
+    } else {
+      size_t end;
+      if (k + 1 < parts.size()) {
+        end = t.find(parts[k + 1].second, ti + 1);
+        if (end == std::string::npos) return false;
+      } else {
+        end = t.size();
+      }
+      if (end <= ti) return false;
+      std::string v = t.substr(ti, end - ti);
+      if (literal < 6 && v.size() > 24) return false;   // korta mallar gäller bara korta värden
+      vals[parts[k].first] = v;
+      ti = end;
+    }
+  }
+  return ti == t.size();
+}
+
+/** Svenska → engelska (om eleven använder Pluggis på engelska). Okänd text lämnas som den är. */
+std::string tr(const std::string& s) {
+  if (!english || s.empty()) return s;
+  size_t a = 0, b = s.size();
+  // ikoner (3 byte som börjar på 0xEF) och mellanslag före och efter står utanför texten
+  for (;;) {
+    if (a < b && (s[a] == ' ' || s[a] == '\n')) a++;
+    else if (a + 3 <= b && (unsigned char)s[a] == 0xEF) a += 3;
+    else break;
+  }
+  for (;;) {
+    if (b > a && (s[b - 1] == ' ' || s[b - 1] == '\n')) b--;
+    else if (b >= a + 3 && (unsigned char)s[b - 3] == 0xEF) b -= 3;
+    else break;
+  }
+  if (a >= b) return s;
+  std::string core = s.substr(a, b - a), out;
+  for (const auto& e : EN_EXACT) if (core == e.sv) { out = e.en; break; }
+  if (out.empty()) {
+    // mest specifika mallen först: "{0} av {1}" får inte ta "Bra jobbat! {0} av {1} rätt."
+    static std::vector<const EnText*> sorted;
+    if (sorted.empty()) {
+      for (const auto& e : EN_TEMPLATES) sorted.push_back(&e);
+      auto lit = [](const EnText* e) { std::string k = e->sv; size_t n = 0; for (size_t i = 0; i < k.size(); i++) { if (k[i] == '{' && i + 2 < k.size() && k[i + 2] == '}') i += 2; else n++; } return n; };
+      std::stable_sort(sorted.begin(), sorted.end(), [&](const EnText* x, const EnText* y) { return lit(x) > lit(y); });
+    }
+    std::vector<std::string> vals;
+    for (const EnText* ep : sorted) {
+      const EnText& e = *ep;
+      if (!matchTemplate(core, e.sv, vals)) continue;
+      std::string r = e.en;
+      for (int n = 0; n < 10; n++) {
+        std::string key = std::string("{") + char('0' + n) + "}";
+        size_t at;
+        while ((at = r.find(key)) != std::string::npos) r.replace(at, 3, tr(vals[n]));
+      }
+      out = r;
+      break;
+    }
+  }
+  if (out.empty()) return s;
+  return s.substr(0, a) + out + s.substr(b);
+}
+
+static lv_obj_t* label(lv_obj_t* p, const std::string& t0, const lv_font_t* f, uint32_t color,
                        lv_text_align_t align = LV_TEXT_ALIGN_LEFT) {
+  const std::string t = tr(t0);
   lv_obj_t* l = lv_label_create(p);
   lv_label_set_text(l, t.c_str());
   lv_obj_set_style_text_font(l, f, 0);
@@ -139,9 +236,10 @@ static const lv_font_t* fit(const std::string& t, int w, int h, std::initializer
 }
 
 /** Text i en ruta: krymper från stort till litet typsnitt tills den får plats. */
-static lv_obj_t* textIn(lv_obj_t* p, const std::string& t, int x, int y, int w, int h, uint32_t color,
+static lv_obj_t* textIn(lv_obj_t* p, const std::string& t0, int x, int y, int w, int h, uint32_t color,
                         std::initializer_list<const lv_font_t*> fonts, lv_text_align_t align = LV_TEXT_ALIGN_LEFT,
                         bool vcenter = false) {
+  const std::string t = tr(t0);   // mäts på det språk som visas
   const lv_font_t* f = fit(t, w, h, fonts);
   lv_obj_t* l = label(p, t, f, color, align);
   lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
@@ -201,7 +299,7 @@ static lv_obj_t* button(lv_obj_t* p, int x, int y, int w, int h, const std::stri
   lv_obj_set_style_transform_height(b, -4, LV_STATE_PRESSED);
   lv_obj_add_style(b, &stTrans, 0);
   uint32_t ink = (kind == Kind::Good || kind == Kind::Warn) ? BG : kind == Kind::Dim ? MUTED : INK;
-  std::string t = sym ? std::string(sym) + "  " + text : text;
+  std::string t = sym ? std::string(sym) + "  " + tr(text) : tr(text);
   const lv_font_t* f = fit(t, w - 36, h - 16, {F_MB, F_M, F_S});
   lv_obj_t* l = label(b, t, f, ink, LV_TEXT_ALIGN_CENTER);
   lv_label_set_long_mode(l, LV_LABEL_LONG_WRAP);
@@ -226,7 +324,7 @@ void setTalking(bool on) {
   lv_obj_set_style_bg_grad_color(talkBtn, C(on ? 0xD9A11F : ACCENT2), 0);
   lv_obj_set_style_text_color(talkLbl, C(on ? BG : INK), 0);
   std::string t = std::string(SYM_MIC) + "  " + (on ? std::string("Släpp när du är klar") : talkIdle);
-  lv_label_set_text(talkLbl, t.c_str());
+  lv_label_set_text(talkLbl, tr(t).c_str());
 }
 
 /** Tunn förloppsstapel. */
@@ -371,6 +469,8 @@ static lv_obj_t *focusChip, *focusLbl;
 static lv_obj_t *statusLbl, *volBars[5], *volIcon, *batBox, *batFill, *batLbl, *batBolt, *pointsChip, *pointsLbl;
 
 static constexpr int TABW = 140;   // en flik i toppraden
+static const char* TAB_NAMES[4] = {"Öva", "Chat", "Läxor", "Plan"};
+static const char* TAB_SYMS[4] = {LV_SYMBOL_EDIT, SYM_CHAT, SYM_BOOK, SYM_CALENDAR};
 static void buildTop() {
   top = panel(root, BG, 0);
   lv_obj_set_size(top, W, TOP_H);
@@ -383,8 +483,8 @@ static void buildTop() {
   lv_obj_t* seg = panel(top, SURFACE, 999);
   lv_obj_set_pos(seg, 16, 14);
   lv_obj_set_size(seg, 4 * TABW + 12, 68);
-  static const char* names[4] = {"Öva", "Chat", "Läxor", "Plan"};
-  static const char* syms[4] = {LV_SYMBOL_EDIT, SYM_CHAT, SYM_BOOK, SYM_CALENDAR};
+  static const char* const* names = TAB_NAMES;
+  static const char* const* syms = TAB_SYMS;
   for (int i = 0; i < 4; i++) {
     lv_obj_t* b = box(seg);
     lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
@@ -483,6 +583,8 @@ void setTop(const Top& t) {
     bool on = i == t.tab;
     lv_obj_set_style_bg_opa(tabBtn[i], on ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
     lv_obj_set_style_text_color(lv_obj_get_child(tabBtn[i], 0), C(on ? INK : MUTED), 0);
+    static const char* TAB_EN[4] = {"Study", "Chat", "Tasks", "Plan"};   // korta: flikarna är 140 px breda
+    lv_label_set_text(lv_obj_get_child(tabBtn[i], 0), (std::string(TAB_SYMS[i]) + "  " + (english ? TAB_EN[i] : TAB_NAMES[i])).c_str());
   }
   // Alltid en WiFi-ikon (tryck för anslutningen och för att byta nätverk); text bara när något är fel
   lv_label_set_text(statusLbl, t.status.empty() ? LV_SYMBOL_WIFI "  " LV_SYMBOL_SETTINGS
@@ -575,8 +677,8 @@ void showBoot(const std::string& line, const std::string& warn, bool wifiButton)
     lv_obj_delete(bootWifi);
     bootWifi = nullptr;
   }
-  lv_label_set_text(bootLine, line.c_str());
-  lv_label_set_text(bootWarn, warn.c_str());
+  lv_label_set_text(bootLine, tr(line).c_str());
+  lv_label_set_text(bootWarn, tr(warn).c_str());
   lv_obj_align(bootLine, LV_ALIGN_CENTER, 0, 150);
   lv_obj_align(bootWarn, LV_ALIGN_TOP_MID, 0, H / 2 + 180);
 }
@@ -687,7 +789,7 @@ std::string wifiSsidInput() { return wifiSsid ? lv_textarea_get_text(wifiSsid) :
 
 void wifiStatus(const std::string& text, Tone tone, bool busy) {
   if (wifiStatusLbl) {
-    lv_label_set_text(wifiStatusLbl, text.c_str());
+    lv_label_set_text(wifiStatusLbl, tr(text).c_str());
     lv_obj_set_style_text_color(wifiStatusLbl, C(toneHex(tone)), 0);
   }
   if (wifiSpin) {
@@ -1629,7 +1731,7 @@ void focusTick(int left, int total, bool paused, bool onBreak) {
   char t[16];
   snprintf(t, sizeof(t), "%d:%02d", left / 60, left % 60);
   lv_label_set_text(focusTime, t);
-  lv_label_set_text(focusState, onBreak ? "paus" : paused ? "pausad" : "kvar");
+  lv_label_set_text(focusState, tr(onBreak ? "paus" : paused ? "pausad" : "kvar").c_str());
   lv_obj_set_style_text_color(focusState, C(paused ? WARN : MUTED), 0);
 }
 
@@ -1878,7 +1980,7 @@ void coachTimer(bool visible, int left, int total, const std::string& task) {
   char mm[16];
   snprintf(mm, sizeof(mm), "%d:%02d", left / 60, left % 60);
   std::string t = std::string(SYM_CLOCK) + "  " + mm + (task.empty() ? "" : "   " + task);
-  lv_label_set_text(timerLbl, t.c_str());
+  lv_label_set_text(timerLbl, tr(t).c_str());
 }
 
 }  // namespace ui

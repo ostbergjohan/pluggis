@@ -404,5 +404,57 @@ int main() {
   ui::toast("+5 poäng");
   run(500);
   save("17-notis");
+  // ---- samma skärmar på engelska (elev med språket English)
+  ui::setEnglish(true);
+  top.tab = 0; top.focusLeft = -1; top.status = "";
+  ui::setTop(top);
+  {
+    ui::Ova eo;
+    eo.rows = {{"Prov: Fotosyntesen", "Imorgon", ui::Tone::Warn, 0x2f6f5e, true},
+               {"Engelska: glosor kap 3", "Fredag 28/11", ui::Tone::Muted, 0x1f8a9e, true},
+               {"Prov: Vikingatiden", "börja nu", ui::Tone::Good, 0xb7862a, false}};
+    eo.title = "Prov: Fotosyntesen";
+    eo.meta = "NO  ·  Imorgon";
+    eo.color = 0x2f6f5e;
+    eo.topics = {"Klorofyll", "Ljus och energi"};
+    eo.last = "Snabbquiz · Fotosyntesen · 8 av 10 rätt";
+    eo.canAgain = true;
+    ui::buildOva(eo);
+    save("en-01-ova");
+    ui::Card ec;
+    ec.deck = "Snabbquiz: Fotosyntesen";
+    ec.answered = 3; ec.right = 2;
+    ec.question = "What do plants need to make sugar?";
+    ec.options = {"Light, water and carbon dioxide", "Oxygen and sugar", "Nitrogen and soil", "Only water"};
+    ec.correct = 0;
+    ui::buildCard(ec);
+    save("en-02-quiz");
+    top.tab = 3; ui::setTop(top);
+    ui::Plan ep;
+    ep.day = "Idag"; ep.summary = "25 min kvar av 60"; ep.doneMinutes = 35; ep.totalMinutes = 60; ep.hasNext = true;
+    ep.items = {{"NO", "Read p. 46–52 about cellular respiration", 0x2f6f5e, 20, false, 1},
+                {"NO", "Do a quick quiz", 0x2f6f5e, 15, true, 2},
+                {"English", "Practise the words in chapter 3", 0x1f8a9e, 15, false}};
+    ui::buildPlan(ep);
+    save("en-03-plan");
+    top.tab = -1; top.focusLeft = 13 * 60 + 27; ui::setTop(top);
+    ui::Focus ef;
+    ef.subject = "NO"; ef.color = 0x2f6f5e; ef.title = "Read p. 46–52 about cellular respiration"; ef.total = 20 * 60; ef.left = 13 * 60 + 27;
+    ui::buildFocus(ef);
+    save("en-04-focus");
+    top.focusLeft = -1; ui::setTop(top);
+    ui::Clock eck;
+    eck.time = "16:42"; eck.date = "Friday 27 November"; eck.next = "NO: Photosynthesis"; eck.nextWhen = "om 3 dagar";
+    eck.today = "2 av 4 kvar · 35 min"; eck.items = {"Read p. 46–52", "Practise the words in chapter 3"};
+    ui::clockShow(&eck);
+    save("en-05-clock");
+    ui::clockShow(nullptr);
+    ui::Settings es;
+    es.wifi = "femtifem"; es.rssi = -52; es.server = "192.168.1.20:8080"; es.serverOk = true; es.serverNote = "Ansluten";
+    es.code = "YQE89"; es.student = "Sam"; es.idleMin = 5; es.brightness = 200;
+    ui::buildSettings(es);
+    save("en-06-settings");
+  }
+  ui::setEnglish(false);
   return 0;
 }

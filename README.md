@@ -36,7 +36,7 @@ A student can be switched to **English** (see [Language](#language)).
 | Plan from the material: reading time per page, only homework with contents is planned | ✅ |
 | From the plan: 🎧 listen to the pages of a reading task, ▶ start the exercise (app and Tab5) | ✅ |
 | Book page numbers on material (read by Claude, can be corrected by hand, spreads 182–183) | ✅ |
-| English per student: the coach, plans, exercises, voice and speech recognition in English | ✅ (app, Tab5 and parent view texts: in progress) |
+| English per student: the coach, plans, exercises, voice, speech recognition, the student app and the Tab5 in English; the parent view in Swedish or English | ✅ |
 | Desk screen M5Stack Tab5: practise, chat, homework, plan, focus timer, clock on the charger, WiFi and settings on screen ([firmware/tab5](firmware/tab5)) | ✅ |
 
 ## What the student chat looks like
@@ -233,9 +233,11 @@ Swedish is the default for everyone. A student can be switched to English (per s
   The prompts stay in Swedish; an English instruction is added last in the system prompt for that student.
 - **The voice** is English (Azure en-GB, or Piper `en_GB-alba-medium` without Azure).
 - **Speech recognition** goes to the multilingual Whisper instead of KB-Whisper.
-- `PUT /api/student` with `{"language":"en"}` (or `"sv"`) for the selected student; `GET /api/chat/me` shows it.
-- Still in progress: a language choice in the parent view, and the texts of the student app, the Tab5 and the parent
-  view in English.
+- **The student app and the Tab5** show their texts in English (the interface is written in Swedish and translated
+  when it's drawn: `static/i18n*.js` for the web, `firmware/tab5/src/lang_en.h` for the Tab5).
+- **Where:** the parent view → the student's tab → Coach → *The student's language* (Svenska/English).
+  Or `PUT /api/student` with `{"language":"en"}`; `GET /api/chat/me` shows it.
+- **The parent view** has its own language choice: **SV/EN** top right, saved in the browser.
 
 ## Web interface
 
@@ -579,5 +581,4 @@ This handles a minor's voice, images and schoolwork.
 
 ## Next steps
 
-1. The texts of the student app, the Tab5 and the parent view in English (the language choice in the parent view).
-2. An MCP server so that the same homework list can be reached from the Claude app and the home agent.
+1. An MCP server so that the same homework list can be reached from the Claude app and the home agent.
