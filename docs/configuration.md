@@ -175,6 +175,9 @@ Homework and tests are fetched from the school's calendar subscription.
 | `PLUGGIS_SPEECH_URL` | set by docker-compose | The speech service (Whisper and Piper) |
 | `STT_MULTI_MODEL` (speech service) | `Systran/faster-whisper-small` | Whisper for English, Spanish, German and French |
 | `SPRING_PROFILES_ACTIVE=postgres` + `DB_URL`, `DB_USER`, `DB_PASSWORD` | H2 file | Postgres instead of the built-in database |
+| `PLUGGIS_BACKUP_KEEP` / `PLUGGIS_BACKUP_DIR` | `14` / `./data/backups` | How many nightly backups are kept, and where (H2 only) |
+| `PLUGGIS_FIRMWARE_REPO` | `ostbergjohan/pluggis` | The GitHub repo whose release `tab5` has the Tab5 firmware |
+| `PLUGGIS_GITHUB_TOKEN` | – | Read access to the repo, only needed if it's private (for Tab5 updates) |
 
 ## Check that everything is in place
 

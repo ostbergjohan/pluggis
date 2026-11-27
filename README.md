@@ -182,6 +182,14 @@ takes effect immediately and is saved (also after a restart); `.env` is just the
 key, the token and the `claude` program are there, successful/failed calls via the subscription, the latest error
 and how often hybrid has fallen back.
 
+**The subscription's limits:** when Claude Code reports a limit (the 5-hour limit or the weekly limit), the Cost tab
+shows how close it is, in percent, and when it resets, and the Overview warns when it's getting close or has been
+reached. *🔄 Kolla nu* (check now) makes a small call via the subscription to update it. When the limit is reached the student
+gets a friendly message with when it works again ("Pluggis har använt upp sin Claude-tid för en stund – det går igen
+kl 15:00", Pluggis has used up its Claude time for now), unless hybrid
+mode can take over with the API key. The percent is fetched from Anthropic's usage endpoint when it answers; with a
+`setup-token` it often doesn't (403), and then only what Claude Code itself reports is shown.
+
 Things to keep in mind:
 - In `claude-code` mode replies are not streamed, and every call starts the program – expect about a second longer
   wait in voice.
@@ -275,7 +283,8 @@ Pluggis blue.
 The student chat (`/`, or `/chat.html`) is a separate, mobile-friendly page for the student (built for iPhone): chat
 with Pluggis (text or 🎤), quick buttons to start studying/quiz/finish, see today's plan and tick it off, see the
 homework and upload material (photo, screenshot, Word, PDF), practise (the **Öva** tab: flashcards, quick quiz,
-fill in the gap and Explain to Pluggis – gives points), and see the points.
+fill in the gap, Explain to Pluggis, mock test, match pairs, right order, and the vocabulary quiz on language
+homework – gives points), and see the points.
 
 - The student opens `/` and enters their code – or gets the link with the code (`/#k=CODE`) via *Copy link* /
   *Share* under System → Students. Open in Safari → Share → *Add to Home Screen*.
@@ -284,9 +293,11 @@ fill in the gap and Explain to Pluggis – gives points), and see the points.
 - Tap the Pluggis name in the chat to log out (e.g. on a shared phone).
 - **From the plan:** reading tasks ("Läs s. 182–187" – read p. 182–187) have a **🎧 Listen** button that opens the
   homework and reads exactly those pages aloud. Reading stops after the last page and the task is ticked off.
-  Exercises in the plan (quick quiz, fill in the gap, Explain to Pluggis, mock test, match pairs, right order) have
-  **▶ Start**; afterwards the app asks whether the task should be ticked off. If the pages aren't in the uploaded
-  material, reading starts from the beginning.
+  Practice tasks ("Övningspass: …" – practice session) have **▶ Start**: a timer runs for the task's minutes at the
+  top of the screen while the exercises take turns (quick quiz, match pairs, fill in the gap, right order, and Explain
+  or the vocabulary quiz on language homework). *Nästa övning ›* skips to the next one. When the time is up the task
+  is ticked off (+3 points); ✕ ends early without ticking off. "Testprov i Pluggis" starts the mock test on its own.
+  If the pages of a reading task aren't in the uploaded material, reading starts from the beginning.
 - **Listen to the material:** at the top of a homework/test there is a player that reads all uploaded material
   page by page (▶/⏸, ⏮ previous sentence, ⏭ next page, progress bar). Where the student is is saved on the homework
   so that they can continue later – also on another device – and pages that have been listened to get ✓.
@@ -332,14 +343,16 @@ The calendar usually only gives a title and a date – if the contents are missi
 From screenshots and text Claude extracts the homework/test, the date and the contents.
 
 **Planning:** when the contents are there (`set_homework_content` via the coach, or
-`POST /api/plan/homework/{id}/content`) Claude makes a plan with small tasks (at most ~20 min) on the study days up
+`POST /api/plan/homework/{id}/content`) Claude makes a plan with tasks of 15–25 minutes on the study days up
 to the date. **No contents, no plan:** homework or a test without "what's included", steps or uploaded material
 isn't planned (old tasks are removed, and *Replan everything* shows it as skipped) – it is included once contents or
 material are added.
 **Reading time from the material:** Claude gets the reading time of each book page (about 140 words/min) and chooses
 a suitable number of pages per reading task. The minutes of reading tasks are then recalculated from the pages (with
-a margin, at least 15 and at most 30 min). Pages are always written as "s. 40–45" and exercises with their names, so
-that they can be tapped in the app and on the Tab5. Before a test, new material is finished 1–2 days before and the
+a margin, at least 15 and at most 30 min). Pages are always written as "s. 40–45" and exercises as
+"Övningspass: <what>" (a mixed practice session, 10–20 min), so that they can be started in the app and on the Tab5.
+Plans made before this change keep their old wording ("Gör ett snabbquiz …") until they're redone; ▶ Start still
+gives a practice session. Before a test, new material is finished 1–2 days before and the
 last days are repetition and flashcards. Ticked-off tasks give points and are kept when replanning.
 **Max minutes per day and study days** are set per student under **Planning** (the max applies to all studying that
 day, all homework and tests together). Tick *Redo existing plans* to replan everything.
@@ -419,9 +432,10 @@ longer has a Practise tab.
 - **🔢 Right order:** Claude makes 2–3 sequences from the material (process steps, events, chains); the student taps
   the steps in the right order and then gets a sentence about why. The prompt is in `prompts/order.md`.
 - Both give +3 points (once per exercise and day).
-- **Vocabulary quiz (Tab5):** on language homework, Claude picks out the words from the material
-  (`prompts/vocab.md`), the Tab5 says the word and the student answers aloud – in Swedish or in the language being
-  learned.
+- **Vocabulary quiz (app and Tab5):** on language homework, Claude picks out the words from the material
+  (`prompts/vocab.md`), Pluggis says the word and the student answers – aloud on the Tab5, aloud or typed in the app –
+  in Swedish or in the language being learned. Any of the answers counts ("hunden / en hund"), with or without an
+  article.
 - **Practise a sub-topic:** when the homework is selected, *Öva på: Allt · Siffror 1–100 · Veckodagar …* (practise:
   everything · numbers 1–100 · weekdays) is shown. The sub-topics are found when the material is read (older homework
   the first time, `GET /api/homework/{id}/topics`, prompt `prompts/topics.md`) and the choice applies to all the
@@ -506,9 +520,13 @@ colours and the Atkinson Hyperlegible typeface (built to be easy to read).
   answers can be spoken.
 - **Chat** – the coach: the reply on the screen and in the speaker, *Håll in och prata* (hold and talk), a session timer.
 - **Läxor** (Homework) – all material is read aloud page by page, and where you are is saved (also in the app).
-- **Plan** – one day at a time; tick off, 🎧 listen to reading tasks, ▶ start exercises, ⏱ focus timer on ordinary tasks.
+- **Plan** – one day at a time; tick off, 🎧 listen to reading tasks, ▶ start a practice session (a timer with
+  exercises that take turns), ⏱ focus timer on ordinary tasks.
 - **Focus timer** (15/25/45 min or the task's time), **clock on the charger** with the next test and what's left
-  today, volume, battery, and WiFi, server, student code, shutdown time and brightness under ⚙.
+  today, volume, battery, and WiFi, server, student code, shutdown time, brightness, software updates and
+  **Stäng av** (turn off) under ⚙.
+- **Turning it off:** *Stäng av* under ⚙, or double-press the power button on the side (one press turns it on).
+  A single press while it's on is a reset, not a shutdown.
 
 The images are drawn with the simulator (`firmware/tab5/sim/run.sh`, test data):
 

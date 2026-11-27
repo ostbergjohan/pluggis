@@ -15,7 +15,7 @@ nothing about the hardware.
 The on-screen texts are in Swedish (UI labels below are quoted in Swedish with the English meaning).
 
 **Tabs at the top (the Tab5 starts on Öva):**
-- **Öva** (Practise) – homework and tests on the left (by date, *Snart* / *Längre fram* = soon / later, scrolled with a
+- **Öva** (Practise) – homework and tests on the left (passed ones are hidden; by date, *Snart* / *Längre fram* = soon / later, scrolled with a
   finger, subject colour, *börja nu* = start now for things further ahead that already have tasks in the plan). On the
   right: the selected homework, *Öva på:* sub-topics and the six exercises – quick quiz, fill in the gap, Explain,
   mock test, match pairs, right order. At the bottom *Senast* (last) with *Kör igen* (again). Everything is made new
@@ -30,9 +30,11 @@ The on-screen texts are in Swedish (UI labels below are quoted in Swedish with t
 - **Läxor** (Homework) – homework and tests; on a homework all material is read aloud page by page
   (*Spela/Paus, Förra, Nästa sida* = play/pause, previous, next page), and where you are is saved so that you can
   continue later (also in the app).
-- **Plan** – one day at a time (< >); tap a task to tick it off, read the pages aloud or start the exercise.
-  ⏱ on the row starts the focus timer for the task (not on exercises like quiz and fill in the gap – they have *Starta*
-  and measure the time themselves).
+- **Plan** – one day at a time (< >); tap a task to tick it off or read the pages aloud. On a practice task
+  ("Övningspass: …") *Starta* runs a practice session: the focus timer counts down the task's minutes while the
+  exercises take turns (quick quiz, match pairs, fill in the gap, right order, Explain or the vocabulary quiz), and the
+  task is ticked off when the time is up. "Testprov i Pluggis" starts the mock test. ⏱ on other rows starts the focus
+  timer for the task.
 - ⏱ **Focus timer** top right (free session: 15, 25 or 45 min) – a big countdown, *Paus/Fortsätt* (pause/continue),
   *Avsluta* (finish), a reminder when 5 minutes are left and a reward when the session is done (practice time and
   points as usual; started from the plan, the task is ticked off). Then *Paus 5 min* (5 min break), *Ett pass till*
@@ -53,8 +55,16 @@ Tap ⚙ top right. There you find **WiFi** (change network), **Server** (IP addr
 **Elev** (student: the student's code, tested against the server – the code decides which student the screen shows),
 **Stäng av efter** (switch off after: off, 2, 5, 10, 15 or 30 minutes), **Ljusstyrka** (brightness),
 **Klocka på laddaren** (clock on the charger: off, 15–21, all day), **Detaljer** (details: WiFi, server, chat, latest
-error, memory) and **Starta om** (restart). Everything is saved in the Tab5 and takes precedence over `config.h`, so
-`config.h` is only needed the first time.
+error, memory), **Programvara** (software: check for and install updates) and **Stäng av** (turn off completely).
+Everything is saved in the Tab5 and takes precedence over `config.h`, so `config.h` is only needed the first time.
+
+**Power button:** one press turns the Tab5 on, a double press turns it off (handled by the hardware – the firmware
+can't change it). A single press while it's on is a reset. On the USB cable the Tab5 can't turn itself off; *Stäng av*
+then says so.
+
+**Sound after a restart:** a soft restart (an update or a reset) doesn't reset the audio chip (ES8388) and amplifier,
+so the firmware shuts the audio down before restarting and starts it again at every boot. A short, calm start sound
+plays when the Tab5 is online. If it's still silent, turn it off completely and on again.
 
 ## Changing WiFi on the screen
 
