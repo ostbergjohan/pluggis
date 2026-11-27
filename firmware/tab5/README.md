@@ -1,78 +1,93 @@
-# Pluggis på M5Stack Tab5
+# Pluggis on the M5Stack Tab5
 
-Kopiera `include/config.example.h` till `include/config.h` och fyll i innan du bygger. Bilder på skärmarna och vilken
-hårdvara som stöds finns i [huvud-README:n](../../README.md#skrivbordsskärmen-m5stack-tab5). Den äldre firmwaren utan
-LVGL är borttagen (finns kvar i git-historiken).
+Copy `include/config.example.h` to `include/config.h` and fill it in before building. Images of the screens and the
+supported hardware are in the [main README](../../README.md#the-desk-screen-m5stack-tab5). The older firmware without
+LVGL has been removed (it's still in the git history).
 
-Firmware för skrivbordsskärmen (PlatformIO/Arduino). Pratar med servern enligt [docs/protokoll.md](../../docs/protokoll.md).
+Firmware for the desk screen (PlatformIO/Arduino). Talks to the server according to [docs/protocol.md](../../docs/protocol.md).
 
-Gränssnittet ritas med **LVGL 9** i `src/ui.cpp` (knappar som sjunker in, listor som rullas med fingret, animationer)
-i loggans färger (mörkblått och gult), med loggan på startskärmen och figuren i chatten (`include/brand.h`),
-med typsnittet Atkinson Hyperlegible – byggt för att vara lättläst – med å, ä, ö och ikoner (`src/fonts/`).
-`src/main.cpp` sköter WiFi, ljud och servern och fyller i vad som ska synas; `ui.cpp` vet ingenting om hårdvaran.
+The interface is drawn with **LVGL 9** in `src/ui.cpp` (buttons that sink when pressed, lists scrolled with a finger,
+animations) in the logo's colours (dark blue and yellow), with the logo on the start screen and the figure in the chat
+(`include/brand.h`), in the Atkinson Hyperlegible typeface – built to be easy to read – with å, ä, ö and icons
+(`src/fonts/`). `src/main.cpp` handles WiFi, audio and the server and fills in what should be shown; `ui.cpp` knows
+nothing about the hardware.
 
-**Flikar högst upp (Tab5 startar på Öva):**
-- **Öva** – läxor och prov till vänster (datumordning, *Snart* / *Längre fram*, rullas med fingret, ämnesfärg,
-  *börja nu* för det som ligger längre fram men har moment i planen). Till höger: vald läxa, *Öva på:* delområden och
-  de sex övningarna – Snabbquiz, Lucktext, Förklara, Testprov, Matcha par, Rätt ordning. Längst ner *Senast* med
-  *Kör igen*. Allt görs nytt varje gång (inga sparade kortlekar). Förklara och skrivfrågor besvaras med rösten.
-  På en språkläxa (spanska, engelska, glosor …) blir Förklara **Glosförhör**: Pluggis plockar ut glosorna ur
-  materialet, Tab5 säger ordet på språket och eleven svarar högt på svenska (*Håll in och säg det på svenska*).
-  Svaret bedöms direkt – något av svaren räcker ("hunden / en hund"), med eller utan en/ett/att. Kunde/Kunde inte
-  som vanligt. Svar på svenska eftersom rösttjänsten (KB-Whisper) är svensk.
-- **Chat** – coachen: svaret på skärmen och i högtalaren, timer för passet, *Börja/Hjälp*, *Håll in och prata*, *Avsluta*.
-- **Läxor** – läxor och prov; på en läxa läses allt material upp sida för sida (*Spela/Paus, Förra, Nästa sida*), och var man är sparas så att det går att fortsätta senare (även i appen).
-- **Plan** – en dag i taget (< >); tryck på ett moment för att bocka av, läsa upp sidorna eller starta övningen.
-  ⏱ på raden startar fokustimern för momentet (inte på övningar som quiz och lucktext – de har *Starta* och mäter tiden själva).
-- ⏱ **Fokustimer** uppe till höger (fritt pass: 15, 25 eller 45 min) – stor nedräkning, *Paus/Fortsätt*, *Avsluta*,
-  påminnelse när 5 minuter är kvar och en belöning när passet är klart (övningstid och poäng som vanligt; startat från
-  planen bockas momentet av). Sedan *Paus 5 min*, *Ett pass till* eller *Klar*. Timern syns i toppraden på alla
-  flikar. Medan den går stängs Tab5 inte av; utan tryck dämpas skärmen efter en minut.
-- Volym − / + (sparas) och batterinivå uppe till höger.
+The on-screen texts are in Swedish (UI labels below are quoted in Swedish with the English meaning).
 
-**Klockläget:** sitter Tab5 i laddaren när avstängningstiden gått visas en klocka med nästa prov och det som är
-kvar idag, med låg ljusstyrka, i stället för en svart skärm – under pluggtid (15–21, eller 7–22 med *Hela dagen*).
-Ett tryck väcker. På batteri stängs den av som vanligt. Ställs in under ⚙ → *Klocka på laddaren*.
+**Tabs at the top (the Tab5 starts on Öva):**
+- **Öva** (Practise) – homework and tests on the left (by date, *Snart* / *Längre fram* = soon / later, scrolled with a
+  finger, subject colour, *börja nu* = start now for things further ahead that already have tasks in the plan). On the
+  right: the selected homework, *Öva på:* sub-topics and the six exercises – quick quiz, fill in the gap, Explain,
+  mock test, match pairs, right order. At the bottom *Senast* (last) with *Kör igen* (again). Everything is made new
+  every time (no saved decks). Explain and written questions are answered by voice.
+  On language homework (Spanish, English, vocabulary …) Explain becomes the **vocabulary quiz** (*Glosförhör*):
+  Pluggis picks out the words from the material, the Tab5 says the word and the student answers aloud – in Swedish,
+  or in the language being learned (then the multilingual Whisper on the server recognises the answer). The answer
+  is judged directly – any of the answers is enough ("hunden / en hund"), with or without an article. Knew/didn't know
+  as usual.
+- **Chat** – the coach: the reply on the screen and in the speaker, a session timer, *Börja/Hjälp* (start/help),
+  *Håll in och prata* (hold and talk), *Avsluta* (finish).
+- **Läxor** (Homework) – homework and tests; on a homework all material is read aloud page by page
+  (*Spela/Paus, Förra, Nästa sida* = play/pause, previous, next page), and where you are is saved so that you can
+  continue later (also in the app).
+- **Plan** – one day at a time (< >); tap a task to tick it off, read the pages aloud or start the exercise.
+  ⏱ on the row starts the focus timer for the task (not on exercises like quiz and fill in the gap – they have *Starta*
+  and measure the time themselves).
+- ⏱ **Focus timer** top right (free session: 15, 25 or 45 min) – a big countdown, *Paus/Fortsätt* (pause/continue),
+  *Avsluta* (finish), a reminder when 5 minutes are left and a reward when the session is done (practice time and
+  points as usual; started from the plan, the task is ticked off). Then *Paus 5 min* (5 min break), *Ett pass till*
+  (one more) or *Klar* (done). The timer is shown in the top bar on all tabs. While it runs the Tab5 doesn't switch off;
+  without touches the screen dims after a minute.
+- Volume − / + (saved) and battery level top right.
 
-Ljudet från coachen kommer som 16 kHz mono i bitar om 8 kB (`audioChunk` i hello). Inte än: kameran (fota med telefonen) och Dual Button.
+**Clock mode:** if the Tab5 is on the charger when the shutdown time has passed, a clock with the next test and what's
+left today is shown at low brightness instead of a black screen – during study time (15–21, or 7–22 with
+*Hela dagen* = all day). A tap wakes it. On battery it switches off as usual. Set under ⚙ → *Klocka på laddaren*.
 
-## Inställningar på skärmen
+The coach's audio comes as 16 kHz mono in 8 kB chunks (`audioChunk` in hello). Not yet: the camera (photos are taken
+with the phone) and the Dual Button.
 
-Tryck på ⚙ uppe till höger. Där finns **WiFi** (byt nätverk), **Server** (IP-adress, provas innan den sparas),
-**Elev** (elevens kod, provas mot servern – koden bestämmer vilken elev skärmen visar), **Stäng av efter**
-(Av, 2, 5, 10, 15 eller 30 minuter), **Ljusstyrka**, **Klocka på laddaren** (Av, 15–21, Hela dagen), **Detaljer** (WiFi, server, chatten, senaste fel, minne) och
-**Starta om**. Allt sparas i Tab5 och går före `config.h`, så `config.h` behövs bara första gången.
+## Settings on the screen
 
-## Byta WiFi på skärmen
+Tap ⚙ top right. There you find **WiFi** (change network), **Server** (IP address, tested before it's saved),
+**Elev** (student: the student's code, tested against the server – the code decides which student the screen shows),
+**Stäng av efter** (switch off after: off, 2, 5, 10, 15 or 30 minutes), **Ljusstyrka** (brightness),
+**Klocka på laddaren** (clock on the charger: off, 15–21, all day), **Detaljer** (details: WiFi, server, chat, latest
+error, memory) and **Starta om** (restart). Everything is saved in the Tab5 and takes precedence over `config.h`, so
+`config.h` is only needed the first time.
 
-Tryck på WiFi-ikonen uppe till höger → **Byt WiFi** (eller **Välj WiFi** på startskärmen om den inte kommer upp
-på nätet). Tab5 söker efter nätverk; tryck på ett och skriv lösenordet på skärmens tangentbord (**Visa** visar det
-du skrivit). **Dolt nätverk** för ett nät som inte syns i listan. Nätverket sparas i Tab5 först när anslutningen
-lyckats och går sedan före `PLUGGIS_WIFI_SSID`/`PLUGGIS_WIFI_PASS` i `config.h`. Blir det fel lösenord går Tab5
-tillbaka till det nät den hade. Bara 2,4 GHz.
+## Changing WiFi on the screen
 
-## Se skärmarna utan Tab5 (simulator)
+Tap the WiFi icon top right → **Byt WiFi** (change WiFi) (or **Välj WiFi** on the start screen if it doesn't get
+online). The Tab5 searches for networks; tap one and type the password on the on-screen keyboard (**Visa** shows what
+you typed). **Dolt nätverk** for a hidden network. The network is saved in the Tab5 only when the connection succeeds,
+and then takes precedence over `PLUGGIS_WIFI_SSID`/`PLUGGIS_WIFI_PASS` in `config.h`. With a wrong password the Tab5
+goes back to the network it had. 2.4 GHz only.
 
-`./sim/run.sh` bygger gränssnittet för datorn och ritar alla skärmar med testdata till `sim/out/*.png`
-(kräver gcc, g++, git och python3 med Pillow; första gången hämtas och byggs LVGL, det tar några minuter).
-Testdatan finns i `sim/sim_main.cpp` – ändra där för att prova långa texter, många läxor och liknande.
+## See the screens without a Tab5 (simulator)
 
-## Typsnitten
+`./sim/run.sh` builds the interface for the computer and draws all screens with test data to `sim/out/*.png`
+(requires gcc, g++, git and python3 with Pillow; the first time LVGL is fetched and built, which takes a few minutes).
+The test data is in `sim/sim_main.cpp` – change it there to try long texts, lots of homework and so on.
 
-`src/fonts/*.c` är gjorda med [lv_font_conv](https://github.com/lvgl/lv_font_conv) från Atkinson Hyperlegible
-(regular 24/30, bold 30/38/60, Latin-1) plus LVGL:s FontAwesome-ikoner och några extra (mikrofon, chatt, bok,
-kalender, glödlampa, frågetecken, länk, ordning, pokal, klocka). Kommandot står överst i varje fil.
+## Fonts
 
-## Flasha
+`src/fonts/*.c` are made with [lv_font_conv](https://github.com/lvgl/lv_font_conv) from Atkinson Hyperlegible
+(regular 24/30, bold 30/38/60, Latin-1, and digits only at 120/200 for the timer and the clock) plus LVGL's
+FontAwesome icons and a few extra (microphone, chat, book, calendar, light bulb, question mark, link, order, trophy,
+clock). The command is at the top of each file.
 
-1. Installera [PlatformIO](https://platformio.org/install/cli) (eller VS Code + PlatformIO).
-2. `cp include/config.example.h include/config.h` och fyll i WiFi, serverns IP-adress och **elevens kod**
-   (`PLUGGIS_CODE`, samma 5 tecken som i elevchatten – admin → Inställningar → Elever). Koden räcker: servern vet
-   vilken elev den hör till, och skärmen når bara den elevens läxor, plan och poäng. Byts koden i admin (*Ny kod*)
-   måste den bytas här också.
-   `config.h` checkas aldrig in.
-3. Koppla Tab5 med USB-C. Gå till nedladdningsläge: håll reset-knappen ~2 s tills den gröna lampan blinkar snabbt.
-4. `pio run -t upload`, och `pio device monitor` för loggen.
-5. I admin: Inställningar → Tab5 (hårdvara) för att visa enhetens status.
+## Flashing
 
-Första bygget laddar ner verktygskedjan för ESP32-P4 och tar några minuter.
+1. Install [PlatformIO](https://platformio.org/install/cli) (or VS Code + PlatformIO).
+2. `cp include/config.example.h include/config.h` and fill in WiFi, the server's IP address and **the student's code**
+   (`PLUGGIS_CODE`, the same 5 characters as in the student chat – admin → System → Students). The code is enough:
+   the server knows which student it belongs to, and the screen only reaches that student's homework, plan and points.
+   If the code is changed in admin (*New code*) it has to be changed here too (or on the screen under ⚙).
+   `config.h` is never checked in.
+3. Connect the Tab5 with USB-C. Enter download mode: hold the reset button for ~2 s until the green light blinks
+   quickly.
+4. `pio run -t upload`, and `pio device monitor` for the log.
+5. In admin: System → Tab5 to show the device's connection status.
+
+The first build downloads the ESP32-P4 toolchain and takes a few minutes.

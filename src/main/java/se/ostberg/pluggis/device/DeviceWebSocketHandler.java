@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * WebSocket för Tab5 (och webbsimulatorn): ws://host:8080/ws/device?deviceId=tab5-1&token=...
  *
- * Text-ramar är JSON (se docs/protokoll.md). Binära ramar är ett helt yttrande som ljud
+ * Text-ramar är JSON (se docs/protocol.md). Binära ramar är ett helt yttrande som ljud
  * (wav 16 kHz mono eller webm/opus) – det skickas till tal till text och sedan till coachen.
  */
 @Component

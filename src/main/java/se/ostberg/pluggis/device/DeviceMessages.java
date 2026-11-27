@@ -1,7 +1,7 @@
 package se.ostberg.pluggis.device;
 
 /**
- * Meddelanden server → enhet. Se docs/protokoll.md.
+ * Meddelanden server → enhet. Se docs/protocol.md.
  * Alla har fältet "type" så att firmwaren kan switcha på det.
  */
 public final class DeviceMessages {

@@ -1,7 +1,7 @@
-# Hemligheter
+# Secrets
 
-Lägg filer här som inte ska in i git, t.ex. Google-tjänstekontots nyckel:
+Put files here that must not go into git, e.g. the Google service account's key:
 
     secrets/google-sa.json
 
-Mappen monteras skrivskyddad som `/app/secrets` i Pluggis-containern. Allt utom den här filen ignoreras av git.
+The folder is mounted read-only as `/app/secrets` in the Pluggis container. Everything except this file is ignored by git.

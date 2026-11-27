@@ -1,6 +1,6 @@
 // Pluggis på M5Stack Tab5 – skrivbordsskärmen.
 //
-// Pratar med Pluggis-servern över WebSocket enligt docs/protokoll.md:
+// Pratar med Pluggis-servern över WebSocket enligt docs/protocol.md:
 //  - visar coachens svar, "tänker", timern för passet, flashkort och poäng
 //  - knappar på pekskärmen: Börja/Hjälp, Avsluta, och håll in "Prata" för att prata
 //  - rösten spelas in (16 kHz mono) och skickas som wav; svaret spelas upp mening för mening
