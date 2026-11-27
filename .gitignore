@@ -8,3 +8,9 @@ data/
 .DS_Store
 secrets/*
 !secrets/README.md
+
+# Tab5 build output (PlatformIO and the simulator)
+firmware/**/.pio/
+firmware/**/sim/build/
+firmware/**/sim/out/
+firmware/**/sim/.lvgl/
