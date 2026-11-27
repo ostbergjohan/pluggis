@@ -63,7 +63,11 @@ class StudentIsolationTest {
     }
 
     private MockHttpServletRequestBuilder as(MockHttpServletRequestBuilder b, String studentId) {
-        b.cookie(parent());
+        try {
+            b.cookie(parent());
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
         if (studentId != null) {
             b.header("X-Pluggis-Student", studentId);
         }

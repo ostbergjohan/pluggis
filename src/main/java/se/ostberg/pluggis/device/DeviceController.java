@@ -20,6 +20,6 @@ public class DeviceController {
 
     @GetMapping
     public Map<String, Set<String>> connected() {
-        return Map.of("connected", registry.connected());
+        return Map.of("connected", registry.connected(), "tab5", registry.tab5Connected());
     }
 }

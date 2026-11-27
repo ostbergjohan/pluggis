@@ -1,6 +1,6 @@
 'use strict';
 
-/* Pluggis – föräldravy och Tab5-simulator. Inga beroenden, inget byggsteg. */
+/* Pluggis – föräldravy. Inga beroenden, inget byggsteg. */
 
 // ---------- Hjälpare ----------
 
@@ -1172,229 +1172,6 @@ views.poang = async (main) => {
       h('button', { class: 'danger', onclick: reset('all') }, 'Nollställ alla poäng'))));
 };
 
-// ----- Tab5-simulator -----
-
-views.simulator = async (main) => {
-  main.append(h('h1', {}, 'Tab5-simulator'),
-    h('p', { class: 'sub' }, `Testa coachen som om du satt vid Tab5. Ansluter som "${state.deviceId}" – riktiga Tab5 och elevchatten med samma id ser samma samtal.`));
-
-  const stateLine = h('div', { class: 'state' }, 'Inte ansluten');
-  const timer = h('div', { class: 'timerbar', style: 'display:none' }, h('div', { style: 'width:100%' }));
-  const timerText = h('div', { class: 'state', style: 'display:none' });
-  const say = h('div', { class: 'say' }, 'Tryck Anslut för att börja.');
-  const cardBox = h('div');
-  const screen = h('div', { class: 'screen' }, stateLine, timer, timerText, cardBox, say);
-  const log = h('div', { class: 'log' });
-  const input = h('input', { placeholder: 'Säg något till coachen… (Enter för att skicka)', onkeydown: (e) => { if (e.key === 'Enter') sendText(); } });
-  const photoInput = h('input', { type: 'file', accept: 'image/*', style: 'display:none' });
-  const connectBtn = h('button', { class: 'primary', onclick: () => (state.ws ? disconnect() : connect()) }, 'Anslut');
-  const speakBox = h('input', { type: 'checkbox', checked: state.speak, onchange: () => { state.speak = speakBox.checked; store.set('lc.speak', state.speak ? '1' : '0'); } });
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const micBtn = Recognition ? h('button', { onclick: listen, title: 'Prata (webbläsarens taligenkänning)' }, '🎤') : null;
-  const serverVoice = h('input', { type: 'checkbox', checked: store.get('lc.serverVoice', '0') === '1',
-    onchange: () => { store.set('lc.serverVoice', serverVoice.checked ? '1' : '0'); sendHello(); } });
-  const pttBtn = h('button', { title: 'Håll inne och prata – skickas till serverns KB-Whisper' }, '🎙 Håll och prata');
-  let recorder = null, chunks = [], pendingAudio = null;
-  const audioQueue = [];
-  let playing = false;
-
-  const press = (button, gesture) => send({ type: 'button', button, gesture });
-  main.append(h('div', { class: 'sim' },
-    h('div', {},
-      h('div', { class: 'device' }, screen,
-        h('div', { class: 'hw-buttons' },
-          h('button', { class: 'hw blue', onclick: () => press('main', 'click'), title: 'Börja / hjälp' }, 'Blå'),
-          h('button', { class: 'hw red', onclick: () => press('photo', 'click'), title: 'Fota uppgift' }, 'Röd'))),
-      h('div', { class: 'toolbar', style: 'margin-top:10px;justify-content:center' },
-        h('button', { class: 'small', onclick: () => press('main', 'long') }, 'Blå långt (avsluta)'),
-        h('button', { class: 'small', onclick: () => press('main', 'double') }, 'Blå dubbel (hjälp)'),
-        h('button', { class: 'small', onclick: () => press('photo', 'long') }, 'Röd långt (kort från foto)')),
-      h('div', { class: 'sim-input' }, input, micBtn, h('button', { onclick: sendText }, 'Skicka')),
-      h('div', { class: 'toolbar', style: 'margin-top:10px' }, connectBtn, pttBtn,
-        h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, speakBox, 'Läs upp (webbläsaren)'),
-        h('label', { style: 'display:flex;gap:6px;align-items:center;margin:0' }, serverVoice, 'Serverns röst (KB-Whisper + Piper)'),
-        photoInput)),
-    h('div', {}, h('h3', {}, 'Meddelanden'), log)));
-
-  function logLine(dir, obj) {
-    log.append(h('div', { class: dir }, `${dir === 'in' ? '←' : '→'} ${JSON.stringify(obj)}`));
-    log.scrollTop = log.scrollHeight;
-  }
-  function send(obj) {
-    if (!state.ws || state.ws.readyState !== 1) return toast('Inte ansluten', true);
-    state.ws.send(JSON.stringify(obj));
-    logLine('out', obj);
-  }
-  function sendText() {
-    const text = input.value.trim();
-    if (!text) return;
-    send({ type: 'text', text });
-    input.value = '';
-  }
-  function sendHello() {
-    if (state.ws && state.ws.readyState === 1) send({ type: 'hello', audio: serverVoice.checked, audioFormat: 'webm' });
-  }
-
-  // Tryck-och-prata: spelar in i webbläsaren och skickar som binär ram (webm/opus) till servern.
-  async function startRecording() {
-    if (!state.ws || state.ws.readyState !== 1) return toast('Inte ansluten', true);
-    if (!navigator.mediaDevices || !window.MediaRecorder) return toast('Webbläsaren kan inte spela in', true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunks = [];
-      recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
-        if (blob.size < 2000) return;
-        state.ws.send(await blob.arrayBuffer());
-        logLine('out', { binary: `${Math.round(blob.size / 1024)} kB ljud` });
-      };
-      recorder.start();
-      pttBtn.textContent = '● Spelar in…';
-    } catch {
-      toast('Fick inte använda mikrofonen', true);
-    }
-  }
-  function stopRecording() {
-    if (recorder && recorder.state === 'recording') recorder.stop();
-    pttBtn.textContent = '🎙 Håll och prata';
-  }
-  pttBtn.addEventListener('pointerdown', startRecording);
-  pttBtn.addEventListener('pointerup', stopRecording);
-  pttBtn.addEventListener('pointerleave', stopRecording);
-
-  function playNext() {
-    if (playing || !audioQueue.length) return;
-    playing = true;
-    const url = URL.createObjectURL(audioQueue.shift());
-    const a = new Audio(url);
-    a.onended = a.onerror = () => { URL.revokeObjectURL(url); playing = false; playNext(); };
-    a.play().catch(() => { playing = false; });
-  }
-
-  function speakText(text) {
-    if (serverVoice.checked) return; // servern läser upp
-    if (!state.speak || !window.speechSynthesis) return;
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'sv-SE';
-    const voice = speechSynthesis.getVoices().find(v => v.lang && v.lang.startsWith('sv'));
-    if (voice) u.voice = voice;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
-  }
-  function listen() {
-    const rec = new Recognition();
-    rec.lang = 'sv-SE';
-    rec.interimResults = false;
-    micBtn.textContent = '…';
-    rec.onresult = (e) => { input.value = e.results[0][0].transcript; sendText(); };
-    rec.onend = () => { micBtn.textContent = '🎤'; };
-    rec.onerror = () => toast('Kunde inte höra – testa igen', true);
-    rec.start();
-  }
-
-  function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws/device?deviceId=${enc(state.deviceId)}`;   // inloggad: cookien följer med
-    const ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
-    state.ws = ws;
-    stateLine.textContent = 'Ansluter…';
-    ws.onopen = () => { sendHello(); stateLine.textContent = 'Ansluten – redo'; connectBtn.textContent = 'Koppla ner'; say.textContent = 'Tryck på blå knappen för att börja, eller skriv något.'; };
-    ws.onclose = (e) => {
-      stateLine.textContent = e.code === 1008 ? 'Nekad – logga in igen' : 'Frånkopplad';
-      connectBtn.textContent = 'Anslut';
-      if (state.ws === ws) state.ws = null;
-    };
-    ws.onmessage = (e) => {
-      if (typeof e.data !== 'string') {
-        // Binär ram = ljudet till det senaste "audio"-meddelandet
-        audioQueue.push(new Blob([e.data], { type: 'audio/wav' }));
-        logLine('in', { binary: `${Math.round(e.data.byteLength / 1024)} kB ljud`, sentence: pendingAudio && pendingAudio.text });
-        pendingAudio = null;
-        playNext();
-        return;
-      }
-      let msg;
-      try { msg = JSON.parse(e.data); } catch { return; }
-      logLine('in', msg);
-      handle(msg);
-    };
-  }
-  function disconnect() { if (state.ws) state.ws.close(); }
-
-  function handle(msg) {
-    switch (msg.type) {
-      case 'thinking':
-        say.replaceChildren(h('span', { class: 'thinking' }, 'Tänker'));
-        break;
-      case 'say':
-        say.textContent = msg.text;
-        speakText(msg.text);
-        break;
-      case 'reminder':
-        say.replaceChildren(h('strong', {}, '🔔 '), msg.text);
-        speakText(msg.text);
-        break;
-      case 'timer': {
-        const pct = msg.totalSeconds ? Math.round(100 * msg.remainingSeconds / msg.totalSeconds) : 0;
-        timer.style.display = timerText.style.display = '';
-        timer.firstChild.style.width = pct + '%';
-        timerText.textContent = `${msg.task} · ${Math.ceil(msg.remainingSeconds / 60)} min kvar`;
-        break;
-      }
-      case 'session':
-        stateLine.textContent = { started: `Pass igång: ${msg.task} (${msg.minutes} min)`, time_up: 'Tiden är ute!', finished: 'Passet är avslutat' }[msg.state] || msg.state;
-        if (msg.state === 'finished') { timer.style.display = timerText.style.display = 'none'; }
-        if (msg.state === 'started') { timer.style.display = timerText.style.display = ''; timer.firstChild.style.width = '100%'; }
-        break;
-      case 'card':
-        cardBox.replaceChildren(h('div', { class: 'card' }, msg.front, msg.hint ? h('div', { class: 'hint' }, 'Tips finns – fråga om ledtråd') : null));
-        break;
-      case 'card_answer':
-        cardBox.replaceChildren(h('div', { class: 'card ' + (msg.correct ? 'right' : 'wrong') }, msg.back,
-          h('div', { class: 'hint' }, `${msg.correct ? 'Rätt!' : 'Inte riktigt'} · fack ${msg.box}`)));
-        break;
-      case 'points':
-        screen.append(h('div', { class: 'points-pop' }, `+${msg.delta}`));
-        setTimeout(() => screen.querySelector('.points-pop')?.remove(), 1900);
-        break;
-      case 'take_photo':
-        say.textContent = 'Välj en bild (i riktiga Tab5 räknar den ner och fotar)…';
-        photoInput.onchange = async () => {
-          const file = photoInput.files[0];
-          if (!file) return;
-          const fd = new FormData(); fd.append('image', file);
-          say.replaceChildren(h('span', { class: 'thinking' }, 'Läser bilden'));
-          await run(() => api(`${msg.uploadPath}?deviceId=${enc(state.deviceId)}`, { method: 'POST', form: fd }));
-          photoInput.value = '';
-        };
-        photoInput.click();
-        break;
-      case 'heard':
-        say.replaceChildren(h('em', {}, `Du sa: ”${msg.text}”`), h('br'), h('span', { class: 'thinking' }, 'Tänker'));
-        break;
-      case 'audio':
-        pendingAudio = msg;
-        break;
-      case 'hello_ack':
-      case 'audio_end':
-      case 'pong':
-        break;
-      case 'error':
-        toast(msg.message, true);
-        break;
-      default:
-        break;
-    }
-  }
-
-  // Lämnar man vyn kopplas simulatorn ner, så att riktiga Tab5 kan ta över igen.
-  state.leaveView = disconnect;
-};
-
 // ----- Logg -----
 
 views.logg = async (main) => {
@@ -1595,7 +1372,6 @@ views.elev = async (main) => {
 
 views.system = async (main) => {
   const items = [['elever', 'Elever och koder'], ['kostnad', 'Claude och kostnad'], ['logg', 'Logg'], ['anslutning', 'Anslutning'], ['tab5', 'Tab5']];
-  if (state.showTab5) items.push(['simulator', 'Tab5-simulator']);
   const sub = items.some(([id]) => id === state.sub) ? state.sub : 'elever';
   main.append(h('h1', {}, 'System'), subnav('system', items, sub));
   const box = h('div');
@@ -1604,7 +1380,6 @@ views.system = async (main) => {
   else if (sub === 'logg') await views.logg(box);
   else if (sub === 'anslutning') box.append(connectionPanel());
   else if (sub === 'tab5') box.append(tab5Panel());
-  else if (sub === 'simulator') await views.simulator(box);
   box.querySelector('h1')?.remove();
   main.append(box);
 };
@@ -1647,7 +1422,7 @@ function tab5Panel() {
     applyTab5(); pollDevice(); route();
   });
   return h('section', { class: 'panel', style: 'margin-top:16px' }, h('h2', {}, 'Tab5 (hårdvara)'),
-    h('label', { style: 'display:flex;gap:8px;align-items:center' }, on, 'Visa Tab5: simulatorn, anslutningsstatus och enhets-id'),
+    h('label', { style: 'display:flex;gap:8px;align-items:center' }, on, 'Visa Tab5: anslutningsstatus uppe till höger'),
     h('p', { class: 'item-meta' }, 'Dolt så länge ni bara använder elevchatten i mobilen. Inget slutar fungera – det syns bara inte. Gäller den här webbläsaren.'));
 }
 
@@ -1661,16 +1436,14 @@ function studentsPanel() {
     const chatUrl = `${location.origin}/`;
     const rows = list.map(s => {
       const name = h('input', { value: s.name || '', placeholder: 'Namn' });
-      const device = h('input', { value: s.deviceId || '', placeholder: 'Enhets-id' });
       const link = `${chatUrl}#k=${s.code}`;
       return h('div', { class: 'student-row' },
         h('div', { class: 'row' },
           h('div', {}, h('label', {}, 'Namn'), name),
-          state.showTab5 ? h('div', {}, h('label', {}, 'Enhets-id (Tab5)'), device) : null,
-          h('div', {}, h('label', {}, 'Kod till mobilchatten'), h('div', { class: 'code' }, s.code))),
+          h('div', {}, h('label', {}, T5('Kod (mobilchatten och Tab5)', 'Kod till mobilchatten')), h('div', { class: 'code' }, s.code))),
         h('div', { class: 'toolbar', style: 'margin-top:8px' },
           h('button', { class: 'small primary', onclick: async (e) => {
-            const r = await run(() => api(`/api/students/${s.id}`, { method: 'PUT', body: { name: name.value, deviceId: device.value } }), e.target, 'Sparat');
+            const r = await run(() => api(`/api/students/${s.id}`, { method: 'PUT', body: { name: name.value } }), e.target, 'Sparat');
             if (r) { await loadStudents(); paint(); }
           } }, 'Spara'),
           h('button', { class: 'small', onclick: async () => { try { await navigator.clipboard.writeText(link); toast('Länk med kod kopierad'); } catch { toast(link); } } }, '📋 Kopiera länk'),
@@ -1688,17 +1461,15 @@ function studentsPanel() {
           } }, 'Ta bort') : null));
     });
     const newName = h('input', { placeholder: 'Namn, t.ex. Lisa' });
-    const newDevice = h('input', { placeholder: 'Enhets-id (valfritt)' });
     panel.replaceChildren(h('h2', {}, 'Elever'),
       h('p', { class: 'item-meta' }, 'Varje elev har egna läxor, plan, flashkort, kalender, ton och poäng. Välj elev uppe till vänster. ',
         'Eleven öppnar ', h('code', {}, chatUrl), ' på mobilen och skriver in sin kod (eller får länken med koden).'),
       ...rows,
       h('h3', { style: 'margin-top:16px' }, 'Lägg till elev'),
-      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Namn'), newName), h('div', {}, h('label', {}, 'Enhets-id (valfritt)'), newDevice)),
-      state.showTab5 ? h('p', { class: 'item-meta' }, 'Enhets-id är det id elevens Tab5 ansluter med. Har eleven ingen Tab5 kan du lämna det tomt.') : null,
+      h('div', { class: 'row' }, h('div', {}, h('label', {}, 'Namn'), newName)),
       h('div', { class: 'toolbar' }, h('button', { class: 'primary', onclick: async (e) => {
         if (!newName.value.trim()) return toast('Ange ett namn', true);
-        const r = await run(() => api('/api/students', { method: 'POST', body: { name: newName.value, deviceId: newDevice.value } }), e.target, 'Elev tillagd');
+        const r = await run(() => api('/api/students', { method: 'POST', body: { name: newName.value } }), e.target, 'Elev tillagd');
         if (r) { await loadStudents(); paint(); }
       } }, '+ Lägg till elev')));
   }
@@ -1875,7 +1646,7 @@ function voicePanel() {
         h('button', { onclick: listen }, '▶ Lyssna'),
         h('button', { class: 'primary', onclick: (e) => run(() => api('/api/speech', { method: 'PUT',
           body: { voice: select.value, speed: Number(speed.value) } }), e.target, 'Rösten sparad') }, 'Spara')),
-      h('p', { class: 'item-meta' }, `Gäller elevchatten med rösten "Pluggis"${T5(', Tab5 och simulatorn')}.`));
+      h('p', { class: 'item-meta' }, `Gäller elevchatten med rösten "Pluggis"${T5(' och Tab5')}.`));
   })();
   return panel;
 }
@@ -1887,7 +1658,7 @@ async function route() {
   let [view, sub] = (location.hash || '#oversikt').slice(1).split('/');
   // Gamla adresser (bokmärken, länkar i texter) leder rätt
   const OLD = { installningar: ['elev', 'coachen'], poang: ['elev', 'poang'], kostnad: ['system', 'kostnad'],
-    logg: ['system', 'logg'], simulator: ['system', 'simulator'], kort: ['oversikt'] };
+    logg: ['system', 'logg'], simulator: ['system', 'tab5'], kort: ['oversikt'] };
   if (OLD[view]) [view, sub] = OLD[view];
   state.sub = sub || null;
   const render = views[view] || views.oversikt;
@@ -1923,9 +1694,12 @@ async function pollDevice() {
     const r = await fetch('/api/devices');
     if (!r.ok) throw new Error();
     const data = await r.json();
-    const on = data.connected.includes(state.deviceId);
+    const id = String(state.deviceId || '').toLowerCase();
+    const on = (data.tab5 || data.connected).some(d => String(d).toLowerCase() === id);
     el.classList.toggle('on', on);
-    el.textContent = on ? '● Tab5 ansluten' : '○ Tab5 inte ansluten';
+    el.textContent = on ? '● Tab5 ansluten' : '○ Tab5 av';
+    el.title = on ? `${currentStudentName()}s Tab5 är ansluten`
+      : `${currentStudentName()}s Tab5 är inte ansluten just nu (avstängd, sover eller utan WiFi). Detaljer finns under ⚙ på Tab5.`;
   } catch {
     el.classList.remove('on');
     el.textContent = '○ –';
@@ -1937,7 +1711,6 @@ async function pollDevice() {
 /** Visa eller dölj allt som bara gäller Tab5-hårdvaran. */
 function applyTab5() {
   document.querySelectorAll('[data-tab5]').forEach(el => { el.hidden = !state.showTab5; });
-  if (!state.showTab5 && location.hash === '#simulator') location.hash = '#oversikt';
 }
 const T5 = (withTab5, without = '') => state.showTab5 ? withTab5 : without;
 

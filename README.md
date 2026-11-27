@@ -220,7 +220,7 @@ Serveras av samma tjänst (`src/main/resources/static`, inga beroenden eller byg
 | Läxor & prov | Lägg till, klistra in från InfoMentor, ladda upp fil (ny läxa eller material till en befintlig), fyll i vad som ingår, planera, markera klar, ta bort |
 | Plan | Tre veckor framåt; dagar utan moment slås ihop. Dra ⠿ för att flytta moment mellan dagar eller ändra ordning (⋯ i mobilen); minuter mot max per dag visas |
 | *Elevens namn* | Coachen (namn, ton, önskemål, poäng av/på) · Planering (max per dag, pluggdagar, pluggtid) · Röst · Kalender (skolans InfoMentor-kalender in, och planen ut till Google) · Poäng (om påslaget) |
-| System | Elever och koder · Claude och kostnad · Logg · Anslutning (lösenord, logga ut) · Tab5 (och simulatorn) |
+| System | Elever och koder · Claude och kostnad · Logg · Anslutning (lösenord, logga ut) · Tab5 (visa anslutningsstatus) |
 
 ### Flera elever
 

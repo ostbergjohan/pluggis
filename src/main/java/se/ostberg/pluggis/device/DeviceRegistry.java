@@ -172,6 +172,21 @@ public class DeviceRegistry {
         return devices.keySet().stream().filter(this::isConnected).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
+    /** Enheter med en ansluten Tab5 (inte en webbläsare – elevchatten räknas inte). */
+    public Set<String> tab5Connected() {
+        return devices.keySet().stream().filter(d -> open(d).stream().anyMatch(c -> !isBrowser(c.session())))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private static boolean isBrowser(WebSocketSession session) {
+        try {
+            String ua = session.getHandshakeHeaders().getFirst("User-Agent");
+            return ua != null && ua.contains("Mozilla");
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     private java.util.List<Conn> open(String deviceId) {
         Map<String, Conn> conns = devices.get(deviceId);
         return conns == null ? java.util.List.of()
