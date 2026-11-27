@@ -856,6 +856,7 @@ static Button btnSay;
 static bool langVoiceCard = false;
 static const char* answerLang = "";   // "" = svara på svenska, annars "es", "de", "fr", "en"
 static const char* langName(const char* l);
+static const char* deckLang();
 static constexpr int ROUND = 10;
 static Button optBtn[4], btnReveal, btnKnew, btnDidnt;
 
