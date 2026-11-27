@@ -10,6 +10,8 @@ services:
     build: .
     ports:
       - "8080:8080"
+      # Metrik för Prometheus/Grafana – bara från den här datorn, aldrig utifrån
+      - "127.0.0.1:9091:9091"
     env_file:
       - path: .env
         required: false

@@ -23,7 +23,7 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     private final PluggisProperties props;
     private final se.ostberg.pluggis.chat.ChatAccess chat;
     private final se.ostberg.pluggis.student.StudentService students;
-    private final LoginGuard guard = new LoginGuard(20, java.time.Duration.ofMinutes(10));
+    private final LoginGuard guard = LoginGuard.STUDENT_CODES;
     private AdminAuth adminAuth;
 
     /** Inloggad förälder (cookie från /auth/login) räknas som token. */

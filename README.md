@@ -137,7 +137,7 @@ Föräldravyn (webb)  ── REST ─────────────▶  �
                                             ├─ flashcards/ kortlekar och repetition
                                             ├─ calendar/  InfoMentor-import · gcal/ Google Kalender
                                             ├─ speech/    KB-Whisper + Piper / Azure
-                                            └─ /actuator/prometheus → Grafana
+                                            └─ :9091/actuator/prometheus → Grafana
 ```
 
 - **Prompterna** ligger i `src/main/resources/prompts/` – ändra coachens ton och regler där.
@@ -450,8 +450,14 @@ Det här hanterar en minderårigs röst, bilder och skolarbete.
   `.env` och starta om.
 - **Elevchatten och Tab5 använder elevens kod** och når bara den elevens data. Det finns ingen delad token:
   utan inloggning eller elevkod är allt stängt.
-- Kör på hemnätet eller bakom VPN.
-  Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
+- Elevkoden (5 tecken): högst 20 fel per 10 minuter och adress och högst 300 totalt från alla adresser – samma
+  spärr för appen och Tab5. Byt kod under Elever om den kommit ut.
+- Metrik (`/actuator/prometheus`) finns bara på port 9091, som docker-compose bara öppnar mot den egna datorn.
+- **Bäst: nå Pluggis via Tailscale** (eller annan VPN) i stället för att öppna en port mot internet – då kan bara
+  era egna enheter nå den alls.
+- **Ska den ändå ut på internet:** bara bakom https (t.ex. Caddy eller Tailscale Funnel), aldrig port 8080 direkt,
+  annars går lösenord och elevkod i klartext. Sätt `PLUGGIS_FORWARD_HEADERS=native` och se till att 8080 inte kan
+  nås förbi proxyn (t.ex. `127.0.0.1:8080:8080` i docker-compose).
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.
 - Material på en läxa sparas: texten (från Word/text, eller som Claude läst av bilden/PDF:en) och en förminskad
   sidbild för foton, så att eleven kan titta på sidan igen och få den uppläst. Det tas bort med läxan eller eleven.

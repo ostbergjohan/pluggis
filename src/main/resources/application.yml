@@ -115,10 +115,23 @@ pluggis:
     region: ${AZURE_SPEECH_REGION:swedencentral}
 
 management:
+  # Metrik (Prometheus) på en egen port som docker-compose bara öppnar mot den egna datorn (127.0.0.1:9091).
+  # På 8080 – den som kan nås utifrån – finns bara /actuator/health.
+  server:
+    port: ${PLUGGIS_MANAGEMENT_PORT:9091}
   endpoints:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  # Bakom en omvänd proxy med https (Caddy, nginx, Tailscale Funnel): lita på X-Forwarded-* så att elevens
+  # riktiga adress räknas i spärren mot gissning och inloggningscookien märks Secure. Sätt bara när Pluggis
+  # inte kan nås förbi proxyn. none = av (standard).
+  forward-headers-strategy: ${PLUGGIS_FORWARD_HEADERS:none}
 
 logging:
   level:

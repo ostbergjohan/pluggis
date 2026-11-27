@@ -74,6 +74,10 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
                 && adminAuth.validCookieHeader(session.getHandshakeHeaders().getFirst("Cookie"));   // inloggad i föräldravyn
         if (parentCookie) {
             studentId = findDevice(session, deviceId, from).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
+        } else if (!se.ostberg.pluggis.config.LoginGuard.STUDENT_CODES.allow(from)) {
+            log.warn("Enhet nekad från {}: för många felaktiga koder", from);
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("För många försök – vänta en stund"));
+            return;
         } else {
             var kid = chat.studentFor(token);
             if (kid.isPresent()) {
@@ -82,6 +86,7 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
                 deviceId = students.byId(studentId).map(se.ostberg.pluggis.student.Student::getDeviceId).orElse(deviceId);
                 log.debug("Enhet från {} loggar in med elevkod som {}", from, deviceId);
             } else {
+                se.ostberg.pluggis.config.LoginGuard.STUDENT_CODES.failure(from);
                 deviceId = null;
             }
         }
