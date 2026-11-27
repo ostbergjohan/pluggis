@@ -25,6 +25,13 @@ public class ApiTokenFilter extends OncePerRequestFilter {
     private final se.ostberg.pluggis.chat.ChatAccess chat;
     private final se.ostberg.pluggis.student.StudentService students;
     private final LoginGuard guard = new LoginGuard(20, java.time.Duration.ofMinutes(10));
+    private AdminAuth adminAuth;
+
+    /** Inloggad förälder (cookie från /auth/login) räknas som token. */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAdminAuth(AdminAuth adminAuth) {
+        this.adminAuth = adminAuth;
+    }
 
     public ApiTokenFilter(PluggisProperties props, se.ostberg.pluggis.chat.ChatAccess chat,
                           se.ostberg.pluggis.student.StudentService students) {
@@ -46,7 +53,8 @@ public class ApiTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String token = request.getHeader(HEADER);
         Long student;
-        if (props.tokenRequired() && props.tokenMatches(token)) {
+        if ((props.tokenRequired() && props.tokenMatches(token))
+                || (adminAuth != null && AdminAuthController.hasValidCookie(request, adminAuth))) {
             student = parentStudent(request);                       // föräldern: vald elev
         } else {
             var kid = chat.studentFor(token);

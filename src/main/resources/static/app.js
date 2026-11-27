@@ -71,7 +71,7 @@ async function api(path, { method = 'GET', body, form, raw } = {}) {
   }
   const res = await fetch(path, { method, headers, body: payload });
   if (res.status === 401) {
-    toast('Fel eller saknad token – ange den under Inställningar.', true);
+    requireLogin();
     throw new Error('401');
   }
   if (raw) return res;
@@ -1614,8 +1614,34 @@ views.system = async (main) => {
 function connectionPanel() {
   const token = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN' });
   const result = h('div', { class: 'item-meta', style: 'margin-top:10px' });
-  return h('section', { class: 'panel' },
-    h('h2', {}, 'Anslutning'),
+  const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nytt lösenord (minst 8 tecken)' });
+  const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma igen' });
+  const post = async (path, body) => {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.token ? { 'X-Pluggis-Token': state.token } : {}) },
+      body: JSON.stringify(body || {}) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    return d;
+  };
+  const login = h('section', { class: 'panel' },
+    h('h2', {}, 'Inloggning'),
+    h('p', { class: 'item-meta' }, 'Föräldravyn loggar in med lösenord och kommer ihåg det i 30 dagar per webbläsare.'),
+    h('label', {}, 'Byt lösenord'), pw, pw2,
+    h('div', { class: 'toolbar', style: 'margin-top:12px' },
+      h('button', { onclick: async (e) => {
+        if (pw.value.length < 8) return toast('Minst 8 tecken', true);
+        if (pw.value !== pw2.value) return toast('Lösenorden är inte lika', true);
+        await run(() => post('/auth/password', { password: pw.value }), e.target, 'Lösenordet är bytt');
+        pw.value = pw2.value = '';
+      } }, 'Spara lösenord'),
+      h('button', { onclick: async () => { await post('/auth/logout'); state.token = ''; store.set('lc.token', ''); location.reload(); } }, 'Logga ut'),
+      h('button', { class: 'danger', onclick: async (e) => {
+        if (!confirm('Logga ut i alla webbläsare och telefoner?')) return;
+        await run(() => post('/auth/logout-all'), e.target);
+        state.token = ''; store.set('lc.token', ''); location.reload();
+      } }, 'Logga ut överallt')));
+  return h('div', {}, login, h('section', { class: 'panel' },
+    h('h2', {}, 'Token (iOS-genvägen och curl)'),
     h('label', {}, 'Token (samma som PLUGGIS_DEVICE_TOKEN)'), token,
     h('div', { class: 'toolbar', style: 'margin-top:12px' },
       h('button', { class: 'primary', onclick: async (e) => {
@@ -1627,7 +1653,7 @@ function connectionPanel() {
         pollDevice();
       } }, 'Spara och testa')),
     result,
-    h('p', { class: 'item-meta' }, 'Token sparas bara i den här webbläsaren.'));
+    h('p', { class: 'item-meta' }, 'Behövs inte för föräldravyn när du loggat in med lösenord. Token sparas bara i den här webbläsaren.')));
 }
 
 function tab5Panel() {
@@ -1963,6 +1989,82 @@ $('#studentSel').addEventListener('change', (e) => {
 });
 
 window.addEventListener('hashchange', route);
-applyTab5();
-loadStudents().then(() => { route(); pollDevice(); });
-setInterval(pollDevice, 30000);
+
+// ---- Inloggning: lösenord (cookie i 30 dagar) eller token som förut ----
+async function authStatus() {
+  try {
+    const r = await fetch('/auth/status', { headers: state.token ? { 'X-Pluggis-Token': state.token } : {} });
+    return await r.json();
+  } catch { return { loggedIn: true, passwordSet: true }; }   // servern svarar inte: visa sidan, felen syns där
+}
+
+let loginShown = false;
+async function requireLogin() {
+  if (loginShown) return;
+  const st = await authStatus();
+  if (!st.loggedIn) showLogin(st);
+}
+
+function showLogin(st) {
+  if (loginShown) return;
+  loginShown = true;
+  const msg = h('div', { class: 'login-msg', role: 'alert' });
+  const pw = h('input', { type: 'password', autocomplete: st.passwordSet ? 'current-password' : 'new-password', placeholder: 'Lösenord' });
+  const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma lösenord igen' });
+  const tok = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN', autocomplete: 'off' });
+  const done = () => { overlay.remove(); loginShown = false; startAdmin(); };
+  const post = async (path, body) => {
+    const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    return d;
+  };
+  const submit = async (e) => {
+    e.preventDefault();
+    msg.textContent = '';
+    try {
+      if (st.passwordSet) {
+        await post('/auth/login', { password: pw.value });
+      } else {
+        if (pw.value.length < 8) throw new Error('Minst 8 tecken');
+        if (pw.value !== pw2.value) throw new Error('Lösenorden är inte lika');
+        await post('/auth/password', { password: pw.value, token: tok.value.trim() });
+        toast('Lösenordet är valt – du är inloggad i 30 dagar');
+      }
+      done();
+    } catch (err) { msg.textContent = err.message; pw.select(); }
+  };
+  const useToken = h('button', { type: 'button', class: 'ghost small', onclick: async () => {
+    const t = prompt('Token (samma som PLUGGIS_DEVICE_TOKEN i .env)', state.token || '');
+    if (t == null) return;
+    state.token = t.trim(); store.set('lc.token', state.token);
+    const s2 = await authStatus();
+    if (s2.loggedIn) done(); else msg.textContent = 'Fel token';
+  } }, 'Använd token i stället');
+  const form = h('form', { class: 'login-box', onsubmit: submit },
+    h('img', { src: '/logo-220.png', alt: '', class: 'login-logo' }),
+    h('h1', {}, st.passwordSet ? 'Logga in' : 'Välj lösenord'),
+    h('p', { class: 'item-meta' }, st.passwordSet ? 'Föräldravyn i Pluggis.'
+      : 'Första gången: välj ett lösenord för föräldravyn (minst 8 tecken). Token från .env behövs bara nu, så att ingen annan på nätet hinner före.'),
+    !st.passwordSet && st.tokenRequired ? h('label', {}, 'Token (PLUGGIS_DEVICE_TOKEN i .env)') : null,
+    !st.passwordSet && st.tokenRequired ? tok : null,
+    h('label', {}, st.passwordSet ? 'Lösenord' : 'Nytt lösenord'), pw,
+    st.passwordSet ? null : pw2,
+    msg,
+    h('button', { class: 'primary', type: 'submit' }, st.passwordSet ? 'Logga in' : 'Spara och logga in'),
+    st.passwordSet ? useToken : null);
+  const overlay = h('div', { class: 'login' }, form);
+  document.body.append(overlay);
+  setTimeout(() => (st.passwordSet || !st.tokenRequired ? pw : tok).focus(), 50);
+}
+
+let started = false;
+function startAdmin() {
+  if (started) { loadStudents().then(() => { route(); pollDevice(); }); return; }
+  started = true;
+  applyTab5();
+  loadStudents().then(() => { route(); pollDevice(); });
+  setInterval(pollDevice, 30000);
+}
+
+authStatus().then(st => (st.loggedIn ? startAdmin() : showLogin(st)));

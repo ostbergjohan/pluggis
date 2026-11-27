@@ -76,7 +76,7 @@ Byt `<server>` mot datorns adress – på Linux syns den med `hostname -I` (t.ex
 
 | Vad | Adress | För |
 |---|---|---|
-| **Föräldravyn (admin)** | `http://<server>:8080/admin` | Dig: läxor, plan, elever, inställningar, kostnad. Ange token under Inställningar första gången. |
+| **Föräldravyn (admin)** | `http://<server>:8080/admin` | Dig: läxor, plan, elever, inställningar, kostnad. Logga in med lösenord (första gången väljer du det med token från `.env`). |
 | **Elevchatten** | `http://<server>:8080/` | Eleven. Logga in med elevens kod på 5 tecken. (`/chat.html` fungerar också.) |
 | **Elevens personliga länk** | `http://<server>:8080/#k=KOD` | Loggar in direkt. Kopiera/dela den under admin → Inställningar → Elever. |
 
@@ -483,6 +483,13 @@ Mer i [firmware/tab5-lvgl/README.md](firmware/tab5-lvgl/README.md).
 
 Det här hanterar en minderårigs röst, bilder och skolarbete.
 
+- **Föräldravyn loggar in med lösenord.** Första gången du öppnar `/admin` väljer du ett lösenord (minst 8 tecken);
+  då behövs `PLUGGIS_DEVICE_TOKEN` en gång, så att ingen annan på nätet hinner före. Lösenordet sparas som en
+  PBKDF2-hash, och inloggningen är en signerad cookie (HttpOnly, SameSite=Strict) som gäller i 30 dagar.
+  Under **System → Anslutning** kan du byta lösenord, logga ut eller *Logga ut överallt*. Högst 10 fel
+  försök per 10 minuter och adress. Token fungerar som förut för iOS-genvägen och curl.
+  Glömt lösenordet: *Använd token i stället* på inloggningssidan, och byt sedan lösenord.
+- **Tab5 och elevchatten använder elevens kod** och når bara den elevens data.
 - Sätt alltid `PLUGGIS_DEVICE_TOKEN`. Kör på hemnätet eller bakom VPN.
   Ska något exponeras publikt (t.ex. som MCP-connector till Claude-appen) behövs riktig auth.
 - Elevens innehåll loggas inte på INFO-nivå. Behåll det så.

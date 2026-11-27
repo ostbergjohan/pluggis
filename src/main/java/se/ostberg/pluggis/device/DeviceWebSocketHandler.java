@@ -55,6 +55,13 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         this.mapper = mapper;
     }
 
+    private se.ostberg.pluggis.config.AdminAuth adminAuth;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAdminAuth(se.ostberg.pluggis.config.AdminAuth adminAuth) {
+        this.adminAuth = adminAuth;
+    }
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws IOException {
         var query = UriComponentsBuilder.fromUri(session.getUri()).build().getQueryParams();
@@ -63,7 +70,9 @@ public class DeviceWebSocketHandler extends AbstractWebSocketHandler {
         String from = session.getRemoteAddress() != null ? session.getRemoteAddress().getAddress().getHostAddress() : "?";
 
         Long studentId = null;
-        if (props.tokenRequired() && props.tokenMatches(token)) {
+        boolean parentCookie = adminAuth != null
+                && adminAuth.validCookieHeader(session.getHandshakeHeaders().getFirst("Cookie"));   // inloggad i föräldravyn
+        if ((props.tokenRequired() && props.tokenMatches(token)) || parentCookie) {
             studentId = findDevice(session, deviceId, from).map(se.ostberg.pluggis.student.Student::getId).orElse(null);
         } else {
             var kid = chat.studentFor(token);
