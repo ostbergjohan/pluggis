@@ -1306,7 +1306,7 @@ views.simulator = async (main) => {
     stateLine.textContent = 'Ansluter…';
     ws.onopen = () => { sendHello(); stateLine.textContent = 'Ansluten – redo'; connectBtn.textContent = 'Koppla ner'; say.textContent = 'Tryck på blå knappen för att börja, eller skriv något.'; };
     ws.onclose = (e) => {
-      stateLine.textContent = e.code === 1008 ? 'Nekad – kontrollera token' : 'Frånkopplad';
+      stateLine.textContent = e.code === 1008 ? 'Nekad – logga in igen' : 'Frånkopplad';
       connectBtn.textContent = 'Anslut';
       if (state.ws === ws) state.ws = null;
     };
@@ -1439,7 +1439,7 @@ views.logg = async (main) => {
       if (atBottom && data.lines.length) view.scrollTop = view.scrollHeight;
       status.textContent = `${view.childElementCount} rader · uppdaterad ${new Date().toLocaleTimeString('sv-SE')}`;
     } catch (e) {
-      status.textContent = e.message === '401' ? 'Ange token under Inställningar' : `Fel: ${e.message}`;
+      status.textContent = e.message === '401' ? 'Inte inloggad – ladda om sidan och logga in' : `Fel: ${e.message}`;
     }
   }
 
@@ -1612,8 +1612,6 @@ views.system = async (main) => {
 };
 
 function connectionPanel() {
-  const token = h('input', { type: 'password', value: state.token, placeholder: 'PLUGGIS_DEVICE_TOKEN' });
-  const result = h('div', { class: 'item-meta', style: 'margin-top:10px' });
   const pw = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Nytt lösenord (minst 8 tecken)' });
   const pw2 = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Samma igen' });
   const post = async (path, body) => {
@@ -1641,19 +1639,12 @@ function connectionPanel() {
         state.token = ''; store.set('lc.token', ''); location.reload();
       } }, 'Logga ut överallt')));
   return h('div', {}, login, h('section', { class: 'panel' },
-    h('h2', {}, 'Token (iOS-genvägen och curl)'),
-    h('label', {}, 'Token (samma som PLUGGIS_DEVICE_TOKEN)'), token,
-    h('div', { class: 'toolbar', style: 'margin-top:12px' },
-      h('button', { class: 'primary', onclick: async (e) => {
-        state.token = token.value.trim();
-        store.set('lc.token', state.token);
-        const r = await run(() => api('/api/devices'), e.target);
-        if (r) result.textContent = `Sparat. Anslutna enheter: ${r.connected.length ? r.connected.join(', ') : 'inga'}`;
-        await loadStudents();
-        pollDevice();
-      } }, 'Spara och testa')),
-    result,
-    h('p', { class: 'item-meta' }, 'Behövs inte för föräldravyn när du loggat in med lösenord. Token sparas bara i den här webbläsaren.')));
+    h('h2', {}, 'iOS-genvägen och curl'),
+    h('p', { class: 'item-meta' }, 'De loggar in med PLUGGIS_DEVICE_TOKEN från .env (headern X-Pluggis-Token), inte med lösenordet. '
+      + 'Token används också om du glömt lösenordet: "Använd token i stället" på inloggningssidan.'),
+    state.token ? h('div', { class: 'toolbar', style: 'margin-top:8px' },
+      h('button', { class: 'small', onclick: () => { state.token = ''; store.set('lc.token', ''); toast('Token borttagen från den här webbläsaren'); route(); } },
+        'Ta bort sparad token från webbläsaren')) : null));
 }
 
 function tab5Panel() {
@@ -1857,7 +1848,7 @@ function voicePanel() {
   (async () => {
     let s;
     try { s = await api('/api/speech'); } catch (e) {
-      panel.replaceChildren(h('h2', {}, 'Röst'), h('div', { class: 'empty' }, e.message === '401' ? 'Ange token först.' : e.message));
+      panel.replaceChildren(h('h2', {}, 'Röst'), h('div', { class: 'empty' }, e.message === '401' ? 'Logga in först.' : e.message));
       return;
     }
     if (!s.enabled) {
@@ -1929,7 +1920,7 @@ async function route() {
     main.replaceChildren(fresh);
   } catch (e) {
     main.replaceChildren(h('section', { class: 'panel' }, h('h2', {}, 'Kunde inte ladda'),
-      h('p', {}, e.message === '401' ? 'Ange token under ' : (e.message || 'Okänt fel'), e.message === '401' ? h('a', { href: '#system/anslutning' }, 'System → Anslutning') : '')));
+      h('p', {}, e.message === '401' ? 'Inte inloggad – ladda om sidan och logga in.' : (e.message || 'Okänt fel'))));
   }
 }
 
