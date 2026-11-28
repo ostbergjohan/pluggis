@@ -76,8 +76,8 @@ async function api(route) {
   if (url.pathname === '/api/plan/progress') return json(route, PROGRESS);
   if (url.pathname === '/api/homework') return json(route, HW);
   if (url.pathname.match(/^\/api\/homework\/\d+\/material$/)) return json(route, [
-    { id: 31, homeworkId: 7, filename: 'utkik-s40.jpg', page: 1, bookPage: 40, bookPageTo: 41, summary: T('Fotosyntesen – ljus, vatten och koldioxid blir socker och syre', 'Photosynthesis – light, water and carbon dioxide become sugar and oxygen'), text: T('Fotosyntesen…', 'Photosynthesis…'), hasImage: false },
-    { id: 32, homeworkId: 7, filename: 'utkik-s42.jpg', page: 2, bookPage: 42, bookPageTo: 43, summary: T('Cellandning – socker och syre ger energi', 'Respiration – sugar and oxygen give energy'), text: T('Cellandning…', 'Respiration…'), hasImage: false }]);
+    { id: 31, homeworkId: 7, filename: 'utkik-s40.jpg', page: 1, bookPage: 40, bookPageTo: 41, summary: T('Fotosyntesen – ljus, vatten och koldioxid blir socker och syre', 'Photosynthesis – light, water and carbon dioxide become sugar and oxygen'), text: T('Fotosyntesen…', 'Photosynthesis…'), hasImage: false, headings: T(['4.1 Fotosyntes', 'Vad behöver växten?', 'Klorofyll fångar ljuset'], ['4.1 Photosynthesis', 'What does the plant need?', 'Chlorophyll captures light']) },
+    { id: 32, homeworkId: 7, filename: 'utkik-s42.jpg', page: 2, bookPage: 42, bookPageTo: 43, summary: T('Cellandning – socker och syre ger energi', 'Respiration – sugar and oxygen give energy'), text: T('Cellandning…', 'Respiration…'), hasImage: false, headings: T(['4.2 Cellandning', 'Energi till cellerna'], ['4.2 Respiration', 'Energy for the cells']) }]);
   if (url.pathname === '/api/flashcards/decks/4/cards' || url.pathname === '/api/flashcards/decks/5/cards') return json(route, [
     { id: 1, front: 'Klorofyll', back: 'Grönt ämne som fångar ljus' }, { id: 2, front: 'Glukos', back: 'Sockret växten bildar' },
     { id: 3, front: 'Koldioxid', back: 'Gas som växten tar upp' }, { id: 4, front: 'Cellandning', back: 'Socker + syre ger energi' },
