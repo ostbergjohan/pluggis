@@ -45,12 +45,12 @@ Drawn with the simulator from the real interface code and test data (`./sim/run.
 
 ## Hardware
 
-Only the **M5Stack Tab5** (ESP32-P4), with or without a battery:
+Only the **[M5Stack Tab5](https://docs.m5stack.com/en/core/Tab5)** (ESP32-P4), with or without a battery – made by [M5Stack](https://m5stack.com), see their docs for the full specs:
 
 | Model | What |
 |---|---|
-| Tab5 Kit (K145) | With a removable NP-F550 battery (7.4 V, 2000 mAh) – recommended, can sit on the desk without a cable |
-| Tab5 (C145) | Without a battery – powered via USB-C (or a battery bought separately) |
+| [Tab5 Kit (K145)](https://docs.m5stack.com/en/products/sku/K145) | With a removable NP-F550 battery (7.4 V, 2000 mAh) – recommended, can sit on the desk without a cable |
+| [Tab5 (C145)](https://docs.m5stack.com/en/products/sku/C145) | Without a battery – powered via USB-C (or a battery bought separately) |
 
 | Part of the Tab5 | Used by Pluggis |
 |---|---|
