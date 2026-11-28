@@ -1676,21 +1676,25 @@ async function homeworkDetail(id) {
     const prog = (await api('/api/plan/progress')).find(p => p.homeworkId === x.id);
     if (prog) page.append(h('div', { style: 'margin-top:10px' }, progressCard(prog)));
   } catch { /* inget framsteg */ }
-  if (x.description) page.append(h('p', { style: 'white-space:pre-wrap' }, x.description));
-  if ((x.steps || []).length) page.append(h('h3', {}, 'Det här ingår'), h('div', { class: 'box' }, x.steps.map(st => h('div', { class: 'row' }, st))));
+  if (x.description) page.append(collapsible(h('p', { style: 'white-space:pre-wrap;margin:0' }, x.description), x.description.length > 280));
+  if ((x.steps || []).length) {
+    const rows = x.steps.map(st => h('div', { class: 'row' }, st));
+    page.append(h('h3', {}, 'Det här ingår'), collapsible(h('div', { class: 'box' }, rows), rows.length > 5));
+  }
 
   page.append(h('h3', { style: 'margin-top:18px' }, `Material (${material.length})`));
   if (!material.length) {
     page.append(h('div', { class: 'box' }, h('div', { class: 'empty' }, 'Inget material än. Fota sidorna i boken så vet Pluggis vad som ingår.')));
   } else {
+    // Bilderna på sidorna visas inte för eleven (de finns i boken) – i stället sidans rubriker
     page.append(h('div', { class: 'mats' }, material.map(m => {
-      const img = m.hasImage ? h('img', { class: 'mat-img', alt: m.filename || 'sida', loading: 'lazy' }) : null;
-      if (img) authImage(`/api/homework/material/${m.id}/image`).then(u => { img.src = u; img.onclick = () => zoom(u); }).catch(() => img.remove());
       const text = h('div', { class: 'mat-text', hidden: true }, m.text || '');
-      return h('div', { class: 'mat' }, img,
+      const heads = (m.headings && m.headings.length) ? m.headings : guessHeadings(m.text);
+      return h('div', { class: 'mat' },
         h('div', { class: 'mat-body' },
           h('div', { class: 'mat-title' }, m.bookPage ? `Sida ${m.bookPage}${m.bookPageTo && m.bookPageTo !== m.bookPage ? '–' + m.bookPageTo : ''}` : m.page ? `Del ${m.page}` : (m.filename || 'Fil')),
-          m.summary ? h('div', { class: 'meta' }, m.summary) : null,
+          heads.length ? h('ul', { class: 'mat-heads' }, heads.map(t => h('li', {}, t))) : null,
+          m.summary ? collapsible(h('div', { class: 'meta' }, m.summary), m.summary.length > 200) : null,
           listen && listen.has(m.id) ? h('div', { class: 'meta listen-mark', 'data-mat': m.id }, listen.mark(m.id)) : null,
           m.text ? h('div', { class: 'mat-actions' },
             listen && listen.has(m.id) ? h('button', { class: 'small-btn', onclick: () => { listen.jump(m.id); window.scrollTo({ top: 0, behavior: 'smooth' }); } }, '🎧 Lyssna härifrån') : null,
@@ -1709,6 +1713,29 @@ async function homeworkDetail(id) {
       h('button', { class: 'quiz-btn', onclick: (e) => startOrder(x.id, e.target) }, '🔢', h('span', {}, 'Rätt ordning'), h('small', {}, 'steg och händelser'))));
   }
   return page;
+}
+
+/** Långt innehåll visas hopfällt med "Visa mer". */
+function collapsible(el, long) {
+  if (!long) return el;
+  const wrap = h('div', { class: 'collapsible closed' }, el);
+  const btn = h('button', { class: 'link-btn', onclick: () => {
+    const closed = wrap.classList.toggle('closed');
+    btn.textContent = closed ? 'Visa mer ▾' : 'Visa mindre ▴';
+  } }, 'Visa mer ▾');
+  return h('div', {}, wrap, btn);
+}
+
+/** Rubriker ur sidans text för äldre material (korta rader utan punkt, följda av längre text). */
+function guessHeadings(text) {
+  const lines = (text || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < lines.length - 1 && out.length < 6; i++) {
+    const l = lines[i];
+    if (l.length >= 3 && l.length <= 60 && !/[.,;:]$/.test(l) && /^[\p{Lu}\d]/u.test(l) && l.split(' ').length <= 8
+        && lines[i + 1].length > l.length) out.push(l);
+  }
+  return out;
 }
 
 function zoom(url) {

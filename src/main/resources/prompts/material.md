@@ -10,7 +10,7 @@ Svara ENDAST med ett JSON-objekt:
   "key_terms": ["Viktiga begrepp, ord eller formler"],
   "topics": ["3–8 delområden som eleven kan öva på var för sig, korta (2–4 ord), t.ex. 'Siffror 1–100', 'Veckodagar', 'Verbet ser', 'Fotosyntesen', 'Näringskedjor'"],
   "text": "Materialets viktigaste innehåll som ren text (max ca 4000 tecken) – det som ska pluggas",
-  "pages": [{"file": 1, "book_page": 182, "text": "Texten på just den filen/sidan, ordagrant och i läsordning (max ca 3000 tecken), så att den kan läsas upp. Rubriker på egen rad. Hoppa över sidhuvud, sidnummer och bildtexter som inte behövs."}],
+  "pages": [{"file": 1, "book_page": 182, "text": "Texten på just den filen/sidan, ordagrant och i läsordning (max ca 3000 tecken), så att den kan läsas upp. Rubriker på egen rad. Hoppa över sidhuvud, sidnummer och bildtexter som inte behövs.", "headings": ["Rubrikerna på just den sidan i ordning, ordagrant, t.ex. '4.1 Fotosyntes', 'Vad behöver växten?'"]}],
   "kind": "test om det handlar om ett prov/förhör, homework om det är en läxa/inlämning, annars null",
   "due_date": "YYYY-MM-DD om ett datum för provet/inlämningen framgår, annars null",
   "note": "Kort kommentar om något var oläsligt, annars null"
@@ -20,6 +20,7 @@ Regler:
 - "sections" ska vara 2–10 delar som går att plugga en i taget. Använd materialets egna rubriker och sidnummer.
 - Hitta inte på sidor, kapitel eller begrepp som inte står i materialet.
 - "pages" ska ha ett objekt per fil som är en bild eller PDF, med samma nummer som filen.
+- "headings" är sidans egna rubriker och underrubriker (högst 8, korta). Inga rubriker: tom lista.
 - "book_page" är sidnumret som står tryckt på sidan (i hörnet, i sidfoten eller sidhuvudet), som ett heltal.
   Syns två sidor (ett uppslag): den vänstra sidans nummer. Syns inget sidnummer: null. Gissa aldrig.
 - Lös inga uppgifter och skriv inga svar.

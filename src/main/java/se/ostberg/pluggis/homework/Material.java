@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
 import java.time.Instant;
+import java.util.List;
 
 /** Studiematerial kopplat till en läxa eller ett prov (skärmdump, Word, PDF, text). */
 @Entity
@@ -52,6 +53,10 @@ public class Material {
     /** Sista sidan när fotot är ett uppslag (t.ex. 183 för 182–183), annars null. */
     private Integer bookPageTo;
 
+    /** Sidans rubriker som Claude läst av, en per rad (null för äldre material – appen gissar då ur texten). */
+    @Column(length = 2000)
+    private String headings;
+
     protected Material() {
     }
 
@@ -81,6 +86,21 @@ public class Material {
 
     public void setBookPage(Integer bookPage) {
         setBookPages(bookPage, null);
+    }
+
+    public List<String> getHeadings() {
+        return headings == null || headings.isBlank() ? List.of() : List.of(headings.split("\n"));
+    }
+
+    public void setHeadings(List<String> list) {
+        if (list == null) {
+            this.headings = null;
+            return;
+        }
+        String joined = list.stream().filter(java.util.Objects::nonNull).map(String::strip)
+                .filter(x -> !x.isEmpty()).map(x -> x.length() > 120 ? x.substring(0, 120) : x)
+                .limit(8).collect(java.util.stream.Collectors.joining("\n"));
+        this.headings = joined.isEmpty() ? null : joined;
     }
 
     /** Sidorna i boken: en sida (to = null) eller ett uppslag (t.ex. 182–183). Ogiltiga värden blir null. */
